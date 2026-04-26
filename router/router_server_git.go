@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/gin-gonic/gin"
 	"github.com/pterodactyl/wings/environment/docker"
 	"github.com/pterodactyl/wings/router/middleware"
@@ -196,7 +196,7 @@ func sanitizeWorkDir(wd string) string {
 func execInContainer(ctx context.Context, env *docker.Environment, cmd []string, workDir string) (*gitResponse, error) {
 	cli := env.Client()
 
-	execConfig := types.ExecConfig{
+	execConfig := container.ExecOptions{
 		Cmd:          cmd,
 		WorkingDir:   workDir,
 		AttachStdout: true,
@@ -209,7 +209,7 @@ func execInContainer(ctx context.Context, env *docker.Environment, cmd []string,
 		return nil, err
 	}
 
-	resp, err := cli.ContainerExecAttach(ctx, exec.ID, types.ExecStartCheck{})
+	resp, err := cli.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{})
 	if err != nil {
 		return nil, err
 	}
