@@ -25,6 +25,14 @@ import (
 )
 
 const gitContainerRoot = "/home/container"
+const gitBetterFilesTrashDir = ".trash-bin"
+
+type gitCloneTargetMode int
+
+const (
+	gitCloneTargetEmpty gitCloneTargetMode = iota
+	gitCloneTargetInternalOnly
+)
 
 var (
 	gitPathCache sync.Map
@@ -205,7 +213,8 @@ func postServerGitClone(c *gin.Context) {
 	}
 
 	hostPath := containerPathToHostPath(s.Filesystem().Path(), targetPath)
-	if err := ensureGitCloneTargetAvailable(hostPath); err != nil {
+	targetMode, err := inspectGitCloneTarget(hostPath)
+	if err != nil {
 		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
@@ -222,6 +231,18 @@ func postServerGitClone(c *gin.Context) {
 	lock.Lock()
 	defer lock.Unlock()
 
+	cloneTargetPath := targetPath
+	var tempHostPath string
+	if targetMode == gitCloneTargetInternalOnly {
+		var err error
+		cloneTargetPath, tempHostPath, err = makeGitCloneTempTarget(s.Filesystem().Path(), targetPath)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
+		defer os.RemoveAll(tempHostPath)
+	}
+
 	result, err := execGit(ctx, env, gitBin, []string{
 		"clone",
 		"--depth=1",
@@ -229,11 +250,25 @@ func postServerGitClone(c *gin.Context) {
 		"--no-tags",
 		"--no-recurse-submodules",
 		repositoryURL,
-		targetPath,
+		cloneTargetPath,
 	}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
+	}
+
+	if result.ExitCode == 0 {
+		if targetMode == gitCloneTargetInternalOnly {
+			if err := promoteGitCloneTempTarget(tempHostPath, hostPath); err != nil {
+				c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
+				return
+			}
+		}
+		_ = addGitInternalExcludes(hostPath)
+	}
+	if cloneTargetPath != targetPath {
+		result.Stdout = strings.ReplaceAll(result.Stdout, cloneTargetPath, targetPath)
+		result.Stderr = strings.ReplaceAll(result.Stderr, cloneTargetPath, targetPath)
 	}
 
 	c.JSON(http.StatusOK, maskGitResponse(result))
@@ -592,30 +627,109 @@ func validateGitTargetDirectory(name string) error {
 	return nil
 }
 
-func ensureGitCloneTargetAvailable(hostPath string) error {
+func inspectGitCloneTarget(hostPath string) (gitCloneTargetMode, error) {
 	info, err := os.Lstat(hostPath)
 	if os.IsNotExist(err) {
-		return nil
+		return gitCloneTargetEmpty, nil
 	}
 	if err != nil {
-		return fmt.Errorf("Could not inspect the clone target.")
+		return gitCloneTargetEmpty, fmt.Errorf("Could not inspect the clone target.")
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("Clone target must not be a symlink.")
+		return gitCloneTargetEmpty, fmt.Errorf("Clone target must not be a symlink.")
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("Clone target already exists and is not a directory.")
+		return gitCloneTargetEmpty, fmt.Errorf("Clone target already exists and is not a directory.")
 	}
 
 	entries, err := os.ReadDir(hostPath)
 	if err != nil {
-		return fmt.Errorf("Could not inspect the clone target.")
+		return gitCloneTargetEmpty, fmt.Errorf("Could not inspect the clone target.")
 	}
-	if len(entries) > 0 {
-		return fmt.Errorf("Clone target must be empty.")
+	if len(entries) == 0 {
+		return gitCloneTargetEmpty, nil
+	}
+
+	for _, entry := range entries {
+		if !isAllowedGitCloneInternalEntry(entry) {
+			return gitCloneTargetEmpty, fmt.Errorf("Clone target must be empty except for Better Files internal folders.")
+		}
+	}
+
+	return gitCloneTargetInternalOnly, nil
+}
+
+func isAllowedGitCloneInternalEntry(entry os.DirEntry) bool {
+	return entry.Name() == gitBetterFilesTrashDir && entry.IsDir()
+}
+
+func makeGitCloneTempTarget(hostRoot string, containerTargetPath string) (string, string, error) {
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf(".betterfiles-git-clone-%d-%d", time.Now().UnixNano(), i)
+		containerPath := path.Join(containerTargetPath, name)
+		hostPath := containerPathToHostPath(hostRoot, containerPath)
+
+		if _, err := os.Lstat(hostPath); os.IsNotExist(err) {
+			return containerPath, hostPath, nil
+		}
+	}
+
+	return "", "", fmt.Errorf("Could not allocate a temporary clone directory.")
+}
+
+func promoteGitCloneTempTarget(tempHostPath string, targetHostPath string) error {
+	entries, err := os.ReadDir(tempHostPath)
+	if err != nil {
+		return fmt.Errorf("Could not inspect the cloned repository.")
+	}
+
+	for _, entry := range entries {
+		if _, err := os.Lstat(filepath.Join(targetHostPath, entry.Name())); err == nil {
+			return fmt.Errorf("Clone output would overwrite %s.", entry.Name())
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("Could not inspect the clone output.")
+		}
+	}
+
+	for _, entry := range entries {
+		if err := os.Rename(
+			filepath.Join(tempHostPath, entry.Name()),
+			filepath.Join(targetHostPath, entry.Name()),
+		); err != nil {
+			return fmt.Errorf("Could not move cloned files into the target directory.")
+		}
 	}
 
 	return nil
+}
+
+func addGitInternalExcludes(hostPath string) error {
+	excludePath := filepath.Join(hostPath, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0750); err != nil {
+		return err
+	}
+
+	content := ""
+	if raw, err := os.ReadFile(excludePath); err == nil {
+		content = string(raw)
+	}
+
+	var additions []string
+	for _, line := range []string{gitBetterFilesTrashDir + "/", ".betterfiles-git-clone-*"} {
+		if !strings.Contains(content, line) {
+			additions = append(additions, line)
+		}
+	}
+	if len(additions) == 0 {
+		return nil
+	}
+
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += strings.Join(additions, "\n") + "\n"
+
+	return os.WriteFile(excludePath, []byte(content), 0640)
 }
 
 func gitDiffArgs(cached bool, diffPath string) []string {
