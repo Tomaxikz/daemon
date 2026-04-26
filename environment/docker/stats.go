@@ -88,6 +88,12 @@ func (e *Environment) pollResources(ctx context.Context) error {
 			for _, nw := range v.Networks {
 				st.Network.RxBytes += nw.RxBytes
 				st.Network.TxBytes += nw.TxBytes
+				st.Network.RxPackets += nw.RxPackets
+				st.Network.TxPackets += nw.TxPackets
+				st.Network.RxErrors += nw.RxErrors
+				st.Network.TxErrors += nw.TxErrors
+				st.Network.RxDropped += nw.RxDropped
+				st.Network.TxDropped += nw.TxDropped
 			}
 
 			e.Events().Publish(environment.ResourceEvent, st)
