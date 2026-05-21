@@ -4,8 +4,11 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -30,7 +33,15 @@ func getDownloadStream(c *gin.Context) {
 		return
 	}
 
-	f, st, err := s.Filesystem().File(token.FilePath)
+	filePath, ok := cleanDownloadStreamPath(token.FilePath)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid file path.",
+		})
+		return
+	}
+
+	f, st, err := s.Filesystem().File(filePath)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -62,4 +73,26 @@ func getDownloadStream(c *gin.Context) {
 	c.Header("Content-Type", contentType)
 
 	http.ServeContent(c.Writer, c.Request, st.Name(), st.ModTime(), f)
+}
+
+func cleanDownloadStreamPath(value string) (string, bool) {
+	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if value == "" || strings.Contains(value, "\x00") || !utf8.ValidString(value) || len(value) > 4096 {
+		return "", false
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == ".." {
+			return "", false
+		}
+	}
+
+	cleaned := pathpkg.Clean(value)
+	if cleaned == "." || cleaned == "/" || !strings.HasPrefix(cleaned, "/") {
+		return "", false
+	}
+
+	return cleaned, true
 }

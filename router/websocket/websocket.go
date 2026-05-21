@@ -300,6 +300,10 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
 		}
 	}
 
+	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+		return err
+	}
+
 	switch m.Event {
 	case AuthenticationEvent:
 		{
