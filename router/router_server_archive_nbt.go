@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -21,7 +20,9 @@ import (
 	"github.com/Tnze/go-mc/nbt"
 	"github.com/Tnze/go-mc/nbt/dynbt"
 	"github.com/gin-gonic/gin"
+	"github.com/pterodactyl/wings/internal/ufs"
 	"github.com/pterodactyl/wings/router/middleware"
+	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
 const (
@@ -48,8 +49,8 @@ type betterFilesArchiveExtractSelection struct {
 }
 
 type betterFilesArchiveExtractRequest struct {
-	File        string                                `json:"file"`
-	Destination string                                `json:"destination"`
+	File        string                               `json:"file"`
+	Destination string                               `json:"destination"`
 	Entries     []betterFilesArchiveExtractSelection `json:"entries"`
 }
 
@@ -65,9 +66,9 @@ type betterFilesNbtNamed struct {
 }
 
 type betterFilesNbtNode struct {
-	Type        string                         `json:"type"`
-	ElementType string                         `json:"element_type,omitempty"`
-	Value       any                            `json:"value,omitempty"`
+	Type        string                        `json:"type"`
+	ElementType string                        `json:"element_type,omitempty"`
+	Value       any                           `json:"value,omitempty"`
 	Children    map[string]betterFilesNbtNode `json:"children,omitempty"`
 	Items       []betterFilesNbtNode          `json:"items,omitempty"`
 }
@@ -79,13 +80,14 @@ type betterFilesNbtWriteRequest struct {
 
 func getServerArchiveList(c *gin.Context) {
 	s := middleware.ExtractServer(c)
-	hostPath, displayPath, ok := betterFilesResolveServerFile(s.Filesystem().Path(), c.Query("file"), true)
+	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), c.Query("file"))
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive path."})
 		return
 	}
+	defer file.Close()
 
-	stat, err := os.Stat(hostPath)
+	stat, err := file.Stat()
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -99,7 +101,7 @@ func getServerArchiveList(c *gin.Context) {
 		return
 	}
 
-	entries, totalEntries, err := betterFilesListArchiveEntries(hostPath, displayPath)
+	entries, totalEntries, err := betterFilesListArchiveEntries(file, displayPath)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -113,9 +115,9 @@ func getServerArchiveList(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusOK, gin.H{
-		"file": displayPath,
-		"entries": entries,
-		"truncated": totalEntries > betterFilesArchiveMaxEntries,
+		"file":          displayPath,
+		"entries":       entries,
+		"truncated":     totalEntries > betterFilesArchiveMaxEntries,
 		"total_entries": totalEntries,
 	})
 }
@@ -133,19 +135,19 @@ func postServerArchiveExtract(c *gin.Context) {
 		return
 	}
 
-	root := s.Filesystem().Path()
-	hostPath, displayPath, ok := betterFilesResolveServerFile(root, request.File, true)
+	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), request.File)
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive path."})
 		return
 	}
-	destinationDisplay, ok := betterFilesResolveServerDirectory(root, request.Destination, true)
+	defer file.Close()
+	destinationDisplay, ok := betterFilesResolveServerDirectory(s.Filesystem(), request.Destination, true)
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid extraction destination."})
 		return
 	}
 
-	stat, err := os.Stat(hostPath)
+	stat, err := file.Stat()
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -161,35 +163,36 @@ func postServerArchiveExtract(c *gin.Context) {
 		return
 	}
 
-	count, err := betterFilesExtractArchiveEntries(s.Filesystem(), hostPath, displayPath, destinationDisplay, selections)
+	count, err := betterFilesExtractArchiveEntries(s.Filesystem(), file, displayPath, destinationDisplay, selections)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"file": displayPath,
+		"file":        displayPath,
 		"destination": destinationDisplay,
-		"extracted": count,
+		"extracted":   count,
 	})
 }
 
 func getServerNbtFile(c *gin.Context) {
 	s := middleware.ExtractServer(c)
-	hostPath, displayPath, ok := betterFilesResolveServerFile(s.Filesystem().Path(), c.Query("file"), true)
+	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), c.Query("file"))
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid NBT path."})
 		return
 	}
+	defer file.Close()
 
-	document, err := betterFilesReadNbtDocument(hostPath)
+	document, err := betterFilesReadNbtDocument(file)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"file": displayPath,
+		"file":     displayPath,
 		"document": document,
 	})
 }
@@ -202,11 +205,12 @@ func putServerNbtFile(c *gin.Context) {
 		return
 	}
 
-	hostPath, displayPath, ok := betterFilesResolveServerFile(s.Filesystem().Path(), request.File, true)
+	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), request.File)
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid NBT path."})
 		return
 	}
+	file.Close()
 	if !betterFilesIsNbtFile(displayPath) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .nbt and .dat files can be edited as NBT."})
 		return
@@ -218,7 +222,7 @@ func putServerNbtFile(c *gin.Context) {
 		return
 	}
 
-	if err := betterFilesWriteNbtDocument(hostPath, request.Document); err != nil {
+	if err := betterFilesWriteNbtDocument(s.Filesystem(), displayPath, request.Document); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -226,54 +230,7 @@ func putServerNbtFile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"file": displayPath})
 }
 
-func betterFilesResolveServerFile(root string, raw string, mustExist bool) (string, string, bool) {
-	cleaned := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
-	if cleaned == "" || strings.Contains(cleaned, "\x00") || !utf8.ValidString(cleaned) || len(cleaned) > 4096 {
-		return "", "", false
-	}
-	if !strings.HasPrefix(cleaned, "/") {
-		cleaned = "/" + cleaned
-	}
-	for _, segment := range strings.Split(cleaned, "/") {
-		if segment == ".." {
-			return "", "", false
-		}
-	}
-
-	displayPath := path.Clean(cleaned)
-	if displayPath == "." || displayPath == "/" || !strings.HasPrefix(displayPath, "/") {
-		return "", "", false
-	}
-
-	rootPath, err := filepath.Abs(filepath.Clean(root))
-	if err != nil {
-		return "", "", false
-	}
-	hostPath := filepath.Join(rootPath, strings.TrimPrefix(displayPath, "/"))
-	hostPath, err = filepath.Abs(hostPath)
-	if err != nil {
-		return "", "", false
-	}
-	rel, err := filepath.Rel(rootPath, hostPath)
-	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
-		return "", "", false
-	}
-
-	stat, err := os.Lstat(hostPath)
-	if err != nil {
-		if mustExist {
-			return "", "", false
-		}
-		return hostPath, displayPath, true
-	}
-	if stat.Mode()&os.ModeSymlink != 0 || !stat.Mode().IsRegular() {
-		return "", "", false
-	}
-
-	return hostPath, displayPath, true
-}
-
-func betterFilesResolveServerDirectory(root string, raw string, mustExist bool) (string, bool) {
+func betterFilesCleanServerPath(raw string, allowRoot bool) (string, bool) {
 	cleaned := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
 	if cleaned == "" || strings.Contains(cleaned, "\x00") || !utf8.ValidString(cleaned) || len(cleaned) > 4096 {
 		return "", false
@@ -288,29 +245,41 @@ func betterFilesResolveServerDirectory(root string, raw string, mustExist bool) 
 	}
 
 	displayPath := path.Clean(cleaned)
-	if displayPath == "." || !strings.HasPrefix(displayPath, "/") {
+	if displayPath == "." || (!allowRoot && displayPath == "/") || !strings.HasPrefix(displayPath, "/") {
 		return "", false
 	}
 
-	rootPath, err := filepath.Abs(filepath.Clean(root))
-	if err != nil {
-		return "", false
+	return displayPath, true
+}
+
+func betterFilesOpenServerRegularFile(fs *serverfs.Filesystem, raw string) (ufs.File, string, bool) {
+	displayPath, ok := betterFilesCleanServerPath(raw, false)
+	if !ok {
+		return nil, "", false
 	}
-	hostPath := filepath.Join(rootPath, strings.TrimPrefix(displayPath, "/"))
-	hostPath, err = filepath.Abs(hostPath)
+
+	file, stat, err := fs.File(displayPath)
 	if err != nil {
-		return "", false
+		return nil, "", false
 	}
-	rel, err := filepath.Rel(rootPath, hostPath)
-	if err != nil || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+	if stat.IsDir() || !stat.Mode().IsRegular() {
+		file.Close()
+		return nil, "", false
+	}
+	return file, displayPath, true
+}
+
+func betterFilesResolveServerDirectory(fs *serverfs.Filesystem, raw string, mustExist bool) (string, bool) {
+	displayPath, ok := betterFilesCleanServerPath(raw, true)
+	if !ok {
 		return "", false
 	}
 
-	stat, err := os.Lstat(hostPath)
+	stat, err := fs.Stat(displayPath)
 	if err != nil {
 		return displayPath, !mustExist
 	}
-	if stat.Mode()&os.ModeSymlink != 0 || !stat.IsDir() {
+	if !stat.IsDir() {
 		return "", false
 	}
 
@@ -336,22 +305,25 @@ func betterFilesIsNbtFile(value string) bool {
 	return ext == ".nbt" || ext == ".dat"
 }
 
-func betterFilesListArchiveEntries(hostPath string, displayPath string) ([]betterFilesArchiveEntry, int, error) {
+func betterFilesListArchiveEntries(file ufs.File, displayPath string) ([]betterFilesArchiveEntry, int, error) {
 	if betterFilesIsZipFile(displayPath) {
-		return betterFilesListZipEntries(hostPath)
+		return betterFilesListZipEntries(file)
 	}
 	if betterFilesIsTarFile(displayPath) {
-		return betterFilesListTarEntries(hostPath, displayPath)
+		return betterFilesListTarEntries(file, displayPath)
 	}
 	return nil, 0, errors.New("unsupported archive type")
 }
 
-func betterFilesListZipEntries(hostPath string) ([]betterFilesArchiveEntry, int, error) {
-	reader, err := zip.OpenReader(hostPath)
+func betterFilesListZipEntries(file ufs.File) ([]betterFilesArchiveEntry, int, error) {
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, 0, err
+	}
+	reader, err := zip.NewReader(file, stat.Size())
 	if err != nil {
 		return nil, 0, errors.New("could not open zip archive")
 	}
-	defer reader.Close()
 
 	entryCapacity := len(reader.File)
 	if entryCapacity > betterFilesArchiveMaxEntries {
@@ -381,13 +353,10 @@ func betterFilesListZipEntries(hostPath string) ([]betterFilesArchiveEntry, int,
 	return entries, len(reader.File), nil
 }
 
-func betterFilesListTarEntries(hostPath string, displayPath string) ([]betterFilesArchiveEntry, int, error) {
-	file, err := os.Open(hostPath)
-	if err != nil {
+func betterFilesListTarEntries(file ufs.File, displayPath string) ([]betterFilesArchiveEntry, int, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return nil, 0, err
 	}
-	defer file.Close()
-
 	var archiveReader io.Reader = file
 	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") || strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
 		gzipReader, err := gzip.NewReader(file)
@@ -499,12 +468,12 @@ type betterFilesArchiveWritableFilesystem interface {
 	CreateDirectory(string, string) error
 }
 
-func betterFilesExtractArchiveEntries(fs betterFilesArchiveWritableFilesystem, hostPath string, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
+func betterFilesExtractArchiveEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
 	if betterFilesIsZipFile(displayPath) {
-		return betterFilesExtractZipEntries(fs, hostPath, destination, selections)
+		return betterFilesExtractZipEntries(fs, file, destination, selections)
 	}
 	if betterFilesIsTarFile(displayPath) {
-		return betterFilesExtractTarEntries(fs, hostPath, displayPath, destination, selections)
+		return betterFilesExtractTarEntries(fs, file, displayPath, destination, selections)
 	}
 	return 0, errors.New("unsupported archive type")
 }
@@ -513,12 +482,15 @@ func betterFilesExtractOutputPath(destination string, entryPath string) string {
 	return path.Clean(path.Join(destination, entryPath))
 }
 
-func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, hostPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
-	reader, err := zip.OpenReader(hostPath)
+func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
+	stat, err := file.Stat()
+	if err != nil {
+		return 0, err
+	}
+	reader, err := zip.NewReader(file, stat.Size())
 	if err != nil {
 		return 0, errors.New("could not open zip archive")
 	}
-	defer reader.Close()
 
 	extracted := 0
 	for _, entry := range reader.File {
@@ -555,13 +527,10 @@ func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, hostP
 	return extracted, nil
 }
 
-func betterFilesExtractTarEntries(fs betterFilesArchiveWritableFilesystem, hostPath string, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
-	file, err := os.Open(hostPath)
-	if err != nil {
+func betterFilesExtractTarEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return 0, err
 	}
-	defer file.Close()
-
 	var archiveReader io.Reader = file
 	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") || strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
 		gzipReader, err := gzip.NewReader(file)
@@ -612,8 +581,8 @@ func betterFilesExtractTarEntries(fs betterFilesArchiveWritableFilesystem, hostP
 	return extracted, nil
 }
 
-func betterFilesReadNbtDocument(hostPath string) (betterFilesNbtDocument, error) {
-	stat, err := os.Stat(hostPath)
+func betterFilesReadNbtDocument(file ufs.File) (betterFilesNbtDocument, error) {
+	stat, err := file.Stat()
 	if err != nil {
 		return betterFilesNbtDocument{}, err
 	}
@@ -621,7 +590,10 @@ func betterFilesReadNbtDocument(hostPath string) (betterFilesNbtDocument, error)
 		return betterFilesNbtDocument{}, errors.New("NBT file is empty, too large, or not a regular file")
 	}
 
-	raw, err := os.ReadFile(hostPath)
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return betterFilesNbtDocument{}, err
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, stat.Size()+1))
 	if err != nil {
 		return betterFilesNbtDocument{}, err
 	}
@@ -650,7 +622,7 @@ func betterFilesReadNbtDocument(hostPath string) (betterFilesNbtDocument, error)
 	}, nil
 }
 
-func betterFilesWriteNbtDocument(hostPath string, document betterFilesNbtDocument) error {
+func betterFilesWriteNbtDocument(fs *serverfs.Filesystem, displayPath string, document betterFilesNbtDocument) error {
 	if document.Root.Type != "compound" || document.Root.Value.Type != "compound" {
 		return errors.New("NBT root must be a compound tag")
 	}
@@ -680,30 +652,11 @@ func betterFilesWriteNbtDocument(hostPath string, document betterFilesNbtDocumen
 	}
 
 	mode := os.FileMode(0640)
-	if stat, err := os.Stat(hostPath); err == nil {
+	if stat, err := fs.UnixFS().Stat(displayPath); err == nil {
 		mode = stat.Mode().Perm()
 	}
 
-	tmpFile, err := os.CreateTemp(filepath.Dir(hostPath), ".betterfiles-nbt-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-
-	if _, err := tmpFile.Write(encoded); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Chmod(mode); err != nil {
-		tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-
-	return os.Rename(tmpPath, hostPath)
+	return fs.Write(displayPath, bytes.NewReader(encoded), int64(len(encoded)), mode)
 }
 
 func betterFilesDecodeNbtCompression(raw []byte) ([]byte, string, error) {

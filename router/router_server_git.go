@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,6 +22,7 @@ import (
 	"github.com/pterodactyl/wings/config"
 	"github.com/pterodactyl/wings/environment/docker"
 	"github.com/pterodactyl/wings/router/middleware"
+	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
 const gitContainerRoot = "/home/container"
@@ -56,14 +57,28 @@ var (
 	}
 
 	gitBlockedNetworks = []*net.IPNet{
-		mustParseGitCIDR("127.0.0.0/8"),
+		mustParseGitCIDR("0.0.0.0/8"),
 		mustParseGitCIDR("10.0.0.0/8"),
-		mustParseGitCIDR("172.16.0.0/12"),
-		mustParseGitCIDR("192.168.0.0/16"),
+		mustParseGitCIDR("100.64.0.0/10"),
+		mustParseGitCIDR("127.0.0.0/8"),
 		mustParseGitCIDR("169.254.0.0/16"),
+		mustParseGitCIDR("172.16.0.0/12"),
+		mustParseGitCIDR("192.0.0.0/24"),
+		mustParseGitCIDR("192.0.2.0/24"),
+		mustParseGitCIDR("192.168.0.0/16"),
+		mustParseGitCIDR("198.18.0.0/15"),
+		mustParseGitCIDR("198.51.100.0/24"),
+		mustParseGitCIDR("203.0.113.0/24"),
+		mustParseGitCIDR("224.0.0.0/4"),
+		mustParseGitCIDR("240.0.0.0/4"),
+		mustParseGitCIDR("255.255.255.255/32"),
+		mustParseGitCIDR("::/128"),
 		mustParseGitCIDR("::1/128"),
-		mustParseGitCIDR("fe80::/10"),
+		mustParseGitCIDR("2001:db8::/32"),
 		mustParseGitCIDR("fc00::/7"),
+		mustParseGitCIDR("fe80::/10"),
+		mustParseGitCIDR("fec0::/10"),
+		mustParseGitCIDR("ff00::/8"),
 	}
 
 	gitTargetDirectoryPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
@@ -90,6 +105,11 @@ type gitResponse struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exit_code"`
+}
+
+type validatedGitRepositoryURL struct {
+	URL            string
+	CurlOptResolve string
 }
 
 func findGitBinary(ctx context.Context, env *docker.Environment) string {
@@ -212,12 +232,7 @@ func postServerGitClone(c *gin.Context) {
 		return
 	}
 
-	hostPath := containerPathToHostPath(s.Filesystem().Path(), targetPath)
-	targetMode, err := inspectGitCloneTarget(hostPath)
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
-		return
-	}
+	targetServerPath := containerPathToServerPath(targetPath)
 
 	gitBin := findGitBinary(ctx, env)
 	if gitBin == "" {
@@ -231,16 +246,24 @@ func postServerGitClone(c *gin.Context) {
 	lock.Lock()
 	defer lock.Unlock()
 
+	targetMode, err := inspectGitCloneTarget(s.Filesystem(), targetServerPath)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
 	cloneTargetPath := targetPath
-	var tempHostPath string
+	var tempServerPath string
 	if targetMode == gitCloneTargetInternalOnly {
 		var err error
-		cloneTargetPath, tempHostPath, err = makeGitCloneTempTarget(s.Filesystem().Path(), targetPath)
+		cloneTargetPath, tempServerPath, err = makeGitCloneTempTarget(s.Filesystem(), targetPath)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
 			return
 		}
-		defer os.RemoveAll(tempHostPath)
+		defer func() {
+			_ = s.Filesystem().Delete(tempServerPath)
+		}()
 	}
 
 	result, err := execGit(ctx, env, gitBin, []string{
@@ -249,9 +272,9 @@ func postServerGitClone(c *gin.Context) {
 		"--single-branch",
 		"--no-tags",
 		"--no-recurse-submodules",
-		repositoryURL,
+		repositoryURL.URL,
 		cloneTargetPath,
-	}, workDir)
+	}, workDir, repositoryURL)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -259,12 +282,12 @@ func postServerGitClone(c *gin.Context) {
 
 	if result.ExitCode == 0 {
 		if targetMode == gitCloneTargetInternalOnly {
-			if err := promoteGitCloneTempTarget(tempHostPath, hostPath); err != nil {
+			if err := promoteGitCloneTempTarget(s.Filesystem(), tempServerPath, targetServerPath); err != nil {
 				c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
 				return
 			}
 		}
-		_ = addGitInternalExcludes(hostPath)
+		_ = addGitInternalExcludes(s.Filesystem(), targetServerPath)
 	}
 	if cloneTargetPath != targetPath {
 		result.Stdout = strings.ReplaceAll(result.Stdout, cloneTargetPath, targetPath)
@@ -377,9 +400,9 @@ func postServerGitPull(c *gin.Context) {
 		"pull",
 		"--ff-only",
 		"--no-recurse-submodules",
-		remoteURL,
+		remoteURL.URL,
 		remoteBranch,
-	}, workDir)
+	}, workDir, remoteURL)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -474,8 +497,15 @@ func postServerGitDiff(c *gin.Context) {
 	c.JSON(http.StatusOK, maskGitResponse(result))
 }
 
-func execGit(ctx context.Context, env *docker.Environment, gitBin string, args []string, workDir string) (*gitResponse, error) {
-	cmd := append(gitBaseCommand(gitBin), args...)
+func execGit(ctx context.Context, env *docker.Environment, gitBin string, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
+	cmd := gitBaseCommand(gitBin)
+	for _, remote := range remotes {
+		if remote.CurlOptResolve == "" {
+			continue
+		}
+		cmd = append(cmd, "-c", "http.curloptResolve="+remote.CurlOptResolve)
+	}
+	cmd = append(cmd, args...)
 	return execInContainer(ctx, env, cmd, workDir)
 }
 
@@ -563,58 +593,79 @@ func isInsideGitRoot(p string) bool {
 	return cleaned == gitContainerRoot || strings.HasPrefix(cleaned, gitContainerRoot+"/")
 }
 
-func validateGitRepositoryURL(ctx context.Context, raw string) (string, error) {
+func validateGitRepositoryURL(ctx context.Context, raw string) (validatedGitRepositoryURL, error) {
 	cleaned := strings.TrimSpace(raw)
 	cleaned = strings.Trim(cleaned, "\x00\r\n\t ")
 	if strings.ContainsAny(cleaned, "\x00\n\r\t") {
-		return "", fmt.Errorf("Repository URL is invalid.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is invalid.")
 	}
 	if cleaned == "" || len(cleaned) > 2048 {
-		return "", fmt.Errorf("Repository URL is invalid.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is invalid.")
 	}
 
 	parsed, err := url.Parse(cleaned)
 	if err != nil {
-		return "", fmt.Errorf("Repository URL is invalid.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is invalid.")
 	}
 	if parsed.Scheme != "https" {
-		return "", fmt.Errorf("Only HTTPS Git remotes are allowed.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Only HTTPS Git remotes are allowed.")
 	}
 	if parsed.User != nil {
-		return "", fmt.Errorf("Credentials in Git remote URLs are not allowed.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Credentials in Git remote URLs are not allowed.")
 	}
 	if parsed.RawQuery != "" || parsed.Fragment != "" {
-		return "", fmt.Errorf("Repository URL must not include query strings or fragments.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL must not include query strings or fragments.")
 	}
 	if parsed.Path == "" || parsed.Path == "/" {
-		return "", fmt.Errorf("Repository URL is missing a repository path.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is missing a repository path.")
 	}
 
 	host := strings.ToLower(parsed.Hostname())
 	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return "", fmt.Errorf("Repository host is not allowed.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host is not allowed.")
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
 		if isBlockedGitIP(ip) {
-			return "", fmt.Errorf("Repository host resolves to an internal network.")
+			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
 		}
-		return parsed.String(), nil
+		return validatedGitRepositoryURL{URL: parsed.String()}, nil
 	}
 
 	lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	addrs, err := net.DefaultResolver.LookupIPAddr(lookupCtx, host)
 	if err != nil || len(addrs) == 0 {
-		return "", fmt.Errorf("Repository host could not be resolved.")
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
 	}
+	var resolved net.IP
 	for _, addr := range addrs {
 		if isBlockedGitIP(addr.IP) {
-			return "", fmt.Errorf("Repository host resolves to an internal network.")
+			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
+		}
+		if resolved == nil {
+			resolved = addr.IP
 		}
 	}
+	if resolved == nil {
+		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
+	}
 
-	return parsed.String(), nil
+	return validatedGitRepositoryURL{
+		URL:            parsed.String(),
+		CurlOptResolve: gitCurlOptResolve(host, parsed.Port(), resolved),
+	}, nil
+}
+
+func gitCurlOptResolve(host string, port string, ip net.IP) string {
+	if port == "" {
+		port = "443"
+	}
+	address := ip.String()
+	if strings.Contains(address, ":") {
+		address = "[" + address + "]"
+	}
+	return host + ":" + port + ":" + address
 }
 
 func validateGitTargetDirectory(name string) error {
@@ -627,8 +678,8 @@ func validateGitTargetDirectory(name string) error {
 	return nil
 }
 
-func inspectGitCloneTarget(hostPath string) (gitCloneTargetMode, error) {
-	info, err := os.Lstat(hostPath)
+func inspectGitCloneTarget(fs *serverfs.Filesystem, targetPath string) (gitCloneTargetMode, error) {
+	info, err := fs.Stat(targetPath)
 	if os.IsNotExist(err) {
 		return gitCloneTargetEmpty, nil
 	}
@@ -642,7 +693,7 @@ func inspectGitCloneTarget(hostPath string) (gitCloneTargetMode, error) {
 		return gitCloneTargetEmpty, fmt.Errorf("Clone target already exists and is not a directory.")
 	}
 
-	entries, err := os.ReadDir(hostPath)
+	entries, err := fs.ReadDirStat(targetPath)
 	if err != nil {
 		return gitCloneTargetEmpty, fmt.Errorf("Could not inspect the clone target.")
 	}
@@ -659,32 +710,32 @@ func inspectGitCloneTarget(hostPath string) (gitCloneTargetMode, error) {
 	return gitCloneTargetInternalOnly, nil
 }
 
-func isAllowedGitCloneInternalEntry(entry os.DirEntry) bool {
+func isAllowedGitCloneInternalEntry(entry os.FileInfo) bool {
 	return entry.Name() == gitBetterFilesTrashDir && entry.IsDir()
 }
 
-func makeGitCloneTempTarget(hostRoot string, containerTargetPath string) (string, string, error) {
+func makeGitCloneTempTarget(fs *serverfs.Filesystem, containerTargetPath string) (string, string, error) {
 	for i := 0; i < 10; i++ {
 		name := fmt.Sprintf(".betterfiles-git-clone-%d-%d", time.Now().UnixNano(), i)
 		containerPath := path.Join(containerTargetPath, name)
-		hostPath := containerPathToHostPath(hostRoot, containerPath)
+		serverPath := containerPathToServerPath(containerPath)
 
-		if _, err := os.Lstat(hostPath); os.IsNotExist(err) {
-			return containerPath, hostPath, nil
+		if _, err := fs.Stat(serverPath); os.IsNotExist(err) {
+			return containerPath, serverPath, nil
 		}
 	}
 
 	return "", "", fmt.Errorf("Could not allocate a temporary clone directory.")
 }
 
-func promoteGitCloneTempTarget(tempHostPath string, targetHostPath string) error {
-	entries, err := os.ReadDir(tempHostPath)
+func promoteGitCloneTempTarget(fs *serverfs.Filesystem, tempPath string, targetPath string) error {
+	entries, err := fs.ReadDirStat(tempPath)
 	if err != nil {
 		return fmt.Errorf("Could not inspect the cloned repository.")
 	}
 
 	for _, entry := range entries {
-		if _, err := os.Lstat(filepath.Join(targetHostPath, entry.Name())); err == nil {
+		if _, err := fs.Stat(path.Join(targetPath, entry.Name())); err == nil {
 			return fmt.Errorf("Clone output would overwrite %s.", entry.Name())
 		} else if !os.IsNotExist(err) {
 			return fmt.Errorf("Could not inspect the clone output.")
@@ -692,10 +743,7 @@ func promoteGitCloneTempTarget(tempHostPath string, targetHostPath string) error
 	}
 
 	for _, entry := range entries {
-		if err := os.Rename(
-			filepath.Join(tempHostPath, entry.Name()),
-			filepath.Join(targetHostPath, entry.Name()),
-		); err != nil {
+		if err := fs.Rename(path.Join(tempPath, entry.Name()), path.Join(targetPath, entry.Name())); err != nil {
 			return fmt.Errorf("Could not move cloned files into the target directory.")
 		}
 	}
@@ -703,14 +751,29 @@ func promoteGitCloneTempTarget(tempHostPath string, targetHostPath string) error
 	return nil
 }
 
-func addGitInternalExcludes(hostPath string) error {
-	excludePath := filepath.Join(hostPath, ".git", "info", "exclude")
-	if err := os.MkdirAll(filepath.Dir(excludePath), 0750); err != nil {
+func addGitInternalExcludes(fs *serverfs.Filesystem, targetPath string) error {
+	gitPath := path.Join(targetPath, ".git")
+	infoPath := path.Join(gitPath, "info")
+	excludePath := path.Join(infoPath, "exclude")
+
+	stat, err := fs.Stat(gitPath)
+	if err != nil {
+		return err
+	}
+	if !stat.IsDir() {
+		return fmt.Errorf("Git metadata path is not a directory.")
+	}
+	if err := fs.CreateDirectory("info", gitPath); err != nil {
 		return err
 	}
 
 	content := ""
-	if raw, err := os.ReadFile(excludePath); err == nil {
+	if file, _, err := fs.File(excludePath); err == nil {
+		raw, readErr := io.ReadAll(io.LimitReader(file, 64*1024))
+		_ = file.Close()
+		if readErr != nil {
+			return readErr
+		}
 		content = string(raw)
 	}
 
@@ -729,7 +792,7 @@ func addGitInternalExcludes(hostPath string) error {
 	}
 	content += strings.Join(additions, "\n") + "\n"
 
-	return os.WriteFile(excludePath, []byte(content), 0640)
+	return fs.Write(excludePath, strings.NewReader(content), int64(len(content)), 0640)
 }
 
 func gitDiffArgs(cached bool, diffPath string) []string {
@@ -773,10 +836,13 @@ func isSafeGitRef(ref string) bool {
 	return !strings.ContainsAny(ref, "\x00\n\r ~^:?*[")
 }
 
-func containerPathToHostPath(root string, containerPath string) string {
+func containerPathToServerPath(containerPath string) string {
 	relative := strings.TrimPrefix(path.Clean(containerPath), gitContainerRoot)
 	relative = strings.TrimPrefix(relative, "/")
-	return filepath.Join(root, relative)
+	if relative == "" {
+		return "/"
+	}
+	return "/" + relative
 }
 
 func gitLockFor(id string) *sync.Mutex {
@@ -797,7 +863,7 @@ func maskGitOutput(output string) string {
 }
 
 func isBlockedGitIP(ip net.IP) bool {
-	if ip == nil || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() {
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
 		return true
 	}
 	for _, block := range gitBlockedNetworks {

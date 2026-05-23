@@ -5,8 +5,7 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
+	"path"
 	"runtime"
 	"strconv"
 	"strings"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pterodactyl/wings/router/middleware"
+	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
 type FileSearchResult struct {
@@ -49,37 +49,37 @@ var (
 	}
 
 	contentAllowedExtensions = map[string]struct{}{
-		".txt": {},
-		".log": {},
-		".json": {},
-		".jsonc": {},
-		".yaml": {},
-		".yml": {},
-		".toml": {},
-		".ini": {},
-		".conf": {},
-		".cfg": {},
+		".txt":        {},
+		".log":        {},
+		".json":       {},
+		".jsonc":      {},
+		".yaml":       {},
+		".yml":        {},
+		".toml":       {},
+		".ini":        {},
+		".conf":       {},
+		".cfg":        {},
 		".properties": {},
-		".env": {},
-		".md": {},
-		".xml": {},
-		".html": {},
-		".htm": {},
-		".css": {},
-		".scss": {},
-		".sass": {},
-		".less": {},
-		".js": {},
-		".jsx": {},
-		".ts": {},
-		".tsx": {},
-		".php": {},
-		".go": {},
-		".java": {},
-		".cs": {},
-		".py": {},
-		".rb": {},
-		".sh": {},
+		".env":        {},
+		".md":         {},
+		".xml":        {},
+		".html":       {},
+		".htm":        {},
+		".css":        {},
+		".scss":       {},
+		".sass":       {},
+		".less":       {},
+		".js":         {},
+		".jsx":        {},
+		".ts":         {},
+		".tsx":        {},
+		".php":        {},
+		".go":         {},
+		".java":       {},
+		".cs":         {},
+		".py":         {},
+		".rb":         {},
+		".sh":         {},
 	}
 
 	sensitivePrefixes = []string{
@@ -122,22 +122,21 @@ type walkJob struct {
 }
 
 type searchContext struct {
-	rootPath     string
-	rootLen      int
-	queryLower   string
-	maxResults   int
-	maxDepth     int
+	fs            *serverfs.Filesystem
+	queryLower    string
+	maxResults    int
+	maxDepth      int
 	contentSearch bool
-	results      []FileSearchResult
-	resultsMu    sync.Mutex
-	truncated    atomic.Bool
-	totalScanned atomic.Int64
-	done         chan struct{}
-	jobChan      chan walkJob
-	resultChan   chan []FileSearchResult
-	pendingJobs  atomic.Int64
-	stopOnce     sync.Once
-	closeOnce    sync.Once
+	results       []FileSearchResult
+	resultsMu     sync.Mutex
+	truncated     atomic.Bool
+	totalScanned  atomic.Int64
+	done          chan struct{}
+	jobChan       chan walkJob
+	resultChan    chan []FileSearchResult
+	pendingJobs   atomic.Int64
+	stopOnce      sync.Once
+	closeOnce     sync.Once
 }
 
 func getWorkerCount() int {
@@ -204,16 +203,19 @@ func allowsContentSearch(name string) bool {
 	return false
 }
 
-func contentMatches(fullPath string, queryLower string, size int64) bool {
+func contentMatches(fs *serverfs.Filesystem, displayPath string, queryLower string, size int64) bool {
 	if size <= 0 || size > maxContentBytes {
 		return false
 	}
 
-	file, err := os.Open(fullPath)
+	file, stat, err := fs.File(displayPath)
 	if err != nil {
 		return false
 	}
 	defer file.Close()
+	if stat.IsDir() || !stat.Mode().IsRegular() || stat.Size() <= 0 || stat.Size() > maxContentBytes {
+		return false
+	}
 
 	limited := io.LimitReader(file, maxContentBytes)
 	data, err := io.ReadAll(limited)
@@ -372,7 +374,7 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 				continue
 			}
 
-			entries, err := os.ReadDir(job.path)
+			entries, err := sc.fs.ReadDirStat(job.path)
 			if err != nil {
 				sc.finishJob()
 				continue
@@ -395,7 +397,7 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 
 				isDir := entry.IsDir()
 
-			sc.totalScanned.Add(1)
+				sc.totalScanned.Add(1)
 
 				nameLower := strings.ToLower(name)
 				nameMatches := strings.Contains(nameLower, sc.queryLower)
@@ -405,32 +407,28 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 						continue
 					}
 
-					fullPath := job.path + string(filepath.Separator) + name
+					fullPath := path.Join(job.path, name)
+					if !strings.HasPrefix(fullPath, "/") {
+						fullPath = "/" + fullPath
+					}
 
 					if len(fullPath) > maxPathLength {
 						continue
 					}
 
-					info, err := entry.Info()
-					if err != nil {
-						continue
-					}
-
-					if !nameMatches && sc.contentSearch && !isDir {
-						if !contentMatches(fullPath, sc.queryLower, info.Size()) {
+					if !nameMatches {
+						if !sc.contentSearch || isDir || !entry.Mode().IsRegular() || !contentMatches(sc.fs, fullPath, sc.queryLower, entry.Size()) {
 							goto scanSubdirs
 						}
 					}
 
-					relativePath := buildRelativePath(sc.rootLen, fullPath)
-
 					result := FileSearchResult{
 						Name:       name,
-						Path:       relativePath,
-						Directory:  getDirectory(relativePath),
+						Path:       fullPath,
+						Directory:  getDirectory(fullPath),
 						IsFile:     !isDir,
-						Size:       info.Size(),
-						ModifiedAt: info.ModTime().UTC().Format(time.RFC3339),
+						Size:       entry.Size(),
+						ModifiedAt: entry.ModTime().UTC().Format(time.RFC3339),
 					}
 
 					localBatch = append(localBatch, result)
@@ -449,7 +447,7 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 
 				if isDir && (sc.maxDepth <= 0 || job.depth < sc.maxDepth) {
 					subDirs = append(subDirs, walkJob{
-						path:  job.path + string(filepath.Separator) + name,
+						path:  path.Join(job.path, name),
 						depth: job.depth + 1,
 					})
 				}
@@ -521,23 +519,20 @@ func getServerFilesSearch(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	rootPath := filepath.Clean(s.Filesystem().Path())
-
 	resultsCap := maxResults
 	if resultsCap <= 0 {
 		resultsCap = 64
 	}
 
 	sc := &searchContext{
-		rootPath:   rootPath,
-		rootLen:    len(rootPath),
-		queryLower: strings.ToLower(query),
-		maxResults: maxResults,
-		maxDepth:   maxDepth,
+		fs:            s.Filesystem(),
+		queryLower:    strings.ToLower(query),
+		maxResults:    maxResults,
+		maxDepth:      maxDepth,
 		contentSearch: contentSearch,
-		results:    make([]FileSearchResult, 0, resultsCap),
-		done:       make(chan struct{}),
-		jobChan:    make(chan walkJob, jobChannelSize),
+		results:       make([]FileSearchResult, 0, resultsCap),
+		done:          make(chan struct{}),
+		jobChan:       make(chan walkJob, jobChannelSize),
 	}
 
 	go func() {
@@ -557,7 +552,7 @@ func getServerFilesSearch(c *gin.Context) {
 
 	sc.pendingJobs.Store(1)
 	select {
-	case sc.jobChan <- walkJob{path: rootPath, depth: 0}:
+	case sc.jobChan <- walkJob{path: "/", depth: 0}:
 	case <-sc.done:
 		sc.finishJob()
 	}

@@ -3,6 +3,7 @@ package router
 import (
 	"database/sql"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/pterodactyl/wings/router/middleware"
+	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
 const (
@@ -55,8 +57,8 @@ type betterFilesDatabaseInitializeRequest struct {
 }
 
 type betterFilesDatabaseCreateTableRequest struct {
-	File    string                                  `json:"file"`
-	Name    string                                  `json:"name"`
+	File    string                                 `json:"file"`
+	Name    string                                 `json:"name"`
 	Columns []betterFilesDatabaseCreateTableColumn `json:"columns"`
 }
 
@@ -87,7 +89,7 @@ type betterFilesDatabaseDeleteRowRequest struct {
 
 func getServerDatabaseInspect(c *gin.Context) {
 	s := middleware.ExtractServer(c)
-	db, displayPath, cleanup, ok := betterFilesOpenServerDatabase(c, s.Filesystem().Path(), c.Query("file"))
+	db, displayPath, cleanup, ok := betterFilesOpenServerDatabase(c, s.Filesystem(), c.Query("file"))
 	if !ok {
 		return
 	}
@@ -100,14 +102,14 @@ func getServerDatabaseInspect(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"file": displayPath,
+		"file":   displayPath,
 		"tables": tables,
 	})
 }
 
 func getServerDatabaseTable(c *gin.Context) {
 	s := middleware.ExtractServer(c)
-	db, displayPath, cleanup, ok := betterFilesOpenServerDatabase(c, s.Filesystem().Path(), c.Query("file"))
+	db, displayPath, cleanup, ok := betterFilesOpenServerDatabase(c, s.Filesystem(), c.Query("file"))
 	if !ok {
 		return
 	}
@@ -169,12 +171,12 @@ func getServerDatabaseTable(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"file":    displayPath,
-		"table":   tableName,
-		"columns": columns,
-		"indexes": indexes,
+		"file":     displayPath,
+		"table":    tableName,
+		"columns":  columns,
+		"indexes":  indexes,
 		"editable": editable,
-		"rows":    rows,
+		"rows":     rows,
 		"pagination": betterFilesDatabasePagination{
 			Total:       total,
 			PerPage:     perPage,
@@ -193,17 +195,18 @@ func postServerDatabaseInitialize(c *gin.Context) {
 		return
 	}
 
-	hostPath, displayPath, ok := betterFilesResolveServerFile(s.Filesystem().Path(), request.File, true)
+	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), request.File)
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database path."})
 		return
 	}
+	defer file.Close()
 	if !betterFilesIsDatabaseFile(displayPath) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .db, .sqlite, and .sqlite3 files can be initialized."})
 		return
 	}
 
-	stat, err := os.Stat(hostPath)
+	stat, err := file.Stat()
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -213,14 +216,18 @@ func postServerDatabaseInitialize(c *gin.Context) {
 		return
 	}
 
-	db, err := betterFilesOpenSQLiteWritable(hostPath)
+	db, commit, cleanup, err := betterFilesOpenSQLiteWritableCopy(s.Filesystem(), displayPath, file, stat)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	defer db.Close()
+	defer cleanup()
 
 	if _, err := db.Exec("PRAGMA user_version = 1"); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unable to initialize SQLite database: %s", err.Error())})
+		return
+	}
+	if err := commit(); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unable to initialize SQLite database: %s", err.Error())})
 		return
 	}
@@ -236,13 +243,17 @@ func postServerDatabaseTable(c *gin.Context) {
 		return
 	}
 
-	db, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem().Path(), request.File)
+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
 	if !ok {
 		return
 	}
 	defer cleanup()
 
 	if err := betterFilesDatabaseCreateTable(db, request.Name, request.Columns); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := commit(); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -258,13 +269,17 @@ func patchServerDatabaseCell(c *gin.Context) {
 		return
 	}
 
-	db, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem().Path(), request.File)
+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
 	if !ok {
 		return
 	}
 	defer cleanup()
 
 	if err := betterFilesDatabaseUpdateCell(db, request.Table, request.RowID, request.Column, request.Value); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := commit(); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -280,7 +295,7 @@ func postServerDatabaseRow(c *gin.Context) {
 		return
 	}
 
-	db, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem().Path(), request.File)
+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
 	if !ok {
 		return
 	}
@@ -288,6 +303,10 @@ func postServerDatabaseRow(c *gin.Context) {
 
 	rowID, err := betterFilesDatabaseInsertRow(db, request.Table, request.Values)
 	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := commit(); err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -303,7 +322,7 @@ func deleteServerDatabaseRow(c *gin.Context) {
 		return
 	}
 
-	db, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem().Path(), request.File)
+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
 	if !ok {
 		return
 	}
@@ -313,73 +332,209 @@ func deleteServerDatabaseRow(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if err := commit(); err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
-func betterFilesOpenServerDatabase(c *gin.Context, root string, rawFile string) (*sql.DB, string, func(), bool) {
-	hostPath, displayPath, ok := betterFilesResolveServerFile(root, rawFile, true)
+func betterFilesOpenServerDatabase(c *gin.Context, fs *serverfs.Filesystem, rawFile string) (*sql.DB, string, func(), bool) {
+	file, displayPath, ok := betterFilesOpenServerRegularFile(fs, rawFile)
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database path."})
 		return nil, "", func() {}, false
 	}
 	if !betterFilesIsDatabaseFile(displayPath) {
+		file.Close()
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .db, .sqlite, and .sqlite3 files can be viewed as databases."})
 		return nil, "", func() {}, false
 	}
 
-	stat, err := os.Stat(hostPath)
+	stat, err := file.Stat()
 	if err != nil {
+		file.Close()
 		middleware.CaptureAndAbort(c, err)
 		return nil, "", func() {}, false
 	}
 	if stat.IsDir() || stat.Size() <= 0 || stat.Size() > betterFilesDatabaseMaxFile {
+		file.Close()
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Database is empty, too large, or is not a file."})
 		return nil, "", func() {}, false
 	}
 
-	db, err := betterFilesOpenSQLiteReadOnly(hostPath)
+	tempPath, err := betterFilesCopyDatabaseToTemp(fs, displayPath, file)
 	if err != nil {
+		file.Close()
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return nil, "", func() {}, false
+	}
+	db, err := betterFilesOpenSQLiteReadOnly(tempPath)
+	if err != nil {
+		file.Close()
+		betterFilesRemoveSQLiteTempFiles(tempPath)
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return nil, "", func() {}, false
 	}
 
 	return db, displayPath, func() {
 		_ = db.Close()
+		_ = file.Close()
+		betterFilesRemoveSQLiteTempFiles(tempPath)
 	}, true
 }
 
-func betterFilesOpenServerDatabaseWritable(c *gin.Context, root string, rawFile string) (*sql.DB, func(), bool) {
-	hostPath, displayPath, ok := betterFilesResolveServerFile(root, rawFile, true)
+func betterFilesOpenServerDatabaseWritable(c *gin.Context, fs *serverfs.Filesystem, rawFile string) (*sql.DB, func() error, func(), bool) {
+	file, displayPath, ok := betterFilesOpenServerRegularFile(fs, rawFile)
 	if !ok {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database path."})
-		return nil, func() {}, false
+		return nil, func() error { return nil }, func() {}, false
 	}
 	if !betterFilesIsDatabaseFile(displayPath) {
+		file.Close()
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .db, .sqlite, and .sqlite3 files can be edited as databases."})
-		return nil, func() {}, false
+		return nil, func() error { return nil }, func() {}, false
 	}
 
-	stat, err := os.Stat(hostPath)
+	stat, err := file.Stat()
 	if err != nil {
+		file.Close()
 		middleware.CaptureAndAbort(c, err)
-		return nil, func() {}, false
+		return nil, func() error { return nil }, func() {}, false
 	}
 	if stat.IsDir() || stat.Size() <= 0 || stat.Size() > betterFilesDatabaseMaxFile {
+		file.Close()
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Database is empty, too large, or is not a file."})
-		return nil, func() {}, false
+		return nil, func() error { return nil }, func() {}, false
 	}
 
-	db, err := betterFilesOpenSQLiteWritable(hostPath)
+	db, commit, cleanup, err := betterFilesOpenSQLiteWritableCopy(fs, displayPath, file, stat)
 	if err != nil {
+		file.Close()
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return nil, func() {}, false
+		return nil, func() error { return nil }, func() {}, false
 	}
 
-	return db, func() {
-		_ = db.Close()
+	return db, commit, func() {
+		cleanup()
+		_ = file.Close()
 	}, true
 }
+
+func betterFilesCopyDatabaseToTemp(fs *serverfs.Filesystem, displayPath string, source io.ReadSeeker) (string, error) {
+	if _, err := source.Seek(0, io.SeekStart); err != nil {
+		return "", err
+	}
+	temp, err := os.CreateTemp("", "betterfiles-db-*")
+	if err != nil {
+		return "", fmt.Errorf("Unable to create temporary SQLite database: %w", err)
+	}
+	tempPath := temp.Name()
+	if _, err := io.Copy(temp, source); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return "", fmt.Errorf("Unable to copy SQLite database: %w", err)
+	}
+	if err := temp.Close(); err != nil {
+		betterFilesRemoveSQLiteTempFiles(tempPath)
+		return "", fmt.Errorf("Unable to prepare temporary SQLite database: %w", err)
+	}
+	for _, suffix := range betterFilesSQLiteSidecarSuffixes {
+		if err := betterFilesCopyDatabaseSidecar(fs, displayPath+suffix, tempPath+suffix); err != nil {
+			betterFilesRemoveSQLiteTempFiles(tempPath)
+			return "", err
+		}
+	}
+	return tempPath, nil
+}
+
+func betterFilesCopyDatabaseSidecar(fs *serverfs.Filesystem, displayPath string, tempPath string) error {
+	sidecar, stat, err := fs.File(displayPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("Unable to open SQLite sidecar file: %w", err)
+	}
+	defer sidecar.Close()
+	if stat.IsDir() || !stat.Mode().IsRegular() || stat.Size() > betterFilesDatabaseMaxFile {
+		return fmt.Errorf("SQLite sidecar file is too large or is not a file")
+	}
+	temp, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, stat.Mode().Perm())
+	if err != nil {
+		return fmt.Errorf("Unable to create temporary SQLite sidecar file: %w", err)
+	}
+	defer temp.Close()
+	if _, err := io.Copy(temp, sidecar); err != nil {
+		return fmt.Errorf("Unable to copy SQLite sidecar file: %w", err)
+	}
+	return nil
+}
+
+func betterFilesRemoveSQLiteTempFiles(tempPath string) {
+	_ = os.Remove(tempPath)
+	for _, suffix := range betterFilesSQLiteSidecarSuffixes {
+		_ = os.Remove(tempPath + suffix)
+	}
+}
+
+func betterFilesRemoveServerSQLiteSidecars(fs *serverfs.Filesystem, displayPath string) error {
+	for _, suffix := range betterFilesSQLiteSidecarSuffixes {
+		err := fs.Delete(displayPath + suffix)
+		if err == nil || os.IsNotExist(err) {
+			continue
+		}
+		return fmt.Errorf("Unable to remove SQLite sidecar file: %w", err)
+	}
+	return nil
+}
+
+func betterFilesOpenSQLiteWritableCopy(fs *serverfs.Filesystem, displayPath string, source io.ReadSeeker, stat os.FileInfo) (*sql.DB, func() error, func(), error) {
+	tempPath, err := betterFilesCopyDatabaseToTemp(fs, displayPath, source)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	db, err := betterFilesOpenSQLiteWritable(tempPath)
+	if err != nil {
+		betterFilesRemoveSQLiteTempFiles(tempPath)
+		return nil, nil, nil, err
+	}
+
+	closed := false
+	cleanup := func() {
+		if !closed {
+			_ = db.Close()
+			closed = true
+		}
+		betterFilesRemoveSQLiteTempFiles(tempPath)
+	}
+	commit := func() error {
+		if !closed {
+			if err := db.Close(); err != nil {
+				return fmt.Errorf("Unable to close SQLite database: %w", err)
+			}
+			closed = true
+		}
+		temp, err := os.Open(tempPath)
+		if err != nil {
+			return fmt.Errorf("Unable to reopen temporary SQLite database: %w", err)
+		}
+		defer temp.Close()
+		info, err := temp.Stat()
+		if err != nil {
+			return fmt.Errorf("Unable to inspect temporary SQLite database: %w", err)
+		}
+		if err := fs.Write(displayPath, temp, info.Size(), stat.Mode().Perm()); err != nil {
+			return err
+		}
+		return betterFilesRemoveServerSQLiteSidecars(fs, displayPath)
+	}
+
+	return db, commit, cleanup, nil
+}
+
+var betterFilesSQLiteSidecarSuffixes = []string{"-wal", "-shm", "-journal"}
 
 func betterFilesOpenSQLiteReadOnly(hostPath string) (*sql.DB, error) {
 	u := url.URL{Scheme: "file", Path: hostPath}
@@ -423,6 +578,10 @@ func betterFilesOpenSQLiteWritable(hostPath string) (*sql.DB, error) {
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
+	if _, err := db.Exec("PRAGMA journal_mode = DELETE"); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("Unable to configure SQLite journal mode: %w", err)
+	}
 	if _, err := db.Exec("PRAGMA busy_timeout = 250"); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("Unable to configure SQLite timeout: %w", err)
