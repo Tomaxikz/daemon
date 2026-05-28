@@ -31,6 +31,10 @@ var (
 	importStateMutex sync.RWMutex
 )
 
+var ErrImportInProgress = errors.New("server import already running")
+
+const importConnectionTimeout = 30 * time.Second
+
 type SessionHostKeyStore struct {
 	mu      sync.Mutex
 	entries map[string]string
@@ -73,7 +77,31 @@ func setImportProgress(uuid string, p *ImportProgress) {
 	}
 }
 
+func beginImportProgress(uuid string) bool {
+	importStateMutex.Lock()
+	defer importStateMutex.Unlock()
+	if _, ok := importStateMap[uuid]; ok {
+		return false
+	}
+	importStateMap[uuid] = &ImportProgress{
+		TotalFiles:     -1,
+		ProcessedFiles: 0,
+		Percentage:     0,
+	}
+	return true
+}
+
 func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod string, wipe bool) error {
+	if !beginImportProgress(s.ID()) {
+		return ErrImportInProgress
+	}
+	releaseProgress := true
+	defer func() {
+		if releaseProgress {
+			setImportProgress(s.ID(), nil)
+		}
+	}()
+
 	if err := s.ensureServerStopped(); err != nil {
 		return err
 	}
@@ -85,10 +113,21 @@ func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFing
 	}
 
 	srcLocation, dstLocation = normalizePaths(srcLocation, dstLocation)
+	releaseProgress = false
 	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, nil)
 }
 
 func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod string, wipe bool, selectedItems []string) error {
+	if !beginImportProgress(s.ID()) {
+		return ErrImportInProgress
+	}
+	releaseProgress := true
+	defer func() {
+		if releaseProgress {
+			setImportProgress(s.ID(), nil)
+		}
+	}()
+
 	if err := s.ensureServerStopped(); err != nil {
 		return err
 	}
@@ -100,19 +139,14 @@ func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hos
 	}
 
 	srcLocation, dstLocation = normalizePaths(srcLocation, dstLocation)
+	releaseProgress = false
 	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, selectedItems)
 }
 
 func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod string, selectedItems []string) error {
 	uuid := s.ID()
 	var err error
-
-	progress := &ImportProgress{
-		TotalFiles:     -1,
-		ProcessedFiles: 0,
-		Percentage:     0,
-	}
-	setImportProgress(uuid, progress)
+	started := time.Now()
 	sessionKeys := NewSessionHostKeyStore()
 
 	defer func() {
@@ -145,6 +179,9 @@ func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKey
 		"type":        transferType,
 		"auth_method": authMethod,
 		"host":        host,
+		"port":        port,
+		"src":         srcLocation,
+		"dst":         dstLocation,
 		"selective":   isSelective,
 		"items":       len(selectedItems),
 	}).Info("starting import process")
@@ -184,9 +221,30 @@ func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKey
 	}
 
 	if err != nil {
-		s.Log().WithField("error", err).Error("import process failed")
+		s.Log().WithFields(log.Fields{
+			"error":       err,
+			"type":        transferType,
+			"auth_method": authMethod,
+			"host":        host,
+			"port":        port,
+			"src":         srcLocation,
+			"dst":         dstLocation,
+			"selective":   isSelective,
+			"items":       len(selectedItems),
+			"duration":    time.Since(started),
+		}).Error("import process failed")
 	} else {
-		s.Log().Info("import process completed successfully")
+		s.Log().WithFields(log.Fields{
+			"type":        transferType,
+			"auth_method": authMethod,
+			"host":        host,
+			"port":        port,
+			"src":         srcLocation,
+			"dst":         dstLocation,
+			"selective":   isSelective,
+			"items":       len(selectedItems),
+			"duration":    time.Since(started),
+		}).Info("import process completed successfully")
 	}
 
 	return err
@@ -808,7 +866,7 @@ func (s *Server) connectSSH(user, password, sshKey, sshKeyPassphrase, hostKeyFin
 		User:            user,
 		Auth:            authMethods,
 		HostKeyCallback: hostKeyCallback,
-		Timeout:         0,
+		Timeout:         importConnectionTimeout,
 	}
 
 	addr := net.JoinHostPort(resolvedIP, strconv.Itoa(port))
@@ -831,7 +889,7 @@ func (s *Server) connectFTP(user, password, host string, port int) (*goftp.Clien
 		User:               user,
 		Password:           password,
 		ConnectionsPerHost: 3,
-		Timeout:            0,
+		Timeout:            importConnectionTimeout,
 	}
 
 	addr := net.JoinHostPort(resolvedIP, strconv.Itoa(port))

@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/apex/log"
 	"github.com/gin-gonic/gin"
 	"github.com/pterodactyl/wings/router/middleware"
 	"github.com/pterodactyl/wings/server"
@@ -10,6 +11,7 @@ import (
 
 func postServerImport(c *gin.Context) {
 	s := ExtractServer(c)
+	logger := middleware.ExtractLogger(c)
 
 	var data struct {
 		User               string `json:"user"`
@@ -38,6 +40,24 @@ func postServerImport(c *gin.Context) {
 		return
 	}
 
+	if s.IsImporting() {
+		logger.Warn("server import rejected because another import is already running")
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": "A server import is already running for this server.",
+		})
+		return
+	}
+
+	logger.WithFields(log.Fields{
+		"type":      data.Type,
+		"host":      data.Hote,
+		"port":      data.Port,
+		"src":       data.Srclocation,
+		"dst":       data.Dstlocation,
+		"wipe":      data.Wipe,
+		"selective": false,
+	}).Info("accepted server import request")
+
 	go func(srv *server.Server) {
 		if err := srv.ImportNew(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.Wipe); err != nil {
 			srv.Log().WithField("error", err).Error("failed to complete server import process")
@@ -49,6 +69,7 @@ func postServerImport(c *gin.Context) {
 
 func postServerImportSelected(c *gin.Context) {
 	s := ExtractServer(c)
+	logger := middleware.ExtractLogger(c)
 
 	var data struct {
 		User               string   `json:"user"`
@@ -77,6 +98,25 @@ func postServerImportSelected(c *gin.Context) {
 		})
 		return
 	}
+
+	if s.IsImporting() {
+		logger.Warn("selective server import rejected because another import is already running")
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": "A server import is already running for this server.",
+		})
+		return
+	}
+
+	logger.WithFields(log.Fields{
+		"type":      data.Type,
+		"host":      data.Hote,
+		"port":      data.Port,
+		"src":       data.Srclocation,
+		"dst":       data.Dstlocation,
+		"wipe":      data.Wipe,
+		"selective": true,
+		"items":     len(data.SelectedItems),
+	}).Info("accepted selective server import request")
 
 	go func(srv *server.Server) {
 		if err := srv.ImportNewSelected(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.Wipe, data.SelectedItems); err != nil {

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apex/log"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/gin-gonic/gin"
@@ -243,8 +244,30 @@ func postServerGitClone(c *gin.Context) {
 	}
 
 	lock := gitLockFor(env.Id)
-	lock.Lock()
+	if !lock.TryLock() {
+		middleware.ExtractLogger(c).WithFields(log.Fields{
+			"operation":      "clone",
+			"container_id":   env.Id,
+			"repository_url": maskGitOutput(repositoryURL.URL),
+			"repo_host":      gitRepositoryHost(repositoryURL.URL),
+			"work_dir":       workDir,
+			"target":         targetPath,
+		}).Warn("git operation rejected because another git operation is already running")
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
+		return
+	}
 	defer lock.Unlock()
+
+	started := time.Now()
+	logger := middleware.ExtractLogger(c).WithFields(log.Fields{
+		"operation":      "clone",
+		"container_id":   env.Id,
+		"repository_url": maskGitOutput(repositoryURL.URL),
+		"repo_host":      gitRepositoryHost(repositoryURL.URL),
+		"work_dir":       workDir,
+		"target":         targetPath,
+	})
+	logger.Info("starting git operation")
 
 	targetMode, err := inspectGitCloneTarget(s.Filesystem(), targetServerPath)
 	if err != nil {
@@ -293,6 +316,11 @@ func postServerGitClone(c *gin.Context) {
 		result.Stdout = strings.ReplaceAll(result.Stdout, cloneTargetPath, targetPath)
 		result.Stderr = strings.ReplaceAll(result.Stderr, cloneTargetPath, targetPath)
 	}
+
+	logger.WithFields(log.Fields{
+		"duration":  time.Since(started),
+		"exit_code": result.ExitCode,
+	}).Info("completed git operation")
 
 	c.JSON(http.StatusOK, maskGitResponse(result))
 }
@@ -393,8 +421,30 @@ func postServerGitPull(c *gin.Context) {
 	}
 
 	lock := gitLockFor(env.Id)
-	lock.Lock()
+	if !lock.TryLock() {
+		middleware.ExtractLogger(c).WithFields(log.Fields{
+			"operation":      "pull",
+			"container_id":   env.Id,
+			"repository_url": maskGitOutput(remoteURL.URL),
+			"repo_host":      gitRepositoryHost(remoteURL.URL),
+			"work_dir":       workDir,
+			"branch":         remoteBranch,
+		}).Warn("git operation rejected because another git operation is already running")
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
+		return
+	}
 	defer lock.Unlock()
+
+	started := time.Now()
+	logger := middleware.ExtractLogger(c).WithFields(log.Fields{
+		"operation":      "pull",
+		"container_id":   env.Id,
+		"repository_url": maskGitOutput(remoteURL.URL),
+		"repo_host":      gitRepositoryHost(remoteURL.URL),
+		"work_dir":       workDir,
+		"branch":         remoteBranch,
+	})
+	logger.Info("starting git operation")
 
 	result, err := execGit(ctx, env, gitBin, []string{
 		"pull",
@@ -407,6 +457,11 @@ func postServerGitPull(c *gin.Context) {
 		middleware.CaptureAndAbort(c, err)
 		return
 	}
+
+	logger.WithFields(log.Fields{
+		"duration":  time.Since(started),
+		"exit_code": result.ExitCode,
+	}).Info("completed git operation")
 
 	c.JSON(http.StatusOK, maskGitResponse(result))
 }
@@ -860,6 +915,14 @@ func maskGitResponse(result *gitResponse) *gitResponse {
 
 func maskGitOutput(output string) string {
 	return gitCredentialPattern.ReplaceAllString(output, "${1}****@")
+}
+
+func gitRepositoryHost(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }
 
 func isBlockedGitIP(ip net.IP) bool {

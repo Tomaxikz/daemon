@@ -33,6 +33,13 @@ func (s *Server) GetImportProgressSnapshot() (ImportProgressSnapshot, bool) {
 	return ImportProgressSnapshot{}, false
 }
 
+func (s *Server) IsImporting() bool {
+	if s == nil {
+		return false
+	}
+	return getImportProgress(s.ID()) != nil
+}
+
 func (p *ImportProgress) SetTotalFiles(total int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
