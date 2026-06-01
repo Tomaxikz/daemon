@@ -66,7 +66,7 @@ func (h *Handler) listenForExpiration(ctx context.Context) {
 	}
 }
 
-var e = []string{
+var e = append([]string{
 	server.StatsEvent,
 	server.StatusEvent,
 	server.ConsoleOutputEvent,
@@ -78,7 +78,7 @@ var e = []string{
 	server.BackupRestoreCompletedEvent,
 	server.TransferLogsEvent,
 	server.TransferStatusEvent,
-}
+}, serverImporterListenerEvents...)
 
 // ListenForServerEvents will listen for different events happening on a server
 // and send them along to the connected websocket client. This function will

@@ -36,6 +36,7 @@ const (
 	PermissionReceiveInstall   = "admin.websocket.install"
 	PermissionReceiveTransfer  = "admin.websocket.transfer"
 	PermissionReceiveBackups   = "backup.read"
+	PermissionReceiveImporter  = "file.sftp"
 )
 
 type Handler struct {
@@ -164,6 +165,12 @@ func (h *Handler) SendJson(v Message) error {
 		// If we are sending transfer output, only send it to the user if they have the required permissions.
 		if v.Event == server.TransferLogsEvent {
 			if !j.HasPermission(PermissionReceiveTransfer) {
+				return nil
+			}
+		}
+
+		if isServerImporterEvent(v.Event) {
+			if !j.HasPermission(PermissionReceiveImporter) {
 				return nil
 			}
 		}
@@ -301,6 +308,10 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
 	}
 
 	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+		return err
+	}
+
+	if handled, err := h.HandleServerImporter(ctx, m); handled {
 		return err
 	}
 

@@ -34,6 +34,73 @@ var (
 var ErrImportInProgress = errors.New("server import already running")
 
 const importConnectionTimeout = 30 * time.Second
+const (
+	importProgressModeLive    = "live"
+	importProgressModeScan    = "scan"
+	importTransferIdleTimeout = 30 * time.Second
+	importTerminalProgressTTL = 10 * time.Minute
+)
+
+type importReadResult struct {
+	n   int
+	err error
+}
+
+type importIdleReader struct {
+	reader  io.Reader
+	timeout time.Duration
+	close   func() error
+}
+
+func newImportIdleReader(reader io.Reader, timeout time.Duration, closeFn func() error) io.Reader {
+	if timeout <= 0 {
+		return reader
+	}
+	return &importIdleReader{reader: reader, timeout: timeout, close: closeFn}
+}
+
+func (r *importIdleReader) Read(p []byte) (int, error) {
+	result := make(chan importReadResult, 1)
+	buffer := make([]byte, len(p))
+	go func() {
+		n, err := r.reader.Read(buffer)
+		result <- importReadResult{n: n, err: err}
+	}()
+
+	timer := time.NewTimer(r.timeout)
+	defer timer.Stop()
+
+	select {
+	case read := <-result:
+		if read.n > 0 {
+			copy(p, buffer[:read.n])
+		}
+		return read.n, read.err
+	case <-timer.C:
+		if r.close != nil {
+			_ = r.close()
+		}
+		return 0, fmt.Errorf("import stalled: no data received for %s", r.timeout)
+	}
+}
+
+type importIdleWriter struct {
+	writer   io.Writer
+	activity chan<- struct{}
+}
+
+func (w *importIdleWriter) Write(p []byte) (int, error) {
+	select {
+	case w.activity <- struct{}{}:
+	default:
+	}
+	return w.writer.Write(p)
+}
+
+type ImportEstimate struct {
+	Files int64
+	Bytes int64
+}
 
 type SessionHostKeyStore struct {
 	mu      sync.Mutex
@@ -63,8 +130,15 @@ func (s *SessionHostKeyStore) VerifyOrStore(hostKey string, fingerprint string) 
 
 func getImportProgress(uuid string) *ImportProgress {
 	importStateMutex.RLock()
-	defer importStateMutex.RUnlock()
-	return importStateMap[uuid]
+	progress := importStateMap[uuid]
+	importStateMutex.RUnlock()
+
+	if progress != nil && progress.IsExpiredTerminal(importTerminalProgressTTL) {
+		clearImportProgressIf(uuid, progress)
+		return nil
+	}
+
+	return progress
 }
 
 func setImportProgress(uuid string, p *ImportProgress) {
@@ -77,22 +151,37 @@ func setImportProgress(uuid string, p *ImportProgress) {
 	}
 }
 
-func beginImportProgress(uuid string) bool {
+func clearImportProgressIf(uuid string, p *ImportProgress) {
 	importStateMutex.Lock()
 	defer importStateMutex.Unlock()
-	if _, ok := importStateMap[uuid]; ok {
+	if importStateMap[uuid] == p {
+		delete(importStateMap, uuid)
+	}
+}
+
+func beginImportProgress(uuid string, mode string) bool {
+	importStateMutex.Lock()
+	defer importStateMutex.Unlock()
+	if existing, ok := importStateMap[uuid]; ok && existing.IsImporting() {
 		return false
 	}
+	if mode != importProgressModeScan {
+		mode = importProgressModeLive
+	}
 	importStateMap[uuid] = &ImportProgress{
+		Mode:           mode,
+		Status:         "queued",
 		TotalFiles:     -1,
 		ProcessedFiles: 0,
+		TotalBytes:     -1,
+		ProcessedBytes: 0,
 		Percentage:     0,
 	}
 	return true
 }
 
-func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod string, wipe bool) error {
-	if !beginImportProgress(s.ID()) {
+func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod, progressMode string, wipe bool) error {
+	if !beginImportProgress(s.ID(), progressMode) {
 		return ErrImportInProgress
 	}
 	releaseProgress := true
@@ -114,11 +203,11 @@ func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFing
 
 	srcLocation, dstLocation = normalizePaths(srcLocation, dstLocation)
 	releaseProgress = false
-	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, nil)
+	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, progressMode, nil)
 }
 
-func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod string, wipe bool, selectedItems []string) error {
-	if !beginImportProgress(s.ID()) {
+func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod, progressMode string, wipe bool, selectedItems []string) error {
+	if !beginImportProgress(s.ID(), progressMode) {
 		return ErrImportInProgress
 	}
 	releaseProgress := true
@@ -140,17 +229,23 @@ func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hos
 
 	srcLocation, dstLocation = normalizePaths(srcLocation, dstLocation)
 	releaseProgress = false
-	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, selectedItems)
+	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, progressMode, selectedItems)
 }
 
-func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod string, selectedItems []string) error {
+func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod, progressMode string, selectedItems []string) error {
 	uuid := s.ID()
 	var err error
 	started := time.Now()
 	sessionKeys := NewSessionHostKeyStore()
 
 	defer func() {
-		setImportProgress(uuid, nil)
+		if progress := getImportProgress(uuid); progress != nil {
+			if err != nil {
+				progress.SetError(s, err.Error())
+			} else {
+				progress.Complete(s)
+			}
+		}
 
 		if notifyErr := s.notifyImportComplete(err); notifyErr != nil {
 			s.Log().WithField("error", notifyErr).Warn("failed to notify Panel of import completion, status may need manual clearing")
@@ -182,9 +277,17 @@ func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKey
 		"port":        port,
 		"src":         srcLocation,
 		"dst":         dstLocation,
+		"progress":    progressMode,
 		"selective":   isSelective,
 		"items":       len(selectedItems),
 	}).Info("starting import process")
+
+	if progress := getImportProgress(uuid); progress != nil {
+		progress.SetStatus(s, "scanning")
+		if !progress.ShouldScan() {
+			progress.SetStatus(s, "transferring")
+		}
+	}
 
 	if isFTP {
 		if isSelective {
@@ -229,6 +332,7 @@ func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKey
 			"port":        port,
 			"src":         srcLocation,
 			"dst":         dstLocation,
+			"progress":    progressMode,
 			"selective":   isSelective,
 			"items":       len(selectedItems),
 			"duration":    time.Since(started),
@@ -241,6 +345,7 @@ func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKey
 			"port":        port,
 			"src":         srcLocation,
 			"dst":         dstLocation,
+			"progress":    progressMode,
 			"selective":   isSelective,
 			"items":       len(selectedItems),
 			"duration":    time.Since(started),
@@ -269,16 +374,22 @@ func (s *Server) importFullSFTP(user, password, sshKey, sshKeyPassphrase, hostKe
 
 	if !info.IsDir() {
 		if progress := getImportProgress(s.ID()); progress != nil {
-			progress.SetTotalFiles(1)
+			if progress.ShouldScan() {
+				progress.SetTotals(s, 1, info.Size())
+				progress.SetStatus(s, "transferring")
+			}
 		}
 		return s.downloadSingleFileSFTP(client, remotePath, dstLocation)
 	}
 
 	if progress := getImportProgress(s.ID()); progress != nil {
-		if total, err := countSFTPFiles(client, remotePath, s, true); err == nil {
-			progress.SetTotalFiles(total)
-		} else {
-			s.Log().WithField("error", err).Debug("failed to pre-scan SFTP files for progress")
+		if progress.ShouldScan() {
+			if estimate, err := countSFTPFiles(client, remotePath, s, true); err == nil {
+				progress.SetTotals(s, estimate.Files, estimate.Bytes)
+			} else {
+				s.Log().WithField("error", err).Debug("failed to pre-scan SFTP files for progress")
+			}
+			progress.SetStatus(s, "transferring")
 		}
 	}
 
@@ -310,20 +421,24 @@ func (s *Server) importSelectedSFTP(user, password, sshKey, sshKeyPassphrase, ho
 	}
 
 	if progress := getImportProgress(s.ID()); progress != nil {
-		total := int64(0)
-		for _, item := range selectedItems {
-			remotePath, _ := resolveSelectedItemPath(srcLocation, item)
-			if remotePath == "" {
-				continue
+		if progress.ShouldScan() {
+			estimate := ImportEstimate{}
+			for _, item := range selectedItems {
+				remotePath, _ := resolveSelectedItemPath(srcLocation, item)
+				if remotePath == "" {
+					continue
+				}
+				count, err := countSFTPFiles(client, remotePath, s, false)
+				if err != nil {
+					return err
+				}
+				estimate.Files += count.Files
+				estimate.Bytes += count.Bytes
 			}
-			count, err := countSFTPFiles(client, remotePath, s, false)
-			if err != nil {
-				return err
+			if estimate.Files > 0 {
+				progress.SetTotals(s, estimate.Files, estimate.Bytes)
 			}
-			total += count
-		}
-		if total > 0 {
-			progress.SetTotalFiles(total)
+			progress.SetStatus(s, "transferring")
 		}
 	}
 
@@ -413,11 +528,6 @@ func (s *Server) downloadSingleFileSFTP(client *sftp.Client, remotePath, dstLoca
 }
 
 func (s *Server) downloadFileSFTP(client *sftp.Client, remotePath, localPath string) error {
-	uuid := s.ID()
-	if progress := getImportProgress(uuid); progress != nil {
-		progress.IncrementProcessed(s, remotePath)
-	}
-
 	remotePath = strings.TrimSuffix(remotePath, "/")
 	localPath = strings.TrimSuffix(localPath, "/")
 
@@ -446,9 +556,14 @@ func (s *Server) downloadFileSFTP(client *sftp.Client, remotePath, localPath str
 		}
 	}
 
-	if err := s.Filesystem().Write(filepath.Clean(localPath), srcFile, srcFileInfo.Size(), 0644); err != nil {
+	reader := newImportIdleReader(srcFile, importTransferIdleTimeout, srcFile.Close)
+	if err := s.Filesystem().Write(filepath.Clean(localPath), reader, srcFileInfo.Size(), 0644); err != nil {
 		s.Log().WithField("error", err).Error("Unable to write to local file")
 		return err
+	}
+
+	if progress := getImportProgress(s.ID()); progress != nil {
+		progress.IncrementProcessed(s, remotePath, srcFileInfo.Size())
 	}
 
 	return nil
@@ -472,10 +587,13 @@ func (s *Server) importFullSCP(user, password, sshKey, sshKeyPassphrase, hostKey
 	}
 
 	if progress := getImportProgress(s.ID()); progress != nil {
-		if total, err := s.countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, true, sessionKeys); err == nil {
-			progress.SetTotalFiles(total)
-		} else {
-			s.Log().WithField("error", err).Debug("failed to pre-scan SCP files for progress")
+		if progress.ShouldScan() {
+			if estimate, err := s.countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, true, sessionKeys); err == nil {
+				progress.SetTotals(s, estimate.Files, estimate.Bytes)
+			} else {
+				s.Log().WithField("error", err).Debug("failed to pre-scan SCP files for progress")
+			}
+			progress.SetStatus(s, "transferring")
 		}
 	}
 
@@ -500,10 +618,13 @@ func (s *Server) importSelectedSCP(user, password, sshKey, sshKeyPassphrase, hos
 	}
 
 	if progress := getImportProgress(s.ID()); progress != nil {
-		if total, err := s.countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, selectedItems, sessionKeys); err == nil && total > 0 {
-			progress.SetTotalFiles(total)
-		} else if err != nil {
-			s.Log().WithField("error", err).Debug("failed to pre-scan SCP files for progress")
+		if progress.ShouldScan() {
+			if estimate, err := s.countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, selectedItems, sessionKeys); err == nil && estimate.Files > 0 {
+				progress.SetTotals(s, estimate.Files, estimate.Bytes)
+			} else if err != nil {
+				s.Log().WithField("error", err).Debug("failed to pre-scan SCP files for progress")
+			}
+			progress.SetStatus(s, "transferring")
 		}
 	}
 
@@ -547,10 +668,13 @@ func (s *Server) importFullFTP(user, password, host string, port int, srcLocatio
 	}
 
 	if progress := getImportProgress(s.ID()); progress != nil {
-		if total, err := countFTPFiles(client, srcLocation, s, true); err == nil {
-			progress.SetTotalFiles(total)
-		} else {
-			s.Log().WithField("error", err).Debug("failed to pre-scan FTP files for progress")
+		if progress.ShouldScan() {
+			if estimate, err := countFTPFiles(client, srcLocation, s, true); err == nil {
+				progress.SetTotals(s, estimate.Files, estimate.Bytes)
+			} else {
+				s.Log().WithField("error", err).Debug("failed to pre-scan FTP files for progress")
+			}
+			progress.SetStatus(s, "transferring")
 		}
 	}
 
@@ -618,20 +742,24 @@ func (s *Server) importSelectedFTP(user, password, host string, port int, srcLoc
 	}
 
 	if progress := getImportProgress(s.ID()); progress != nil {
-		total := int64(0)
-		for _, item := range selectedItems {
-			remotePath, _ := resolveSelectedItemPath(srcLocation, item)
-			if remotePath == "" {
-				continue
+		if progress.ShouldScan() {
+			estimate := ImportEstimate{}
+			for _, item := range selectedItems {
+				remotePath, _ := resolveSelectedItemPath(srcLocation, item)
+				if remotePath == "" {
+					continue
+				}
+				count, err := countFTPFiles(client, remotePath, s, false)
+				if err != nil {
+					return err
+				}
+				estimate.Files += count.Files
+				estimate.Bytes += count.Bytes
 			}
-			count, err := countFTPFiles(client, remotePath, s, false)
-			if err != nil {
-				return err
+			if estimate.Files > 0 {
+				progress.SetTotals(s, estimate.Files, estimate.Bytes)
 			}
-			total += count
-		}
-		if total > 0 {
-			progress.SetTotalFiles(total)
+			progress.SetStatus(s, "transferring")
 		}
 	}
 
@@ -739,11 +867,6 @@ func (s *Server) walkAndDownloadFTP(client *goftp.Client, remotePath, targetPath
 }
 
 func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath string, fileSize int64) error {
-	uuid := s.ID()
-	if progress := getImportProgress(uuid); progress != nil {
-		progress.IncrementProcessed(s, remotePath)
-	}
-
 	if lastSlash := strings.LastIndex(localPath, "/"); lastSlash != -1 {
 		parentDir := filepath.Clean(localPath[:lastSlash])
 		if err := s.Filesystem().CreateDirectory("", parentDir); err != nil {
@@ -762,11 +885,37 @@ func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath str
 		defer tempFile.Close()
 
 		ftpPath := strings.TrimPrefix(remotePath, "/")
-		if err := client.Retrieve(ftpPath, tempFile); err != nil {
-			s.Log().WithField("error", err).Error("Failed to retrieve file: " + remotePath)
-			return err
+		activity := make(chan struct{}, 1)
+		retrieveErr := make(chan error, 1)
+		go func() {
+			retrieveErr <- client.Retrieve(ftpPath, &importIdleWriter{writer: tempFile, activity: activity})
+		}()
+
+		timer := time.NewTimer(importTransferIdleTimeout)
+		defer timer.Stop()
+		for {
+			select {
+			case err := <-retrieveErr:
+				if err != nil {
+					s.Log().WithField("error", err).Error("Failed to retrieve file: " + remotePath)
+					return err
+				}
+				goto ftpRetrieveComplete
+			case <-activity:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(importTransferIdleTimeout)
+			case <-timer.C:
+				_ = client.Close()
+				return fmt.Errorf("import stalled: no data received for %s", importTransferIdleTimeout)
+			}
 		}
 
+	ftpRetrieveComplete:
 		if _, err = tempFile.Seek(0, 0); err != nil {
 			return err
 		}
@@ -779,6 +928,9 @@ func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath str
 		if err := s.Filesystem().Write(localPath, tempFile, fileInfo.Size(), 0644); err != nil {
 			s.Log().WithField("error", err).Error("Failed to write file: " + localPath)
 			return err
+		}
+		if progress := getImportProgress(s.ID()); progress != nil {
+			progress.IncrementProcessed(s, remotePath, fileInfo.Size())
 		}
 		return nil
 	}
@@ -793,7 +945,11 @@ func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath str
 		retrieveErr <- err
 	}()
 
-	writeErr := s.Filesystem().Write(localPath, reader, fileSize, 0644)
+	idleReader := newImportIdleReader(reader, importTransferIdleTimeout, func() error {
+		_ = reader.CloseWithError(fmt.Errorf("import stalled: no data received for %s", importTransferIdleTimeout))
+		return client.Close()
+	})
+	writeErr := s.Filesystem().Write(localPath, idleReader, fileSize, 0644)
 	if writeErr != nil {
 		_ = reader.CloseWithError(writeErr)
 	}
@@ -808,6 +964,10 @@ func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath str
 	if writeErr != nil {
 		s.Log().WithField("error", writeErr).Error("Failed to write file: " + localPath)
 		return writeErr
+	}
+
+	if progress := getImportProgress(s.ID()); progress != nil {
+		progress.IncrementProcessed(s, remotePath, fileSize)
 	}
 
 	return nil
@@ -1205,7 +1365,7 @@ func (s *Server) scpDownloadRecursive(conn *ssh.Client, remotePath, localBase st
 		return err
 	}
 
-	reader := bufio.NewReader(stdout)
+	reader := bufio.NewReader(newImportIdleReader(stdout, importTransferIdleTimeout, session.Close))
 	if err := scpSendAck(stdin); err != nil {
 		return err
 	}
@@ -1333,7 +1493,7 @@ func (s *Server) scpDownloadRecursive(conn *ssh.Client, remotePath, localBase st
 				if len(remoteStack) > 0 {
 					remoteName = filepath.Join(append(remoteStack, name)...)
 				}
-				progress.IncrementProcessed(s, remoteName)
+				progress.IncrementProcessed(s, remoteName, size)
 			}
 		default:
 			errBuf, _ := io.ReadAll(stderr)
@@ -1421,7 +1581,7 @@ func shellEscape(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-func countSFTPFiles(client *sftp.Client, remotePath string, s *Server, skipPerm bool) (int64, error) {
+func countSFTPFiles(client *sftp.Client, remotePath string, s *Server, skipPerm bool) (ImportEstimate, error) {
 	remotePath = strings.TrimSuffix(remotePath, "/")
 	if remotePath == "" {
 		remotePath = "/"
@@ -1433,34 +1593,38 @@ func countSFTPFiles(client *sftp.Client, remotePath string, s *Server, skipPerm 
 	info, err := client.Stat(remotePath)
 	if err != nil {
 		if skipPerm && isPermissionDenied(err) {
-			return 0, nil
+			return ImportEstimate{}, nil
 		}
 		if isNotFoundError(err) {
-			return 0, nil
+			return ImportEstimate{}, nil
 		}
-		return 0, err
+		return ImportEstimate{}, err
 	}
 
 	if !info.IsDir() {
-		return 1, nil
+		return ImportEstimate{Files: 1, Bytes: info.Size()}, nil
 	}
 
-	var total int64
-	err = walkDirSFTP(client, remotePath, s, skipPerm, func(_ string, info os.FileInfo) error {
+	estimate := ImportEstimate{}
+	err = walkDirSFTP(client, remotePath, s, skipPerm, func(path string, info os.FileInfo) error {
 		if info.IsDir() {
 			return nil
 		}
-		total++
+		estimate.Files++
+		estimate.Bytes += info.Size()
+		if progress := getImportProgress(s.ID()); progress != nil && progress.ShouldScan() {
+			progress.SetScanEstimate(s, estimate.Files, estimate.Bytes, path)
+		}
 		return nil
 	})
 	if err != nil {
-		return 0, err
+		return ImportEstimate{}, err
 	}
 
-	return total, nil
+	return estimate, nil
 }
 
-func countFTPFiles(client *goftp.Client, remotePath string, s *Server, skipPerm bool) (int64, error) {
+func countFTPFiles(client *goftp.Client, remotePath string, s *Server, skipPerm bool) (ImportEstimate, error) {
 	remotePath = strings.TrimSuffix(remotePath, "/")
 	if remotePath == "" {
 		remotePath = "/"
@@ -1469,16 +1633,16 @@ func countFTPFiles(client *goftp.Client, remotePath string, s *Server, skipPerm 
 	info, err := client.Stat(remotePath)
 	if err != nil {
 		if skipPerm && isPermissionDenied(err) {
-			return 0, nil
+			return ImportEstimate{}, nil
 		}
-		return 0, err
+		return ImportEstimate{}, err
 	}
 
 	if !info.IsDir() {
-		return 1, nil
+		return ImportEstimate{Files: 1, Bytes: info.Size()}, nil
 	}
 
-	var total int64
+	estimate := ImportEstimate{}
 	var walk func(dir string) error
 	walk = func(dir string) error {
 		files, err := client.ReadDir(dir)
@@ -1496,23 +1660,27 @@ func countFTPFiles(client *goftp.Client, remotePath string, s *Server, skipPerm 
 					return err
 				}
 			} else {
-				total++
+				estimate.Files++
+				estimate.Bytes += f.Size()
+				if progress := getImportProgress(s.ID()); progress != nil && progress.ShouldScan() {
+					progress.SetScanEstimate(s, estimate.Files, estimate.Bytes, filepath.Join(dir, f.Name()))
+				}
 			}
 		}
 		return nil
 	}
 
 	if err := walk(remotePath); err != nil {
-		return 0, err
+		return ImportEstimate{}, err
 	}
 
-	return total, nil
+	return estimate, nil
 }
 
-func (s *Server) countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation string, skipPerm bool, sessionKeys *SessionHostKeyStore) (int64, error) {
+func (s *Server) countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation string, skipPerm bool, sessionKeys *SessionHostKeyStore) (ImportEstimate, error) {
 	client, conn, err := s.connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
-		return 0, err
+		return ImportEstimate{}, err
 	}
 	defer client.Close()
 	defer conn.Close()
@@ -1525,15 +1693,15 @@ func (s *Server) countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKey
 	return countSFTPFiles(client, srcLocation, s, skipPerm)
 }
 
-func (s *Server) countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation string, selectedItems []string, sessionKeys *SessionHostKeyStore) (int64, error) {
+func (s *Server) countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation string, selectedItems []string, sessionKeys *SessionHostKeyStore) (ImportEstimate, error) {
 	client, conn, err := s.connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
-		return 0, err
+		return ImportEstimate{}, err
 	}
 	defer client.Close()
 	defer conn.Close()
 
-	total := int64(0)
+	estimate := ImportEstimate{}
 	for _, item := range selectedItems {
 		remotePath, _ := resolveSelectedItemPath(srcLocation, item)
 		if remotePath == "" {
@@ -1544,10 +1712,11 @@ func (s *Server) countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase,
 			s.Log().WithField("error", err).Debug("failed to pre-scan SCP selection for progress")
 			continue
 		}
-		total += count
+		estimate.Files += count.Files
+		estimate.Bytes += count.Bytes
 	}
 
-	return total, nil
+	return estimate, nil
 }
 
 func walkDirSFTP(client *sftp.Client, dir string, s *Server, skipPerm bool, callback func(path string, info os.FileInfo) error) error {

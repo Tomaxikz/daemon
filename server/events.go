@@ -7,18 +7,20 @@ import (
 
 // Defines all the possible output events for a server.
 const (
-	DaemonMessageEvent          = "daemon message"
-	InstallOutputEvent          = "install output"
-	InstallStartedEvent         = "install started"
-	InstallCompletedEvent       = "install completed"
-	ConsoleOutputEvent          = "console output"
-	StatusEvent                 = "status"
-	StatsEvent                  = "stats"
-	BackupRestoreCompletedEvent = "backup restore completed"
-	BackupCompletedEvent        = "backup completed"
-	TransferLogsEvent           = "transfer logs"
-	TransferStatusEvent         = "transfer status"
-	DeletedEvent                = "deleted"
+	DaemonMessageEvent           = "daemon message"
+	InstallOutputEvent           = "install output"
+	InstallStartedEvent          = "install started"
+	InstallCompletedEvent        = "install completed"
+	ConsoleOutputEvent           = "console output"
+	StatusEvent                  = "status"
+	StatsEvent                   = "stats"
+	BackupRestoreCompletedEvent  = "backup restore completed"
+	BackupCompletedEvent         = "backup completed"
+	TransferLogsEvent            = "transfer logs"
+	TransferStatusEvent          = "transfer status"
+	DeletedEvent                 = "deleted"
+	ServerImporterProgressEvent  = "serverimporter:progress"
+	ServerImporterCompletedEvent = "serverimporter:completed"
 )
 
 // Events returns the server's emitter instance.

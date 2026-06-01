@@ -26,6 +26,7 @@ func postServerImport(c *gin.Context) {
 		Wipe               bool   `json:"wipe"`
 		Type               string `json:"type"`
 		AuthMethod         string `json:"auth_method"`
+		ProgressMode       string `json:"progress_mode"`
 	}
 
 	if err := c.BindJSON(&data); err != nil {
@@ -55,11 +56,12 @@ func postServerImport(c *gin.Context) {
 		"src":       data.Srclocation,
 		"dst":       data.Dstlocation,
 		"wipe":      data.Wipe,
+		"progress":  data.ProgressMode,
 		"selective": false,
 	}).Info("accepted server import request")
 
 	go func(srv *server.Server) {
-		if err := srv.ImportNew(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.Wipe); err != nil {
+		if err := srv.ImportNew(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.ProgressMode, data.Wipe); err != nil {
 			srv.Log().WithField("error", err).Error("failed to complete server import process")
 		}
 	}(s)
@@ -84,6 +86,7 @@ func postServerImportSelected(c *gin.Context) {
 		Wipe               bool     `json:"wipe"`
 		Type               string   `json:"type"`
 		AuthMethod         string   `json:"auth_method"`
+		ProgressMode       string   `json:"progress_mode"`
 		SelectedItems      []string `json:"selected_items"`
 	}
 
@@ -114,12 +117,13 @@ func postServerImportSelected(c *gin.Context) {
 		"src":       data.Srclocation,
 		"dst":       data.Dstlocation,
 		"wipe":      data.Wipe,
+		"progress":  data.ProgressMode,
 		"selective": true,
 		"items":     len(data.SelectedItems),
 	}).Info("accepted selective server import request")
 
 	go func(srv *server.Server) {
-		if err := srv.ImportNewSelected(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.Wipe, data.SelectedItems); err != nil {
+		if err := srv.ImportNewSelected(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.ProgressMode, data.Wipe, data.SelectedItems); err != nil {
 			srv.Log().WithField("error", err).Error("failed to complete selective server import process")
 		}
 	}(s)
@@ -140,7 +144,7 @@ func getServerImporterProgress(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"is_importing": true,
+		"is_importing": s.IsImporting(),
 		"progress":     progress,
 	})
 }
