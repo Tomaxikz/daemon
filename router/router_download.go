@@ -74,37 +74,11 @@ func getDownloadBackup(c *gin.Context) {
 
 // Handles downloading a specific file for a server.
 func getDownloadFile(c *gin.Context) {
-	manager := middleware.ExtractManager(c)
-	token := tokens.FilePayload{}
-	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
-		middleware.CaptureAndAbort(c, err)
+	df, ok := getTokenDownloadFile(c)
+	if !ok {
 		return
 	}
+	defer df.Close()
 
-	s, ok := manager.Get(token.ServerUuid)
-	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileDownload) {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "The requested resource was not found on this server.",
-		})
-		return
-	}
-
-	f, st, err := s.Filesystem().File(token.FilePath)
-	if err != nil {
-		middleware.CaptureAndAbort(c, err)
-		return
-	}
-	defer f.Close()
-	if st.IsDir() {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "The requested resource was not found on this server.",
-		})
-		return
-	}
-
-	c.Header("Content-Length", strconv.Itoa(int(st.Size())))
-	c.Header("Content-Disposition", "attachment; filename="+strconv.Quote(st.Name()))
-	c.Header("Content-Type", "application/octet-stream")
-
-	_, _ = bufio.NewReader(f).WriteTo(c.Writer)
+	serveDownloadFile(c, df, "attachment", false, true)
 }

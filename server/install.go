@@ -259,6 +259,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
 	}
 
 	r, err := ip.client.ImagePull(ip.Server.Context(), ip.Script.ContainerImage, imagePullOptions)
+	safeImage := betterConsoleDockerPullSafeImageRef(ip.Script.ContainerImage)
 	if err != nil {
 		images, ierr := ip.client.ImageList(ip.Server.Context(), image.ListOptions{})
 		if ierr != nil {
@@ -274,7 +275,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
 				}
 
 				log.WithFields(log.Fields{
-					"image": ip.Script.ContainerImage,
+					"image": safeImage,
 					"err":   err.Error(),
 				}).Warn("unable to pull requested image from remote source, however the image exists locally")
 
@@ -288,12 +289,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
 	}
 	defer r.Close()
 
-	log.WithField("image", ip.Script.ContainerImage).Debug("pulling docker image... this could take a bit of time")
+	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
+	ip.Server.Events().Publish(ImagePullStartedEvent, "")
+	defer ip.Server.Events().Publish(ImagePullCompletedEvent, "")
 
 	// Block continuation until the image has been pulled successfully.
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
-		log.Debug(scanner.Text())
+		log.Debug(betterConsoleDockerPullSafeText(scanner.Text()))
+		payload := betterConsoleDockerPullProgress(ip.Script.ContainerImage, scanner.Bytes())
+		if payload != "" {
+			ip.Server.Events().Publish(ImagePullProgressEvent, payload)
+		}
+		if line := betterConsoleDockerPullInstallLine(scanner.Bytes()); line != "" {
+			ip.Server.Sink(system.InstallSink).Push([]byte(line))
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -505,11 +515,30 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
 	}
 	defer reader.Close()
 
-	err = system.ScanReader(reader, ip.Server.Sink(system.InstallSink).Push)
+	err = ip.streamRawInstallOutput(reader)
 	if err != nil && !errors.Is(err, context.Canceled) {
 		ip.Server.Log().WithFields(log.Fields{"container_id": id, "error": err}).Warn("error processing install output lines")
 	}
 	return nil
+}
+
+func (ip *InstallationProcess) streamRawInstallOutput(reader io.Reader) error {
+	buf := make([]byte, 4096)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			chunk := make([]byte, n)
+			copy(chunk, buf[:n])
+			ip.Server.Sink(system.InstallSink).Push(chunk)
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+
+			return err
+		}
+	}
 }
 
 // resourceLimits returns resource limits for the installation container. This

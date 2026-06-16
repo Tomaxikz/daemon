@@ -148,7 +148,10 @@ func (h *Handler) SendJson(v Message) error {
 	if j := h.GetJwt(); j != nil {
 		// If we're sending installation output but the user does not have the required
 		// permissions to see the output, don't send it down the line.
-		if v.Event == server.InstallOutputEvent {
+		if v.Event == server.InstallOutputEvent ||
+			v.Event == server.ImagePullStartedEvent ||
+			v.Event == server.ImagePullProgressEvent ||
+			v.Event == server.ImagePullCompletedEvent {
 			if !j.HasPermission(PermissionReceiveInstall) {
 				return nil
 			}

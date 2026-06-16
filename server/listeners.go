@@ -127,10 +127,17 @@ func (s *Server) StartEventListeners() {
 							s.OnStateChange()
 						}
 					case environment.DockerImagePullStatus:
-						s.Events().Publish(InstallOutputEvent, e.Data)
+						s.Events().Publish(ImagePullProgressEvent, e.Data)
+						if str, ok := e.Data.(string); ok {
+							if line := betterConsoleDockerPullInstallLine([]byte(str)); line != "" {
+								s.Sink(system.LogSink).Push([]byte(line))
+							}
+						}
 					case environment.DockerImagePullStarted:
+						s.Events().Publish(ImagePullStartedEvent, "")
 						s.PublishConsoleOutputFromDaemon("Pulling Docker container image, this could take a few minutes to complete...")
 					case environment.DockerImagePullCompleted:
+						s.Events().Publish(ImagePullCompletedEvent, "")
 						s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")
 					default:
 					}

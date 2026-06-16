@@ -13,6 +13,21 @@ instances, fetch server logs, generate backups, and control all aspects of the s
 In addition, Wings ships with a built-in SFTP server allowing your system to remain free of Pterodactyl specific
 dependencies, and allowing users to authenticate with the same credentials they would normally use to access the Panel.
 
+## Fork Notes
+
+This repository is a fork of [pterodactyl/wings](https://github.com/pterodactyl/wings) with a small set of daemon-side
+fixes and hardening changes. For the Rust rewrite, see [Wings-rs](https://github.com/calagopus/wings).
+
+Notable changes in this fork include:
+
+* File download requests return a proper not-found response when the target file does not exist, instead of bubbling up
+  as an internal server error.
+* File downloads use stricter path and file-type validation before serving content.
+* File downloads and stream responses use `http.ServeContent`, enabling HTTP range and conditional request handling.
+* File downloads are capped to the file size observed when the request starts, matching the fixed-byte behavior used by
+  Wings-rs-style downloads so later file growth does not extend the response.
+* Download responses include safer headers such as `X-Content-Type-Options: nosniff`.
+
 ## Sponsors
 
 I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.

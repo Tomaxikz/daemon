@@ -69,6 +69,13 @@ type SftpConfiguration struct {
 	Port int `default:"2022" json:"bind_port" yaml:"bind_port"`
 	// If set to true, no write actions will be allowed on the SFTP server.
 	ReadOnly bool `default:"false" yaml:"read_only"`
+	// Shell controls the optional interactive SSH shell exposed through the SFTP listener.
+	Shell SftpShellConfiguration `yaml:"shell"`
+}
+
+type SftpShellConfiguration struct {
+	// Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
+	Enabled bool `default:"false" yaml:"enabled"`
 }
 
 // ApiConfiguration defines the configuration for the internal API that is

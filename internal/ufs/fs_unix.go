@@ -690,7 +690,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, 
 	finalPath, err := filepath.EvalSymlinks(filepath.Join("/proc/self/fd/", strconv.Itoa(fd)))
 	if err != nil {
 		if !errors.Is(err, ErrNotExist) {
-			return fd, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
+			_ = unix.Close(fd)
+			return 0, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
 		}
 
 		// The target of one of the symlinks (EvalSymlinks is recursive)
@@ -698,7 +699,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, 
 		// that for further validation instead.
 		var pErr *PathError
 		if !errors.As(err, &pErr) {
-			return fd, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
+			_ = unix.Close(fd)
+			return 0, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
 		}
 
 		// Update the final path to whatever directory or path didn't exist while
@@ -714,7 +716,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, 
 		if fs.useOpenat2 {
 			op = "openat2"
 		}
-		return fd, &PathError{
+		_ = unix.Close(fd)
+		return 0, &PathError{
 			Op:   op,
 			Path: name,
 			Err:  ErrBadPathResolution,
@@ -722,6 +725,10 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, 
 	}
 
 	// Return the file descriptor and any potential error.
+	if err != nil {
+		_ = unix.Close(fd)
+		return 0, err
+	}
 	return fd, err
 }
 

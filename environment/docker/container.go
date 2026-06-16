@@ -11,7 +11,6 @@ import (
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
-	"github.com/buger/jsonparser"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
@@ -346,9 +345,6 @@ func (e *Environment) Readlog(lines int) ([]string, error) {
 // of that. I'd imagine in a lot of cases an outage shouldn't affect users too
 // badly. It'll at least keep existing servers working correctly if anything.
 func (e *Environment) ensureImageExists(img string) error {
-	e.Events().Publish(environment.DockerImagePullStarted, "")
-	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
-
 	// Images prefixed with a ~ are local images that we do not need to try and pull.
 	if strings.HasPrefix(img, "~") {
 		return nil
@@ -385,6 +381,7 @@ func (e *Environment) ensureImageExists(img string) error {
 	}
 
 	out, err := e.client.ImagePull(ctx, img, imagePullOptions)
+	safeImage := betterConsoleDockerPullSafeImageRef(img)
 	if err != nil {
 		images, ierr := e.client.ImageList(ctx, image.ListOptions{})
 		if ierr != nil {
@@ -400,7 +397,7 @@ func (e *Environment) ensureImageExists(img string) error {
 				}
 
 				log.WithFields(log.Fields{
-					"image":        img,
+					"image":        safeImage,
 					"container_id": e.Id,
 					"err":          err.Error(),
 				}).Warn("unable to pull requested image from remote source, however the image exists locally")
@@ -411,29 +408,30 @@ func (e *Environment) ensureImageExists(img string) error {
 			}
 		}
 
-		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", img)
+		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", safeImage)
 	}
 	defer out.Close()
 
-	log.WithField("image", img).Debug("pulling docker image... this could take a bit of time")
+	e.Events().Publish(environment.DockerImagePullStarted, "")
+	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
+
+	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
 
 	// I'm not sure what the best approach here is, but this will block execution until the image
 	// is done being pulled, which is what we need.
 	scanner := bufio.NewScanner(out)
 
 	for scanner.Scan() {
-		b := scanner.Bytes()
-		status, _ := jsonparser.GetString(b, "status")
-		progress, _ := jsonparser.GetString(b, "progress")
-
-		e.Events().Publish(environment.DockerImagePullStatus, status+" "+progress)
+		if payload := betterConsoleDockerPullProgress(img, scanner.Bytes()); payload != "" {
+			e.Events().Publish(environment.DockerImagePullStatus, payload)
+		}
 	}
 
 	if err := scanner.Err(); err != nil {
 		return err
 	}
 
-	log.WithField("image", img).Debug("completed docker image pull")
+	log.WithField("image", safeImage).Debug("completed docker image pull")
 
 	return nil
 }

@@ -90,8 +90,15 @@ func TestFilesystem_Openfile(t *testing.T) {
 			_, _, err := fs.File("foo/bar.txt")
 
 			g.Assert(err).IsNotNil()
-			// TODO
-			//g.Assert(IsErrorCode(err, ErrNotExist)).IsTrue()
+			g.Assert(IsErrorCode(err, ErrNotExist)).IsTrue()
+		})
+
+		g.It("returns custom error when file resolves outside the root", func() {
+			_, _, err := fs.File("/some/../foo/../../test.txt")
+
+			g.Assert(err).IsNotNil()
+			g.Assert(IsErrorCode(err, ErrCodePathResolution)).IsTrue()
+			g.Assert(errors.Is(err, ufs.ErrBadPathResolution)).IsTrue("err is not ErrBadPathResolution")
 		})
 
 		g.It("returns file stat information", func() {

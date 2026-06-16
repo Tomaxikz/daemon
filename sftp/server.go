@@ -37,6 +37,14 @@ type SFTPServer struct {
 	Listen   string
 }
 
+type sshPtyRequest struct {
+	Term   string
+	Cols   uint32
+	Rows   uint32
+	Width  uint32
+	Height uint32
+}
+
 func New(m *server.Manager) *SFTPServer {
 	cfg := config.Get().System
 	return &SFTPServer{
@@ -138,24 +146,62 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 			continue
 		}
 
-		go func(in <-chan *ssh.Request) {
-			for req := range in {
-				// Channels have a type that is dependent on the protocol. For SFTP
-				// this is "subsystem" with a payload that (should) be "sftp". Discard
-				// anything else we receive ("pty", "shell", etc)
-				ok := req.Type == "subsystem" && len(req.Payload) >= 4 && string(req.Payload[4:]) == "sftp"
-				_ = req.Reply(ok, nil)
-			}
-		}(requests)
-
 		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
-			if err := c.Handle(sconn, srv, channel); err != nil {
-				return err
-			}
+			go c.handleSession(sconn, srv, channel, requests)
+		} else {
+			_ = channel.Close()
 		}
 	}
 
 	return nil
+}
+
+func (c *SFTPServer) handleSession(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request) {
+	var requestedPty sshPtyRequest
+
+	for req := range requests {
+		switch req.Type {
+		case "subsystem":
+			ok := len(req.Payload) >= 4 && string(req.Payload[4:]) == "sftp"
+			_ = req.Reply(ok, nil)
+			if ok {
+				if err := c.Handle(conn, srv, channel); err != nil {
+					srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle session")
+				}
+				return
+			}
+		case "pty-req":
+			ok := config.Get().System.Sftp.Shell.Enabled
+			if ok {
+				handler, err := NewHandler(conn, srv)
+				ok = err == nil && handler.can("control.console")
+				if ok {
+					_ = ssh.Unmarshal(req.Payload, &requestedPty)
+				}
+			}
+			_ = req.Reply(ok, nil)
+		case "shell":
+			ok := config.Get().System.Sftp.Shell.Enabled
+			if ok {
+				handler, err := NewHandler(conn, srv)
+				if err != nil || !handler.can("control.console") {
+					_ = req.Reply(false, nil)
+					_ = channel.Close()
+					return
+				}
+				_ = req.Reply(true, nil)
+				if err := c.HandleShell(conn, srv, channel, requests, requestedPty, handler); err != nil {
+					srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle shell session")
+				}
+				return
+			}
+			_ = req.Reply(false, nil)
+		default:
+			_ = req.Reply(false, nil)
+		}
+	}
+
+	_ = channel.Close()
 }
 
 // Handle spins up a SFTP server instance for the authenticated user's server allowing
@@ -180,6 +226,28 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
 	if err := rs.Serve(); err == io.EOF {
 		_ = rs.Close()
 	}
+
+	return nil
+}
+
+// HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
+func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
+	defer channel.Close()
+
+	if !handler.can("control.console") {
+		_, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
+		return nil
+	}
+
+	go func() {
+		for req := range requests {
+			if req.WantReply {
+				_ = req.Reply(false, nil)
+			}
+		}
+	}()
+
+	c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
 
 	return nil
 }

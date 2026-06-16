@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"sync"
 	"time"
 
@@ -73,12 +74,23 @@ var e = append([]string{
 	server.InstallOutputEvent,
 	server.InstallStartedEvent,
 	server.InstallCompletedEvent,
+	server.ImagePullStartedEvent,
+	server.ImagePullProgressEvent,
+	server.ImagePullCompletedEvent,
 	server.DaemonMessageEvent,
 	server.BackupCompletedEvent,
 	server.BackupRestoreCompletedEvent,
 	server.TransferLogsEvent,
 	server.TransferStatusEvent,
 }, serverImporterListenerEvents...)
+
+var allowedServerEvents = func() map[string]struct{} {
+	events := make(map[string]struct{}, len(e))
+	for _, event := range e {
+		events[event] = struct{}{}
+	}
+	return events
+}()
 
 // ListenForServerEvents will listen for different events happening on a server
 // and send them along to the connected websocket client. This function will
@@ -93,10 +105,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
 	eventChan := make(chan []byte)
 	logOutput := make(chan []byte, 8)
 	installOutput := make(chan []byte, 4)
+	canReceiveInstall := false
+	if jwt := h.GetJwt(); jwt != nil {
+		canReceiveInstall = jwt.HasPermission(PermissionReceiveInstall)
+	}
 
 	h.server.Events().On(eventChan) // TODO: make a sinky
 	h.server.Sink(system.LogSink).On(logOutput)
-	h.server.Sink(system.InstallSink).On(installOutput)
+	if canReceiveInstall {
+		h.server.Sink(system.InstallSink).On(installOutput)
+	}
 
 	onError := func(evt string, err2 error) {
 		h.Logger().WithField("event", evt).WithField("error", err2).Error("failed to send event over server websocket")
@@ -130,6 +148,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
 			if err := events.DecodeTo(b, &e); err != nil {
 				continue
 			}
+			if _, ok := allowedServerEvents[e.Topic]; !ok && !strings.HasPrefix(e.Topic, server.BackupCompletedEvent+":") {
+				continue
+			}
 			var sendErr error
 			message := Message{Event: Event(e.Topic)}
 			if str, ok := e.Data.(string); ok {
@@ -157,7 +178,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
 	// These functions will automatically close the channel if it hasn't been already.
 	h.server.Events().Off(eventChan)
 	h.server.Sink(system.LogSink).Off(logOutput)
-	h.server.Sink(system.InstallSink).Off(installOutput)
+	if canReceiveInstall {
+		h.server.Sink(system.InstallSink).Off(installOutput)
+	}
 
 	// If the internal context is stopped it is either because the parent context
 	// got canceled or because we ran into an error. If the "err" variable is nil
