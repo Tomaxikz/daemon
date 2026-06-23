@@ -25,7 +25,6 @@ var (
 )
 
 type cliSettings struct {
-	enabled bool
 	proto   string
 	host    string
 	scheme  string

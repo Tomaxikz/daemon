@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"io"
 	"sync"
 
 	"emperror.dev/errors"
@@ -44,9 +43,6 @@ type Environment struct {
 	// Controls the hijacked response stream which exists only when we're attached to
 	// the running container instance.
 	stream *types.HijackedResponse
-
-	// Holds the stats stream used by the polling commands so that we can easily close it out.
-	stats io.ReadCloser
 
 	emitter *events.Bus
 

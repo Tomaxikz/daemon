@@ -9,18 +9,12 @@ import (
 
 	"github.com/apex/log"
 
+	"github.com/pterodactyl/wings/environment"
 	"github.com/pterodactyl/wings/events"
 	"github.com/pterodactyl/wings/system"
 
-	"github.com/pterodactyl/wings/environment"
 	"github.com/pterodactyl/wings/remote"
 )
-
-var dockerEvents = []string{
-	environment.DockerImagePullStatus,
-	environment.DockerImagePullStarted,
-	environment.DockerImagePullCompleted,
-}
 
 type diskSpaceLimiter struct {
 	o      sync.Once

@@ -1,6 +1,6 @@
 diff --git a/.github/workflows/development-release.yaml b/.github/workflows/development-release.yaml
 new file mode 100644
-index 0000000..e04263f
+index 0000000000000000000000000000000000000000..1b7e0b8fd6591d47d7be517e086d20188b7a2db7
 --- /dev/null
 +++ b/.github/workflows/development-release.yaml
 @@ -0,0 +1,80 @@
@@ -29,7 +29,7 @@ index 0000000..e04263f
 +      - name: Setup Go
 +        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
 +        with:
-+          go-version: 1.24.11
++          go-version: 1.25.5
 +
 +      - name: Build binaries
 +        env:
@@ -86,7 +86,7 @@ index 0000000..e04263f
 +          gh release upload "${TAG_NAME}" dist/* --clobber
 diff --git a/.github/workflows/docker.yaml b/.github/workflows/docker.yaml
 deleted file mode 100644
-index 476cdfb..0000000
+index 476cdfb35553eabaa8d54f0218927da3e54304e3..0000000000000000000000000000000000000000
 --- a/.github/workflows/docker.yaml
 +++ /dev/null
 @@ -1,81 +0,0 @@
@@ -171,9 +171,496 @@ index 476cdfb..0000000
 -          tags: ${{ steps.docker_meta.outputs.tags }}
 -          cache-from: type=gha
 -          cache-to: type=gha,mode=max
+diff --git a/.github/workflows/push.yaml b/.github/workflows/push.yaml
+index 89791d3c37badbb8c9560e9ae40345a3e33029dc..1b4db729013a7954661d3c0c0f69c2e144ed565e 100644
+--- a/.github/workflows/push.yaml
++++ b/.github/workflows/push.yaml
+@@ -16,7 +16,7 @@ jobs:
+       fail-fast: false
+       matrix:
+         os: [ubuntu-24.04]
+-        go: ["1.24.11", "1.25.5"]
++        go: ["1.25.5"]
+         goos: [linux]
+         goarch: [amd64, arm64]
+     permissions:
+@@ -63,14 +63,14 @@ jobs:
+ 
+       - name: Upload Release Artifact
+         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+-        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.24.11' }}
++        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.25.5' }}
+         with:
+           name: wings_linux_${{ matrix.goarch }}
+           path: dist/wings
+ 
+       - name: Upload Debug Artifact
+         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+-        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.24.11' }}
++        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.25.5' }}
+         with:
+           name: wings_linux_${{ matrix.goarch }}_debug
+           path: dist/wings_debug
+diff --git a/.github/workflows/release.yaml b/.github/workflows/release.yaml
+index c564c3dc60cefbac7688856fbf2092e09b0c9595..fb027ba39e1e8721fa26bd99fc29ed8bb166e553 100644
+--- a/.github/workflows/release.yaml
++++ b/.github/workflows/release.yaml
+@@ -16,7 +16,7 @@ jobs:
+       - name: Setup Go
+         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+         with:
+-          go-version: 1.24.11
++          go-version: 1.25.5
+ 
+       - name: Build release binaries
+         env:
+diff --git a/README.md b/README.md
+index d4f8497410ce7abacdb3c36f3d5cd9a7d9f94afe..2120c6ca54f518a945ba5d4c1e70692546c846ee 100644
+--- a/README.md
++++ b/README.md
+@@ -13,6 +13,21 @@ instances, fetch server logs, generate backups, and control all aspects of the s
+ In addition, Wings ships with a built-in SFTP server allowing your system to remain free of Pterodactyl specific
+ dependencies, and allowing users to authenticate with the same credentials they would normally use to access the Panel.
+ 
++## Fork Notes
++
++This repository is a fork of [pterodactyl/wings](https://github.com/pterodactyl/wings) with a small set of daemon-side
++fixes and hardening changes. For the Rust rewrite, see [Wings-rs](https://github.com/calagopus/wings).
++
++Notable changes in this fork include:
++
++* File download requests return a proper not-found response when the target file does not exist, instead of bubbling up
++  as an internal server error.
++* File downloads use stricter path and file-type validation before serving content.
++* File downloads and stream responses use `http.ServeContent`, enabling HTTP range and conditional request handling.
++* File downloads are capped to the file size observed when the request starts, matching the fixed-byte behavior used by
++  Wings-rs-style downloads so later file growth does not extend the response.
++* Download responses include safer headers such as `X-Content-Type-Options: nosniff`.
++
+ ## Sponsors
+ 
+ I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.
+diff --git a/cmd/configure.go b/cmd/configure.go
+index 03553b8d6cdbb0ffb142962112fd3ae73de3994a..e51c8292f774afe8209e8650ae995b355c87fe6c 100644
+--- a/cmd/configure.go
++++ b/cmd/configure.go
+@@ -124,9 +124,6 @@ func configureCmdRun(cmd *cobra.Command, args []string) {
+ 		panic(err)
+ 	}
+ 
+-	fmt.Printf("%+v", req.Header)
+-	fmt.Println(req.URL.String())
+-
+ 	res, err := c.Do(req)
+ 	if err != nil {
+ 		fmt.Println("Failed to fetch configuration from the panel.\n", err.Error())
+@@ -145,6 +142,9 @@ func configureCmdRun(cmd *cobra.Command, args []string) {
+ 	}
+ 
+ 	b, err := io.ReadAll(res.Body)
++	if err != nil {
++		panic(err)
++	}
+ 
+ 	cfg, err := config.NewAtPath(configPath)
+ 	if err != nil {
+diff --git a/cmd/diagnostics.go b/cmd/diagnostics.go
+index aa3bd8b698dfaea4d1f1b75014fbae1541279fe8..8cbbd1ff74f36dc27e51938e2d36e39052efc48b 100644
+--- a/cmd/diagnostics.go
++++ b/cmd/diagnostics.go
+@@ -32,6 +32,7 @@ import (
+ const (
+ 	DefaultHastebinUrl = "https://ptero.co"
+ 	DefaultLogLines    = 200
++	MaxLogLines        = 10000
+ )
+ 
+ var diagnosticsArgs struct {
+@@ -167,11 +168,16 @@ func diagnosticsCmdRun(*cobra.Command, []string) {
+ 
+ 	printHeader(output, "Latest Wings Logs")
+ 	if diagnosticsArgs.IncludeLogs {
++		if diagnosticsArgs.LogLines < 0 {
++			diagnosticsArgs.LogLines = 0
++		} else if diagnosticsArgs.LogLines > MaxLogLines {
++			diagnosticsArgs.LogLines = MaxLogLines
++		}
+ 		p := "/var/log/pterodactyl/wings.log"
+ 		if cfg != nil {
+ 			p = path.Join(cfg.System.LogDirectory, "wings.log")
+ 		}
+-		if c, err := exec.Command("tail", "-n", strconv.Itoa(diagnosticsArgs.LogLines), p).Output(); err != nil {
++		if c, err := exec.Command("tail", "-n", strconv.Itoa(diagnosticsArgs.LogLines), "--", p).Output(); err != nil {
+ 			fmt.Fprintln(output, "No logs found or an error occurred.")
+ 		} else {
+ 			fmt.Fprintf(output, "%s\n", string(c))
+diff --git a/cmd/root.go b/cmd/root.go
+index f411c53b72e37c52577bafc7d54f324857f990a8..e02d61ea67a8f6cdfaa3cfd53f7bf97c71fa58f1 100644
+--- a/cmd/root.go
++++ b/cmd/root.go
+@@ -330,9 +330,10 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
+ 	// Create a new HTTP server instance to handle inbound requests from the Panel
+ 	// and external clients.
+ 	s := &http.Server{
+-		Addr:      api.Host + ":" + strconv.Itoa(api.Port),
+-		Handler:   router.Configure(manager, pclient),
+-		TLSConfig: config.DefaultTLSConfig,
++		Addr:              api.Host + ":" + strconv.Itoa(api.Port),
++		Handler:           router.Configure(manager, pclient),
++		TLSConfig:         config.DefaultTLSConfig,
++		ReadHeaderTimeout: 10 * time.Second,
+ 	}
+ 
+ 	profile, _ := cmd.Flags().GetBool("pprof")
+@@ -345,7 +346,13 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
+ 
+ 		profilePort, _ := cmd.Flags().GetInt("pprof-port")
+ 		go func() {
+-			http.ListenAndServe(fmt.Sprintf("localhost:%d", profilePort), nil)
++			profileServer := &http.Server{
++				Addr:              fmt.Sprintf("localhost:%d", profilePort),
++				ReadHeaderTimeout: 10 * time.Second,
++			}
++			if err := profileServer.ListenAndServe(); err != nil {
++				log.WithError(err).Error("failed to serve pprof server")
++			}
+ 		}()
+ 	}
+ 
+@@ -365,7 +372,12 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
+ 
+ 		// Start the autocert server.
+ 		go func() {
+-			if err := http.ListenAndServe(":http", m.HTTPHandler(nil)); err != nil {
++			autoTLSServer := &http.Server{
++				Addr:              ":http",
++				Handler:           m.HTTPHandler(nil),
++				ReadHeaderTimeout: 10 * time.Second,
++			}
++			if err := autoTLSServer.ListenAndServe(); err != nil {
+ 				log.WithError(err).Error("failed to serve autocert http server")
+ 			}
+ 		}()
+diff --git a/config/config.go b/config/config.go
+index a83936d882d9b13e7c8b063941856759d78acb40..dffdfa90344d084a8a6afde31842cd205edb45a2 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -30,6 +30,8 @@ import (
+ 
+ const DefaultLocation = "/etc/pterodactyl/config.yml"
+ 
++var systemUsernamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*\$?$`)
++
+ // DefaultTLSConfig sets sane defaults to use when configuring the internal
+ // webserver to listen for public connections.
+ //
+@@ -69,6 +71,13 @@ type SftpConfiguration struct {
+ 	Port int `default:"2022" json:"bind_port" yaml:"bind_port"`
+ 	// If set to true, no write actions will be allowed on the SFTP server.
+ 	ReadOnly bool `default:"false" yaml:"read_only"`
++	// Shell controls the optional interactive SSH shell exposed through the SFTP listener.
++	Shell SftpShellConfiguration `yaml:"shell"`
++}
++
++type SftpShellConfiguration struct {
++	// Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
++	Enabled bool `default:"false" yaml:"enabled"`
+ }
+ 
+ // ApiConfiguration defines the configuration for the internal API that is
+@@ -511,6 +520,10 @@ func EnsurePterodactylUser() error {
+ 	}
+ 
+ 	log.WithField("username", _config.System.Username).Info("checking for pterodactyl system user")
++	if len(_config.System.Username) > 32 || !systemUsernamePattern.MatchString(_config.System.Username) {
++		return fmt.Errorf("invalid system username %q", _config.System.Username)
++	}
++
+ 	u, err := user.Lookup(_config.System.Username)
+ 	// If an error is returned but it isn't the unknown user error just abort
+ 	// the process entirely. If we did find a user, return it immediately.
+@@ -524,11 +537,13 @@ func EnsurePterodactylUser() error {
+ 		return nil
+ 	}
+ 
+-	command := fmt.Sprintf("useradd --system --no-create-home --shell /usr/sbin/nologin %s", _config.System.Username)
++	command := "useradd"
++	args := []string{"--system", "--no-create-home", "--shell", "/usr/sbin/nologin", _config.System.Username}
+ 	// Alpine Linux is the only OS we currently support that doesn't work with the useradd
+ 	// command, so in those cases we just modify the command a bit to work as expected.
+ 	if strings.HasPrefix(sysName, "alpine") {
+-		command = fmt.Sprintf("adduser -S -D -H -G %[1]s -s /sbin/nologin %[1]s", _config.System.Username)
++		command = "adduser"
++		args = []string{"-S", "-D", "-H", "-G", _config.System.Username, "-s", "/sbin/nologin", _config.System.Username}
+ 		// We have to create the group first on Alpine, so do that here before continuing on
+ 		// to the user creation process.
+ 		if _, err := exec.Command("addgroup", "-S", _config.System.Username).Output(); err != nil {
+@@ -536,8 +551,7 @@ func EnsurePterodactylUser() error {
+ 		}
+ 	}
+ 
+-	split := strings.Split(command, " ")
+-	if _, err := exec.Command(split[0], split[1:]...).Output(); err != nil {
++	if _, err := exec.Command(command, args...).Output(); err != nil {
+ 		return err
+ 	}
+ 	u, err = user.Lookup(_config.System.Username)
+diff --git a/environment/docker/api.go b/environment/docker/api.go
+index 82080db02abbb60c9a08f5fe655812b4121ca874..863140948467bfa71ba27d57d5eaa82319124267 100644
+--- a/environment/docker/api.go
++++ b/environment/docker/api.go
+@@ -25,7 +25,6 @@ var (
+ )
+ 
+ type cliSettings struct {
+-	enabled bool
+ 	proto   string
+ 	host    string
+ 	scheme  string
+diff --git a/environment/docker/betterconsole_pull_progress.go b/environment/docker/betterconsole_pull_progress.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..8ed965d15891c1a00f5a4a045e5f2bb3180c6fcd
+--- /dev/null
++++ b/environment/docker/betterconsole_pull_progress.go
+@@ -0,0 +1,171 @@
++package docker
++
++import (
++	"encoding/json"
++	"fmt"
++	"math"
++	"strings"
++
++	"github.com/buger/jsonparser"
++)
++
++func betterConsoleDockerPullProgress(img string, b []byte) string {
++	id, _ := jsonparser.GetString(b, "id")
++	status, _ := jsonparser.GetString(b, "status")
++	progress, _ := jsonparser.GetString(b, "progress")
++	current, currentErr := jsonparser.GetInt(b, "progressDetail", "current")
++	total, totalErr := jsonparser.GetInt(b, "progressDetail", "total")
++	status = strings.TrimSpace(status)
++	if status == "" && id == "" {
++		return ""
++	}
++
++	displayStatus, phase := betterConsoleDockerPullStatus(status)
++	hasProgressDetail := currentErr == nil && totalErr == nil
++	percent := betterConsoleDockerPullPercent(current, total, phase == "complete")
++	line := betterConsoleDockerPullLine(displayStatus, current, total, hasProgressDetail)
++	image := betterConsoleDockerPullSafeImageRef(img)
++
++	payload, err := json.Marshal(map[string]interface{}{
++		"id":       betterConsoleDockerPullSafeText(id),
++		"image":    image,
++		"label":    betterConsoleDockerPullImageLabel(image),
++		"phase":    phase,
++		"status":   displayStatus,
++		"progress": betterConsoleDockerPullSafeText(progress),
++		"current":  current,
++		"total":    total,
++		"percent":  percent,
++		"line":     line,
++	})
++	if err != nil {
++		return line
++	}
++
++	return string(payload)
++}
++
++func betterConsoleDockerPullStatus(status string) (string, string) {
++	normalized := strings.ToLower(strings.TrimSpace(status))
++	switch normalized {
++	case "downloading":
++		return "Downloading", "pulling"
++	case "extracting":
++		return "Extracting", "extracting"
++	case "download complete":
++		return "Download complete", "complete"
++	case "pull complete":
++		return "Pull complete", "complete"
++	case "already exists":
++		return "Already exists", "complete"
++	default:
++		if status == "" {
++			return "Pulling", "pulling"
++		}
++		return betterConsoleDockerPullSafeText(status), "status"
++	}
++}
++
++func betterConsoleDockerPullPercent(current int64, total int64, complete bool) float64 {
++	if complete {
++		return 100
++	}
++	if total <= 0 || current <= 0 {
++		return 0
++	}
++
++	percent := (float64(current) / float64(total)) * 100
++	if percent > 100 {
++		return 100
++	}
++	if percent < 0 {
++		return 0
++	}
++
++	return percent
++}
++
++func betterConsoleDockerPullLine(status string, current int64, total int64, complete bool) string {
++	if !complete {
++		return strings.TrimSpace(status)
++	}
++
++	percent := betterConsoleDockerPullPercent(current, total, false)
++	width := 50 - len(status)
++	if width < 8 {
++		width = 8
++	}
++
++	return fmt.Sprintf(
++		"%s %s %.2f%% of %s",
++		status,
++		betterConsoleDockerPullBar(width, percent),
++		percent,
++		betterConsoleDockerPullBytes(total),
++	)
++}
++
++func betterConsoleDockerPullBar(width int, percent float64) string {
++	completed := int(math.Round((percent / 100) * float64(width)))
++	if completed >= width {
++		return "[" + strings.Repeat("=", width) + "]"
++	}
++	if completed < 0 {
++		completed = 0
++	}
++
++	return "[" + strings.Repeat("=", completed) + ">" + strings.Repeat(" ", width-completed-1) + "]"
++}
++
++func betterConsoleDockerPullBytes(value int64) string {
++	if value <= 0 {
++		return "0 B"
++	}
++
++	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
++	size := float64(value)
++	unit := 0
++	for size >= 1024 && unit < len(units)-1 {
++		size /= 1024
++		unit++
++	}
++
++	if unit == 0 {
++		return fmt.Sprintf("%d B", value)
++	}
++
++	return fmt.Sprintf("%.1f %s", size, units[unit])
++}
++
++func betterConsoleDockerPullImageLabel(img string) string {
++	parts := strings.Split(strings.TrimSpace(img), "/")
++	if len(parts) == 0 || parts[len(parts)-1] == "" {
++		return "Docker image"
++	}
++
++	return parts[len(parts)-1]
++}
++
++func betterConsoleDockerPullSafeImageRef(img string) string {
++	img = strings.TrimSpace(img)
++	slash := strings.IndexByte(img, '/')
++	if slash <= 0 {
++		return img
++	}
++
++	registry := img[:slash]
++	if at := strings.LastIndex(registry, "@"); at >= 0 {
++		registry = registry[at+1:]
++	}
++
++	return registry + "/" + img[slash+1:]
++}
++
++func betterConsoleDockerPullSafeText(value string) string {
++	return strings.Map(func(r rune) rune {
++		if r == '\t' || r >= 32 {
++			return r
++		}
++		return -1
++	}, strings.TrimSpace(value))
++}
+diff --git a/environment/docker/betterconsole_pull_progress_test.go b/environment/docker/betterconsole_pull_progress_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66603eaa2f
+--- /dev/null
++++ b/environment/docker/betterconsole_pull_progress_test.go
+@@ -0,0 +1,58 @@
++package docker
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++)
++
++func TestBetterConsoleDockerPullProgressWithProgressDetail(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte(`{"id":"layer","status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	var parsed struct {
++		Line    string  `json:"line"`
++		Percent float64 `json:"percent"`
++	}
++	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
++		t.Fatal(err)
++	}
++	if parsed.Percent != 50 {
++		t.Fatalf("expected 50 percent, got %f", parsed.Percent)
++	}
++	if !strings.HasPrefix(parsed.Line, "Downloading [") {
++		t.Fatalf("expected progress bar line, got %q", parsed.Line)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressWithoutProgressDetail(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte(`{"status":"Status: Image is up to date for ghcr.io/ptero-eggs/yolks:nodejs_22"}`))
++
++	var parsed struct {
++		Line string `json:"line"`
++	}
++	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
++		t.Fatal(err)
++	}
++	if strings.Contains(parsed.Line, "0 B") || strings.Contains(parsed.Line, "[") {
++		t.Fatalf("expected plain status without fake bar, got %q", parsed.Line)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressSanitizesImageCredentials(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("user:secret@registry.example.com/private/image:latest", []byte(`{"id":"layer","status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	if strings.Contains(payload, "secret") || strings.Contains(payload, "user:") {
++		t.Fatalf("expected sanitized image payload, got %q", payload)
++	}
++	if !strings.Contains(payload, "registry.example.com/private/image:latest") {
++		t.Fatalf("expected sanitized image reference in payload, got %q", payload)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressStripsControlCharacters(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte("{\"id\":\"lay\u001ber\",\"status\":\"Pull\u001b complete\",\"progress\":\"10\u001b%\"}"))
++
++	if strings.Contains(payload, "\u001b") {
++		t.Fatalf("expected control characters to be stripped, got %q", payload)
++	}
++}
 diff --git a/environment/docker/client_accessor.go b/environment/docker/client_accessor.go
 new file mode 100644
-index 0000000..f8eea15
+index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f543654187eee676
 --- /dev/null
 +++ b/environment/docker/client_accessor.go
 @@ -0,0 +1,7 @@
@@ -184,8 +671,124 @@ index 0000000..f8eea15
 +func (e *Environment) Client() *client.Client {
 +	return e.client
 +}
+diff --git a/environment/docker/container.go b/environment/docker/container.go
+index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98ea0cb46e4 100644
+--- a/environment/docker/container.go
++++ b/environment/docker/container.go
+@@ -11,7 +11,6 @@ import (
+ 
+ 	"emperror.dev/errors"
+ 	"github.com/apex/log"
+-	"github.com/buger/jsonparser"
+ 	"github.com/docker/docker/api/types/container"
+ 	"github.com/docker/docker/api/types/image"
+ 	"github.com/docker/docker/api/types/mount"
+@@ -346,9 +345,6 @@ func (e *Environment) Readlog(lines int) ([]string, error) {
+ // of that. I'd imagine in a lot of cases an outage shouldn't affect users too
+ // badly. It'll at least keep existing servers working correctly if anything.
+ func (e *Environment) ensureImageExists(img string) error {
+-	e.Events().Publish(environment.DockerImagePullStarted, "")
+-	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
+-
+ 	// Images prefixed with a ~ are local images that we do not need to try and pull.
+ 	if strings.HasPrefix(img, "~") {
+ 		return nil
+@@ -385,6 +381,7 @@ func (e *Environment) ensureImageExists(img string) error {
+ 	}
+ 
+ 	out, err := e.client.ImagePull(ctx, img, imagePullOptions)
++	safeImage := betterConsoleDockerPullSafeImageRef(img)
+ 	if err != nil {
+ 		images, ierr := e.client.ImageList(ctx, image.ListOptions{})
+ 		if ierr != nil {
+@@ -400,7 +397,7 @@ func (e *Environment) ensureImageExists(img string) error {
+ 				}
+ 
+ 				log.WithFields(log.Fields{
+-					"image":        img,
++					"image":        safeImage,
+ 					"container_id": e.Id,
+ 					"err":          err.Error(),
+ 				}).Warn("unable to pull requested image from remote source, however the image exists locally")
+@@ -411,29 +408,30 @@ func (e *Environment) ensureImageExists(img string) error {
+ 			}
+ 		}
+ 
+-		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", img)
++		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", safeImage)
+ 	}
+ 	defer out.Close()
+ 
+-	log.WithField("image", img).Debug("pulling docker image... this could take a bit of time")
++	e.Events().Publish(environment.DockerImagePullStarted, "")
++	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
++
++	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
+ 
+ 	// I'm not sure what the best approach here is, but this will block execution until the image
+ 	// is done being pulled, which is what we need.
+ 	scanner := bufio.NewScanner(out)
+ 
+ 	for scanner.Scan() {
+-		b := scanner.Bytes()
+-		status, _ := jsonparser.GetString(b, "status")
+-		progress, _ := jsonparser.GetString(b, "progress")
+-
+-		e.Events().Publish(environment.DockerImagePullStatus, status+" "+progress)
++		if payload := betterConsoleDockerPullProgress(img, scanner.Bytes()); payload != "" {
++			e.Events().Publish(environment.DockerImagePullStatus, payload)
++		}
+ 	}
+ 
+ 	if err := scanner.Err(); err != nil {
+ 		return err
+ 	}
+ 
+-	log.WithField("image", img).Debug("completed docker image pull")
++	log.WithField("image", safeImage).Debug("completed docker image pull")
+ 
+ 	return nil
+ }
+diff --git a/environment/docker/environment.go b/environment/docker/environment.go
+index 47f2d33812f052403990cd5ea66ba9bedafd2f1c..52bc1f9d227a14eb80086556651c819c72517d43 100644
+--- a/environment/docker/environment.go
++++ b/environment/docker/environment.go
+@@ -3,7 +3,6 @@ package docker
+ import (
+ 	"context"
+ 	"fmt"
+-	"io"
+ 	"sync"
+ 
+ 	"emperror.dev/errors"
+@@ -45,9 +44,6 @@ type Environment struct {
+ 	// the running container instance.
+ 	stream *types.HijackedResponse
+ 
+-	// Holds the stats stream used by the polling commands so that we can easily close it out.
+-	stats io.ReadCloser
+-
+ 	emitter *events.Bus
+ 
+ 	logCallbackMx sync.Mutex
+@@ -163,7 +159,14 @@ func (e *Environment) ExitState() (uint32, bool, error) {
+ 		}
+ 		return 0, false, errors.WrapIf(err, "environment/docker: failed to inspect container")
+ 	}
+-	return uint32(c.State.ExitCode), c.State.OOMKilled, nil
++	if c.State.ExitCode < 0 {
++		return 0, c.State.OOMKilled, fmt.Errorf("environment/docker: invalid negative container exit code %d", c.State.ExitCode)
++	}
++	const maxUint32 = int64(1<<32 - 1)
++	if int64(c.State.ExitCode) > maxUint32 {
++		return 0, c.State.OOMKilled, fmt.Errorf("environment/docker: invalid oversized container exit code %d", c.State.ExitCode)
++	}
++	return uint32(c.State.ExitCode), c.State.OOMKilled, nil // #nosec G115 -- range checked above.
+ }
+ 
+ // Config returns the environment configuration allowing a process to make
 diff --git a/environment/docker/stats.go b/environment/docker/stats.go
-index 7a98439..1f66427 100644
+index 7a984399c4f0587e63b41f9bd23e11e67b97cce2..1f6642753d695dd5ecc0c456ac5d5434527ccd88 100644
 --- a/environment/docker/stats.go
 +++ b/environment/docker/stats.go
 @@ -88,6 +88,12 @@ func (e *Environment) pollResources(ctx context.Context) error {
@@ -202,7 +805,7 @@ index 7a98439..1f66427 100644
  
  			e.Events().Publish(environment.ResourceEvent, st)
 diff --git a/environment/stats.go b/environment/stats.go
-index 5d5c872..b33ff4d 100644
+index 5d5c8720307f3d0c717d159eb9be6f851ac25925..b33ff4db83f45aec221044297d95d407740567c7 100644
 --- a/environment/stats.go
 +++ b/environment/stats.go
 @@ -27,4 +27,10 @@ type Stats struct {
@@ -217,41 +820,91 @@ index 5d5c872..b33ff4d 100644
 +	TxDropped uint64 `json:"tx_dropped"`
  }
 diff --git a/go.mod b/go.mod
-index 6ed6d60..001d45b 100644
+index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..99b1cce9b0385623fd608c950d3052809aed56d1 100644
 --- a/go.mod
 +++ b/go.mod
-@@ -40,6 +40,7 @@ require (
+@@ -1,8 +1,6 @@
+ module github.com/pterodactyl/wings
+ 
+-go 1.24.0
+-
+-toolchain go1.24.1
++go 1.25.0
+ 
+ require (
+ 	emperror.dev/errors v0.8.1
+@@ -13,7 +11,7 @@ require (
+ 	github.com/apex/log v1.9.0
+ 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
+ 	github.com/beevik/etree v1.5.0
+-	github.com/buger/jsonparser v1.1.1
++	github.com/buger/jsonparser v1.1.2
+ 	github.com/cenkalti/backoff/v4 v4.3.0
+ 	github.com/creasty/defaults v1.8.0
+ 	github.com/docker/docker v28.3.3+incompatible
+@@ -24,6 +22,7 @@ require (
+ 	github.com/gammazero/workerpool v1.1.3
+ 	github.com/gbrlsnchs/jwt/v3 v3.0.1
+ 	github.com/gin-gonic/gin v1.10.1
++	github.com/glebarez/go-sqlite v1.22.0
+ 	github.com/glebarez/sqlite v1.11.0
+ 	github.com/go-co-op/gocron v1.37.0
+ 	github.com/google/uuid v1.6.0
+@@ -40,11 +39,13 @@ require (
  	github.com/patrickmn/go-cache v2.1.0+incompatible
  	github.com/pkg/sftp v1.13.10
  	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 +	github.com/secsy/goftp v0.0.0-20200609142545-aa2de14babf4
  	github.com/spf13/cobra v1.9.1
  	github.com/stretchr/testify v1.10.0
- 	golang.org/x/crypto v0.46.0
-@@ -55,6 +56,7 @@ require (
- 	github.com/Microsoft/go-winio v0.6.2 // indirect
- 	github.com/Microsoft/hcsshim v0.12.9 // indirect
- 	github.com/STARRY-S/zip v0.2.3 // indirect
-+	github.com/Tnze/go-mc v1.20.3-0.20241224032005-539b4a3a7f03 // indirect
- 	github.com/andybalholm/brotli v1.2.0 // indirect
- 	github.com/bodgit/plumbing v1.3.0 // indirect
- 	github.com/bodgit/sevenzip v1.6.1 // indirect
+-	golang.org/x/crypto v0.46.0
+-	golang.org/x/sync v0.19.0
+-	golang.org/x/sys v0.39.0
++	golang.org/x/crypto v0.53.0
++	golang.org/x/sync v0.21.0
++	golang.org/x/sys v0.46.0
++	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af
+ 	gopkg.in/ini.v1 v1.67.0
+ 	gopkg.in/yaml.v2 v2.4.0
+ 	gopkg.in/yaml.v3 v3.0.1
+@@ -73,7 +74,6 @@ require (
+ 	github.com/felixge/httpsnoop v1.0.4 // indirect
+ 	github.com/gammazero/deque v1.0.0 // indirect
+ 	github.com/gin-contrib/sse v1.0.0 // indirect
+-	github.com/glebarez/go-sqlite v1.22.0 // indirect
+ 	github.com/go-logr/logr v1.4.2 // indirect
+ 	github.com/go-logr/stdr v1.2.2 // indirect
+ 	github.com/go-playground/locales v0.14.1 // indirect
+@@ -129,10 +129,9 @@ require (
+ 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
+ 	golang.org/x/arch v0.15.0 // indirect
+ 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
+-	golang.org/x/net v0.47.0 // indirect
+-	golang.org/x/term v0.38.0 // indirect
+-	golang.org/x/text v0.32.0 // indirect
+-	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
++	golang.org/x/net v0.55.0 // indirect
++	golang.org/x/term v0.44.0 // indirect
++	golang.org/x/text v0.38.0 // indirect
+ 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
+ 	google.golang.org/protobuf v1.36.5 // indirect
+ 	gotest.tools/v3 v3.0.2 // indirect
 diff --git a/go.sum b/go.sum
-index 9e2465a..6cc8c08 100644
+index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..e778c3b04c057454c47015e4e44f0979f0927582 100644
 --- a/go.sum
 +++ b/go.sum
-@@ -36,6 +36,10 @@ github.com/Netflix/go-expect v0.0.0-20220104043353-73e0943537d2 h1:+vx7roKuyA63n
- github.com/Netflix/go-expect v0.0.0-20220104043353-73e0943537d2/go.mod h1:HBCaDeC1lPdgDeDbhX8XFpy1jqjK0IBG8W5K+xYqA0w=
- github.com/STARRY-S/zip v0.2.3 h1:luE4dMvRPDOWQdeDdUxUoZkzUIpTccdKdhHHsQJ1fm4=
- github.com/STARRY-S/zip v0.2.3/go.mod h1:lqJ9JdeRipyOQJrYSOtpNAiaesFO6zVDsE8GIGFaoSk=
-+github.com/Tnze/go-mc v1.20.2 h1:arHCE/WxLCxY73C/4ZNLdOymRYtdwoXE05ohB7HVN6Q=
-+github.com/Tnze/go-mc v1.20.2/go.mod h1:geoRj2HsXSkB3FJBuhr7wCzXegRlzWsVXd7h7jiJ6aQ=
-+github.com/Tnze/go-mc v1.20.3-0.20241224032005-539b4a3a7f03 h1:DTfuZLjn/C0Q7IWk6+vTbMUlCjHyGGS48YeU7GlxoV4=
-+github.com/Tnze/go-mc v1.20.3-0.20241224032005-539b4a3a7f03/go.mod h1:vp949nHNUK5KVwSuadpN1vp7c1zvkPEniM08PQv1FcY=
- github.com/acobaugh/osrelease v0.1.0 h1:Yb59HQDGGNhCj4suHaFQQfBps5wyoKLSSX/J/+UifRE=
- github.com/acobaugh/osrelease v0.1.0/go.mod h1:4bFEs0MtgHNHBrmHCt67gNisnabCRAlzdVasCEGHTWY=
- github.com/andybalholm/brotli v1.2.0 h1:ukwgCxwYrmACq68yiUqwIWnGY0cTPox/M94sVwToPjQ=
-@@ -323,6 +327,8 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
+@@ -57,8 +57,8 @@ github.com/bodgit/sevenzip v1.6.1 h1:kikg2pUMYC9ljU7W9SaqHXhym5HyKm8/M/jd31fYan4
+ github.com/bodgit/sevenzip v1.6.1/go.mod h1:GVoYQbEVbOGT8n2pfqCIMRUaRjQ8F9oSqoBEqZh5fQ8=
+ github.com/bodgit/windows v1.0.1 h1:tF7K6KOluPYygXa3Z2594zxlkbKPAOvqr97etrGNIz4=
+ github.com/bodgit/windows v1.0.1/go.mod h1:a6JLwrB4KrTR5hBpp8FI9/9W9jJfeQ2h4XDXU74ZCdM=
+-github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
+-github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
++github.com/buger/jsonparser v1.1.2 h1:frqHqw7otoVbk5M8LlE/L7HTnIq2v9RX6EJ48i9AxJk=
++github.com/buger/jsonparser v1.1.2/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
+ github.com/bytedance/sonic v1.13.1 h1:Jyd5CIvdFnkOWuKXr+wm4Nyk2h0yAFsr8ucJgEasO3g=
+ github.com/bytedance/sonic v1.13.1/go.mod h1:o68xyaF9u2gvVBuGHPlUVCy+ZfmNNO5ETf1+KgkJhz4=
+ github.com/bytedance/sonic/loader v0.1.1/go.mod h1:ncP89zfokxS5LZrJxl5z0UJcsk4M4yY2JpfqGeCtNLU=
+@@ -323,6 +323,8 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
  github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd/go.mod h1:hPqNNc0+uJM6H+SuU8sEs5K5IQeKccPqeSjfgcKGgPk=
  github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDjyw0ULyrTYWeN0UNCCkmCWfjPnIA2W6oviI=
  github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
@@ -260,9 +913,157 @@ index 9e2465a..6cc8c08 100644
  github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
  github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
  github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
+@@ -418,8 +420,8 @@ golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad/go.mod h1:yigFU9vqHzYiE8U
+ golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
+ golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
+ golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
+-golang.org/x/crypto v0.46.0 h1:cKRW/pmt1pKAfetfu+RCEvjvZkA9RimPbh7bhFjGVBU=
+-golang.org/x/crypto v0.46.0/go.mod h1:Evb/oLKmMraqjZ2iQTwDwvCtJkczlDuTmdJXoZVzqU0=
++golang.org/x/crypto v0.53.0 h1:QZ4Muo8THX6CizN2vPPd5fBGHyogrdK9fG4wLPFUsto=
++golang.org/x/crypto v0.53.0/go.mod h1:DNLU434OwVakk9PzuwV8w62mAJpRJL3vsgcfp4Qnsio=
+ golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
+ golang.org/x/exp v0.0.0-20190306152737-a1d7652674e8/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
+ golang.org/x/exp v0.0.0-20190510132918-efd6b22b2522/go.mod h1:ZjyILWgesfNpC6sMxTJOJm9Kp84zZh5NQWvqDGG3Qr8=
+@@ -449,8 +451,8 @@ golang.org/x/mod v0.1.1-0.20191105210325-c90efee705ee/go.mod h1:QqPTAvyqsEbceGzB
+ golang.org/x/mod v0.2.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+ golang.org/x/mod v0.3.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+ golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
+-golang.org/x/mod v0.30.0 h1:fDEXFVZ/fmCKProc/yAXXUijritrDzahmwwefnjoPFk=
+-golang.org/x/mod v0.30.0/go.mod h1:lAsf5O2EvJeSFMiBxXDki7sCgAxEUcZHXoXMKT4GJKc=
++golang.org/x/mod v0.36.0 h1:JJjpVx6myfUsUdAzZuOSTTmRE0PfZeNWzzvKrP7amb4=
++golang.org/x/mod v0.36.0/go.mod h1:moc6ELqsWcOw5Ef3xVprK5ul/MvtVvkIXLziUOICjUQ=
+ golang.org/x/net v0.0.0-20180724234803-3673e40ba225/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+ golang.org/x/net v0.0.0-20180826012351-8a410e7b638d/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+ golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+@@ -470,8 +472,8 @@ golang.org/x/net v0.0.0-20201021035429-f5854403a974/go.mod h1:sp8m0HH+o8qH0wwXwY
+ golang.org/x/net v0.0.0-20210226172049-e18ecbb05110/go.mod h1:m0MpNAwzfU5UDzcl9v0D8zg8gWTRqZa9RBIspLL5mdg=
+ golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
+ golang.org/x/net v0.7.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
+-golang.org/x/net v0.47.0 h1:Mx+4dIFzqraBXUugkia1OOvlD6LemFo1ALMHjrXDOhY=
+-golang.org/x/net v0.47.0/go.mod h1:/jNxtkgq5yWUGYkaZGqo27cfGZ1c5Nen03aYrrKpVRU=
++golang.org/x/net v0.55.0 h1:bcvxaJn3e1U6InsFWt1JUq1aSjnRxLzT2rtD2KfkDF8=
++golang.org/x/net v0.55.0/go.mod h1:L5U2KuzuOe1lY7Z+aWVIKK6qEeJXnXV9yzGA+WCHJww=
+ golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
+ golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
+ golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
+@@ -485,8 +487,8 @@ golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJ
+ golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+ golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+ golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+-golang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=
+-golang.org/x/sync v0.19.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=
++golang.org/x/sync v0.21.0 h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=
++golang.org/x/sync v0.21.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
+ golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+ golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+ golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+@@ -510,13 +512,13 @@ golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBc
+ golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.5.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+-golang.org/x/sys v0.39.0 h1:CvCKL8MeisomCi6qNZ+wbb0DN9E5AATixKsvNtMoMFk=
+-golang.org/x/sys v0.39.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
++golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
++golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+ golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1/go.mod h1:bj7SfCRtBDWHUb9snDiAeCFNEtKQo2Wmx5Cou7ajbmo=
+ golang.org/x/term v0.0.0-20210927222741-03fcf44c2211/go.mod h1:jbD1KX2456YbFQfuXm/mYQcufACuNUgVhRMnK/tPxf8=
+ golang.org/x/term v0.5.0/go.mod h1:jMB1sMXY+tzblOD4FWmEbocvup2/aLOaQEp7JmGp78k=
+-golang.org/x/term v0.38.0 h1:PQ5pkm/rLO6HnxFR7N2lJHOZX6Kez5Y1gDSJla6jo7Q=
+-golang.org/x/term v0.38.0/go.mod h1:bSEAKrOT1W+VSu9TSCMtoGEOUcKxOKgl3LE5QEF/xVg=
++golang.org/x/term v0.44.0 h1:0rLvDRCtNj0gZkyIXhCyOb2OAzEhLVqc4B+hrsBhrmc=
++golang.org/x/term v0.44.0/go.mod h1:7ze4MdzUzLXpSAoFP1H0bOI9aXDqveSvatT5vKcFh2Y=
+ golang.org/x/text v0.0.0-20170915032832-14c0d48ead0c/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+ golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+ golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
+@@ -525,8 +527,8 @@ golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+ golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
+ golang.org/x/text v0.4.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+ golang.org/x/text v0.7.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+-golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=
+-golang.org/x/text v0.32.0/go.mod h1:o/rUWzghvpD5TXrTIBuJU77MTaN0ljMWE47kxGJQ7jY=
++golang.org/x/text v0.38.0 h1:sXmwo9DwP3OK9EZ7PqAdaooSGozfl/3a6/xJcbzPRhE=
++golang.org/x/text v0.38.0/go.mod h1:YXZt3QhHUKYT53r2lLKFIVi6Ao1jdzrTR/KQ09qyxF4=
+ golang.org/x/time v0.0.0-20181108054448-85acf8d2951c/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
+ golang.org/x/time v0.0.0-20190308202827-9d24e82272b4/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
+ golang.org/x/time v0.0.0-20220922220347-f3bd1da661af h1:Yx9k8YCG3dvF87UAn2tu2HQLf2dt/eR1bXxpLMWeH+Y=
+@@ -560,8 +562,8 @@ golang.org/x/tools v0.0.0-20200212150539-ea181f53ac56/go.mod h1:TB2adYChydJhpapK
+ golang.org/x/tools v0.0.0-20200619180055-7c47624df98f/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
+ golang.org/x/tools v0.0.0-20210106214847-113979e3529a/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
+ golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc=
+-golang.org/x/tools v0.39.0 h1:ik4ho21kwuQln40uelmciQPp9SipgNDdrafrYA4TmQQ=
+-golang.org/x/tools v0.39.0/go.mod h1:JnefbkDPyD8UU2kI5fuf8ZX4/yUeh9W877ZeBONxUqQ=
++golang.org/x/tools v0.45.0 h1:18qN3FAooORvApf5XjCXgsuayZOEtXf6JK18I3+ONa8=
++golang.org/x/tools v0.45.0/go.mod h1:LuUGqqaXcXMEFEruIVJVm5mgDD8vww/z/SR1gQ4uE/0=
+ golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+diff --git a/internal/ufs/fs_unix.go b/internal/ufs/fs_unix.go
+index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a8ea1d135 100644
+--- a/internal/ufs/fs_unix.go
++++ b/internal/ufs/fs_unix.go
+@@ -656,6 +656,9 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
+ // was configured to enable openat2 support, unix.Openat2 will be used instead
+ // of unix.Openat due to having better security properties for our use-case.
+ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, error) {
++	if flag < 0 {
++		return 0, &PathError{Op: "open", Path: name, Err: unix.EINVAL}
++	}
+ 	if flag&O_NOFOLLOW == 0 {
+ 		flag |= O_NOFOLLOW
+ 	}
+@@ -664,7 +667,7 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+ 	for {
+ 		var err error
+ 		if fs.useOpenat2 {
+-			fd, err = fs._openat2(dirfd, name, uint64(flag), uint64(syscallMode(mode)))
++			fd, err = fs._openat2(dirfd, name, uint64(flag), uint64(syscallMode(mode))) // #nosec G115 -- negative flags are rejected above.
+ 		} else {
+ 			fd, err = fs._openat(dirfd, name, flag, uint32(syscallMode(mode)))
+ 		}
+@@ -690,7 +693,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+ 	finalPath, err := filepath.EvalSymlinks(filepath.Join("/proc/self/fd/", strconv.Itoa(fd)))
+ 	if err != nil {
+ 		if !errors.Is(err, ErrNotExist) {
+-			return fd, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
++			_ = unix.Close(fd)
++			return 0, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
+ 		}
+ 
+ 		// The target of one of the symlinks (EvalSymlinks is recursive)
+@@ -698,7 +702,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+ 		// that for further validation instead.
+ 		var pErr *PathError
+ 		if !errors.As(err, &pErr) {
+-			return fd, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
++			_ = unix.Close(fd)
++			return 0, fmt.Errorf("failed to evaluate symlink: %w", convertErrorType(err))
+ 		}
+ 
+ 		// Update the final path to whatever directory or path didn't exist while
+@@ -714,7 +719,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+ 		if fs.useOpenat2 {
+ 			op = "openat2"
+ 		}
+-		return fd, &PathError{
++		_ = unix.Close(fd)
++		return 0, &PathError{
+ 			Op:   op,
+ 			Path: name,
+ 			Err:  ErrBadPathResolution,
+@@ -722,6 +728,10 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+ 	}
+ 
+ 	// Return the file descriptor and any potential error.
++	if err != nil {
++		_ = unix.Close(fd)
++		return 0, err
++	}
+ 	return fd, err
+ }
+ 
 diff --git a/router/nsm_router.go b/router/nsm_router.go
 new file mode 100644
-index 0000000..fea5c8d
+index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e62970dfc
 --- /dev/null
 +++ b/router/nsm_router.go
 @@ -0,0 +1,23 @@
@@ -290,7 +1091,7 @@ index 0000000..fea5c8d
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac760..1b62f06 100644
+index bdac76065242c834f37f74a68fdba2211df96125..1b62f0667ea23cd14d6f9593c8cbc899ec31a07f 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -332,88 +1133,296 @@ index bdac760..1b62f06 100644
  			files.POST("/copy", postServerCopyFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000..dbb76b8
+index 0000000000000000000000000000000000000000..69b4a96f0704f17087e66d7ad70aef2d9fedfeaf
 --- /dev/null
 +++ b/router/router_cdn_stream.go
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,14 @@
++package router
++
++import "github.com/gin-gonic/gin"
++
++// Handles streaming a specific file with HTTP Range support.
++func getDownloadStream(c *gin.Context) {
++	df, ok := getTokenDownloadFile(c)
++	if !ok {
++		return
++	}
++	defer df.Close()
++
++	serveDownloadFile(c, df, "inline", true, false)
++}
+diff --git a/router/router_download.go b/router/router_download.go
+index ec098236f32f76a98e2afac8839992a0d8965dd9..49ef8de4d7db93258d97fd7d10a054607650af95 100644
+--- a/router/router_download.go
++++ b/router/router_download.go
+@@ -28,7 +28,7 @@ func getDownloadBackup(c *gin.Context) {
+ 	}
+ 
+ 	// Get the server using the UUID from the token.
+-	if _, ok := manager.Get(token.ServerUuid); !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.BackupDownload) {
++	if _, ok := manager.Get(token.ServerUuid); !ok || !token.HasScope(tokens.BackupDownload) || !token.IsUniqueRequest() {
+ 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+ 			"error": "The requested resource was not found on this server.",
+ 		})
+@@ -74,37 +74,11 @@ func getDownloadBackup(c *gin.Context) {
+ 
+ // Handles downloading a specific file for a server.
+ func getDownloadFile(c *gin.Context) {
+-	manager := middleware.ExtractManager(c)
+-	token := tokens.FilePayload{}
+-	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
+-		middleware.CaptureAndAbort(c, err)
++	df, ok := getTokenDownloadFile(c)
++	if !ok {
+ 		return
+ 	}
++	defer df.Close()
+ 
+-	s, ok := manager.Get(token.ServerUuid)
+-	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileDownload) {
+-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+-			"error": "The requested resource was not found on this server.",
+-		})
+-		return
+-	}
+-
+-	f, st, err := s.Filesystem().File(token.FilePath)
+-	if err != nil {
+-		middleware.CaptureAndAbort(c, err)
+-		return
+-	}
+-	defer f.Close()
+-	if st.IsDir() {
+-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+-			"error": "The requested resource was not found on this server.",
+-		})
+-		return
+-	}
+-
+-	c.Header("Content-Length", strconv.Itoa(int(st.Size())))
+-	c.Header("Content-Disposition", "attachment; filename="+strconv.Quote(st.Name()))
+-	c.Header("Content-Type", "application/octet-stream")
+-
+-	_, _ = bufio.NewReader(f).WriteTo(c.Writer)
++	serveDownloadFile(c, df, "attachment", false, true)
+ }
+diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..4d21e8d700f6b5179324a509b72cc739525443aa
+--- /dev/null
++++ b/router/router_download_helpers.go
+@@ -0,0 +1,231 @@
 +package router
 +
 +import (
++	"errors"
++	"io"
 +	"mime"
 +	"net/http"
-+	"os"
 +	pathpkg "path"
 +	"path/filepath"
 +	"strconv"
 +	"strings"
 +	"unicode/utf8"
 +
++	"github.com/gabriel-vasile/mimetype"
 +	"github.com/gin-gonic/gin"
++	"golang.org/x/sys/unix"
 +
++	"github.com/pterodactyl/wings/internal/ufs"
 +	"github.com/pterodactyl/wings/router/middleware"
 +	"github.com/pterodactyl/wings/router/tokens"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
 +)
 +
-+// Handles streaming a specific file with HTTP Range support.
-+func getDownloadStream(c *gin.Context) {
++type downloadFile struct {
++	file ufs.File
++	info ufs.FileInfo
++}
++
++func (df *downloadFile) Close() error {
++	return df.file.Close()
++}
++
++func getTokenDownloadFile(c *gin.Context) (*downloadFile, bool) {
 +	manager := middleware.ExtractManager(c)
 +	token := tokens.FilePayload{}
 +	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
 +		middleware.CaptureAndAbort(c, err)
-+		return
++		return nil, false
 +	}
 +
 +	s, ok := manager.Get(token.ServerUuid)
-+	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileDownload) {
++	if !ok || !token.HasScope(tokens.FileDownload) || !token.IsUniqueRequest() {
 +		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 +			"error": "The requested resource was not found on this server.",
 +		})
-+		return
++		return nil, false
 +	}
 +
-+	filePath, ok := cleanDownloadStreamPath(token.FilePath)
++	filePath, ok := cleanDownloadFilePath(token.FilePath)
 +	if !ok {
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 +			"error": "Invalid file path.",
 +		})
-+		return
++		return nil, false
 +	}
 +
-+	f, st, err := s.Filesystem().File(filePath)
++	return openDownloadFile(c, s.Filesystem(), filePath)
++}
++
++func openDownloadFile(c *gin.Context, fs *serverfs.Filesystem, filePath string) (*downloadFile, bool) {
++	info, err := fs.UnixFS().Lstat(filePath)
 +	if err != nil {
-+		middleware.CaptureAndAbort(c, err)
-+		return
++		abortDownloadFileError(c, err)
++		return nil, false
 +	}
-+	defer f.Close()
-+	if st.IsDir() {
++	if info.IsDir() {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return nil, false
++	}
++	if !info.Mode().IsRegular() {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++			"error": "Cannot open files of this type.",
++		})
++		return nil, false
++	}
++
++	file, err := fs.UnixFS().OpenFile(filePath, ufs.O_RDONLY|unix.O_NONBLOCK, 0)
++	if err != nil {
++		abortDownloadFileError(c, err)
++		return nil, false
++	}
++
++	openedInfo, err := file.Stat()
++	if err != nil {
++		_ = file.Close()
++		abortDownloadFileError(c, err)
++		return nil, false
++	}
++	if openedInfo.IsDir() {
++		_ = file.Close()
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return nil, false
++	}
++	if !openedInfo.Mode().IsRegular() {
++		_ = file.Close()
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++			"error": "Cannot open files of this type.",
++		})
++		return nil, false
++	}
++
++	return &downloadFile{file: file, info: openedInfo}, true
++}
++
++func abortDownloadFileError(c *gin.Context, err error) {
++	if errors.Is(err, ufs.ErrNotExist) || errors.Is(err, ufs.ErrBadPathResolution) {
 +		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 +			"error": "The requested resource was not found on this server.",
 +		})
 +		return
 +	}
-+	if st.Mode()&os.ModeNamedPipe != 0 {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-+			"error": "Cannot open files of this type.",
-+		})
-+		return
-+	}
-+
-+	contentType := st.Mimetype
-+	if contentType == "" {
-+		contentType = mime.TypeByExtension(filepath.Ext(st.Name()))
-+	}
-+	if contentType == "" {
-+		contentType = "application/octet-stream"
-+	}
-+
-+	c.Header("Accept-Ranges", "bytes")
-+	c.Header("Content-Disposition", "inline; filename="+strconv.Quote(st.Name()))
-+	c.Header("Content-Type", contentType)
-+
-+	http.ServeContent(c.Writer, c.Request, st.Name(), st.ModTime(), f)
++	middleware.CaptureAndAbort(c, err)
 +}
 +
-+func cleanDownloadStreamPath(value string) (string, bool) {
++func serveDownloadFile(c *gin.Context, df *downloadFile, disposition string, inline bool, fixedSize bool) {
++	c.Header("Accept-Ranges", "bytes")
++	c.Header("Content-Disposition", disposition+"; filename="+strconv.Quote(df.info.Name()))
++	c.Header("Content-Type", downloadContentType(df, inline))
++	c.Header("ETag", downloadETag(df.info))
++	c.Header("X-Content-Type-Options", "nosniff")
++
++	content := io.ReadSeeker(df.file)
++	if fixedSize {
++		content = newFixedDownloadReader(df.file, df.info.Size())
++	}
++	http.ServeContent(c.Writer, c.Request, df.info.Name(), df.info.ModTime(), content)
++}
++
++func downloadContentType(df *downloadFile, inline bool) string {
++	if !inline {
++		return "application/octet-stream"
++	}
++	if contentType := mime.TypeByExtension(filepath.Ext(df.info.Name())); contentType != "" {
++		return contentType
++	}
++
++	m, err := mimetype.DetectReader(df.file)
++	_, _ = df.file.Seek(0, io.SeekStart)
++	if err == nil && m != nil {
++		return m.String()
++	}
++	return "application/octet-stream"
++}
++
++func downloadETag(info ufs.FileInfo) string {
++	return `W/"` + strconv.FormatInt(info.Size(), 16) + `-` + strconv.FormatInt(info.ModTime().UnixNano(), 16) + `"`
++}
++
++type fixedDownloadReader struct {
++	reader io.ReadSeeker
++	size   int64
++	offset int64
++}
++
++func newFixedDownloadReader(reader io.ReadSeeker, size int64) *fixedDownloadReader {
++	return &fixedDownloadReader{
++		reader: reader,
++		size:   size,
++	}
++}
++
++func (r *fixedDownloadReader) Read(p []byte) (int, error) {
++	if r.offset >= r.size {
++		return 0, io.EOF
++	}
++
++	remaining := r.size - r.offset
++	if int64(len(p)) > remaining {
++		p = p[:int(remaining)]
++	}
++
++	n, err := r.reader.Read(p)
++	if n == 0 && errors.Is(err, io.EOF) {
++		for i := range p {
++			p[i] = 0
++		}
++		r.offset += int64(len(p))
++		return len(p), nil
++	}
++
++	r.offset += int64(n)
++	return n, err
++}
++
++func (r *fixedDownloadReader) Seek(offset int64, whence int) (int64, error) {
++	var target int64
++	switch whence {
++	case io.SeekStart:
++		target = offset
++	case io.SeekCurrent:
++		target = r.offset + offset
++	case io.SeekEnd:
++		target = r.size + offset
++	default:
++		return 0, errors.New("invalid whence")
++	}
++	if target < 0 {
++		return 0, errors.New("negative position")
++	}
++	if _, err := r.reader.Seek(target, io.SeekStart); err != nil {
++		return 0, err
++	}
++	r.offset = target
++	return target, nil
++}
++
++func cleanDownloadFilePath(value string) (string, bool) {
 +	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
 +	if value == "" || strings.Contains(value, "\x00") || !utf8.ValidString(value) || len(value) > 4096 {
 +		return "", false
@@ -434,9 +1443,179 @@ index 0000000..dbb76b8
 +
 +	return cleaned, true
 +}
+diff --git a/router/router_download_helpers_test.go b/router/router_download_helpers_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26df8101e2d
+--- /dev/null
++++ b/router/router_download_helpers_test.go
+@@ -0,0 +1,164 @@
++package router
++
++import (
++	"bytes"
++	"io"
++	"os"
++	"path/filepath"
++	"testing"
++)
++
++func TestCleanDownloadFilePath(t *testing.T) {
++	tests := []struct {
++		name string
++		in   string
++		want string
++		ok   bool
++	}{
++		{name: "relative file", in: "foo/bar.txt", want: "/foo/bar.txt", ok: true},
++		{name: "absolute file", in: "/foo/bar.txt", want: "/foo/bar.txt", ok: true},
++		{name: "backslashes", in: `foo\bar.txt`, want: "/foo/bar.txt", ok: true},
++		{name: "empty", in: "", ok: false},
++		{name: "root", in: "/", ok: false},
++		{name: "traversal", in: "/foo/../bar.txt", ok: false},
++		{name: "nul byte", in: "foo\x00bar.txt", ok: false},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got, ok := cleanDownloadFilePath(tt.in)
++			if ok != tt.ok {
++				t.Fatalf("expected ok %t, got %t", tt.ok, ok)
++			}
++			if got != tt.want {
++				t.Fatalf("expected path %q, got %q", tt.want, got)
++			}
++		})
++	}
++}
++
++func TestCleanUploadFilename(t *testing.T) {
++	tests := []struct {
++		name string
++		in   string
++		want string
++		ok   bool
++	}{
++		{name: "simple", in: "world.zip", want: "world.zip", ok: true},
++		{name: "spaces", in: "my world.zip", want: "my world.zip", ok: true},
++		{name: "empty", in: "", ok: false},
++		{name: "dot", in: ".", ok: false},
++		{name: "dot dot", in: "..", ok: false},
++		{name: "forward slash", in: "../world.zip", ok: false},
++		{name: "nested path", in: "saves/world.zip", ok: false},
++		{name: "backslash", in: `saves\world.zip`, ok: false},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got, ok := cleanUploadFilename(tt.in)
++			if ok != tt.ok {
++				t.Fatalf("expected ok %t, got %t", tt.ok, ok)
++			}
++			if got != tt.want {
++				t.Fatalf("expected filename %q, got %q", tt.want, got)
++			}
++		})
++	}
++}
++
++func TestFixedDownloadReader(t *testing.T) {
++	t.Run("reads unchanged file", func(t *testing.T) {
++		path := filepath.Join(t.TempDir(), "download.txt")
++		if err := os.WriteFile(path, []byte("download contents"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		f, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer f.Close()
++
++		info, err := f.Stat()
++		if err != nil {
++			t.Fatal(err)
++		}
++
++		got, err := os.ReadFile(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		buf := make([]byte, len(got))
++		n, err := newFixedDownloadReader(f, info.Size()).Read(buf)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if string(buf[:n]) != string(got) {
++			t.Fatalf("expected %q, got %q", string(got), string(buf[:n]))
++		}
++	})
++
++	t.Run("caps file growth to original size", func(t *testing.T) {
++		path := filepath.Join(t.TempDir(), "download.txt")
++		if err := os.WriteFile(path, []byte("download"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		f, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer f.Close()
++
++		info, err := f.Stat()
++		if err != nil {
++			t.Fatal(err)
++		}
++		reader := newFixedDownloadReader(f, info.Size())
++
++		if err := os.WriteFile(path, []byte("download with extra bytes"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		got, err := io.ReadAll(reader)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if string(got) != "download" {
++			t.Fatalf("expected %q, got %q", "download", string(got))
++		}
++	})
++
++	t.Run("pads when file shrinks before fixed size is read", func(t *testing.T) {
++		path := filepath.Join(t.TempDir(), "download.txt")
++		if err := os.WriteFile(path, []byte("download"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		f, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer f.Close()
++
++		info, err := f.Stat()
++		if err != nil {
++			t.Fatal(err)
++		}
++		reader := newFixedDownloadReader(f, info.Size())
++
++		if err := os.WriteFile(path, []byte("down"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		got, err := io.ReadAll(reader)
++		if err != nil {
++			t.Fatal(err)
++		}
++		want := append([]byte("down"), bytes.Repeat([]byte{0}, 4)...)
++		if !bytes.Equal(got, want) {
++			t.Fatalf("expected %q, got %q", want, got)
++		}
++	})
++}
 diff --git a/router/router_importer.go b/router/router_importer.go
 new file mode 100644
-index 0000000..bca4c70
+index 0000000000000000000000000000000000000000..bca4c70f1b5f81eb1337ce85d1740a04c1f86807
 --- /dev/null
 +++ b/router/router_importer.go
 @@ -0,0 +1,150 @@
@@ -592,10 +1771,10 @@ index 0000000..bca4c70
 +}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
 new file mode 100644
-index 0000000..1aa6c47
+index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625c32f97e0
 --- /dev/null
 +++ b/router/router_server_archive_nbt.go
-@@ -0,0 +1,491 @@
+@@ -0,0 +1,496 @@
 +package router
 +
 +import (
@@ -604,6 +1783,7 @@ index 0000000..1aa6c47
 +	"compress/gzip"
 +	"errors"
 +	"io"
++	"math"
 +	"net/http"
 +	"os"
 +	"path"
@@ -1017,6 +2197,10 @@ index 0000000..1aa6c47
 +		if err != nil {
 +			return extracted, err
 +		}
++		if entry.UncompressedSize64 > uint64(math.MaxInt64) {
++			file.Close()
++			return extracted, errors.New("Archive entry is too large to extract.")
++		}
 +		err = fs.Write(outputPath, file, int64(entry.UncompressedSize64), entry.FileInfo().Mode().Perm())
 +		file.Close()
 +		if err != nil {
@@ -1089,7 +2273,7 @@ index 0000000..1aa6c47
 +}
 diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
 new file mode 100644
-index 0000000..404ddc3
+index 0000000000000000000000000000000000000000..404ddc35019a4fb8d762bcce6ad446180034ccc8
 --- /dev/null
 +++ b/router/router_server_betterfiles_collaboration.go
 @@ -0,0 +1,38 @@
@@ -1133,7 +2317,7 @@ index 0000000..404ddc3
 +}
 diff --git a/router/router_server_database.go b/router/router_server_database.go
 new file mode 100644
-index 0000000..29c0ed2
+index 0000000000000000000000000000000000000000..29c0ed29aaa50f8dbe9c96473f3950a8f6179bc7
 --- /dev/null
 +++ b/router/router_server_database.go
 @@ -0,0 +1,1069 @@
@@ -2206,9 +3390,103 @@ index 0000000..29c0ed2
 +		return false
 +	}
 +}
+diff --git a/router/router_server_files.go b/router/router_server_files.go
+index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee2dbbbf52 100644
+--- a/router/router_server_files.go
++++ b/router/router_server_files.go
+@@ -9,7 +9,6 @@ import (
+ 	"net/url"
+ 	"os"
+ 	"path"
+-	"path/filepath"
+ 	"strconv"
+ 	"strings"
+ 
+@@ -575,7 +574,7 @@ func postServerUploadFiles(c *gin.Context) {
+ 	}
+ 
+ 	s, ok := manager.Get(token.ServerUuid)
+-	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileUpload) {
++	if !ok || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
+ 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+ 			"error": "The requested resource was not found on this server.",
+ 		})
+@@ -598,36 +597,67 @@ func postServerUploadFiles(c *gin.Context) {
+ 		return
+ 	}
+ 
+-	directory := c.Query("directory")
++	directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))
++	if directory == "." {
++		directory = "/"
++	}
+ 
+ 	maxFileSize := config.Get().Api.UploadLimit
++	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
++	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
++		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
++			"error": "Upload limit is not configured correctly.",
++		})
++		return
++	}
+ 	maxFileSizeBytes := maxFileSize * 1024 * 1024
+ 	var totalSize int64
+ 	for _, header := range headers {
+-		if header.Size > maxFileSizeBytes {
++		if header.Size < 0 || header.Size > maxFileSizeBytes {
+ 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+ 				"error": "File " + header.Filename + " is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
+ 			})
+ 			return
+ 		}
+ 		totalSize += header.Size
++		if totalSize > maxFileSizeBytes {
++			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++				"error": "Total upload size is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
++			})
++			return
++		}
+ 	}
+ 
+ 	for _, header := range headers {
++		filename, ok := cleanUploadFilename(header.Filename)
++		if !ok {
++			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++				"error": "Invalid upload filename.",
++			})
++			return
++		}
++
+ 		// We run this in a different method so I can use defer without any of
+ 		// the consequences caused by calling it in a loop.
+-		if err := handleFileUpload(filepath.Join(directory, header.Filename), s, header); err != nil {
++		if err := handleFileUpload(path.Join(directory, filename), s, header); err != nil {
+ 			middleware.CaptureAndAbort(c, err)
+ 			return
+ 		} else {
+ 			s.SaveActivity(s.NewRequestActivity(token.UserUuid, c.ClientIP()), server.ActivityFileUploaded, models.ActivityMeta{
+-				"file":      header.Filename,
+-				"directory": filepath.Clean(directory),
++				"file":      filename,
++				"directory": directory,
+ 			})
+ 		}
+ 	}
+ }
+ 
++func cleanUploadFilename(name string) (string, bool) {
++	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
++		return "", false
++	}
++	return name, true
++}
++
+ func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {
+ 	file, err := header.Open()
+ 	if err != nil {
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
-index 0000000..a5d789d
+index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384c5092784
 --- /dev/null
 +++ b/router/router_server_files_search.go
 @@ -0,0 +1,577 @@
@@ -2791,7 +4069,7 @@ index 0000000..a5d789d
 +}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 0000000..688a396
+index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b421acfdbe
 --- /dev/null
 +++ b/router/router_server_git.go
 @@ -0,0 +1,1015 @@
@@ -3810,9 +5088,46 @@ index 0000000..688a396
 +		ExitCode: inspect.ExitCode,
 +	}, nil
 +}
+diff --git a/router/router_transfer.go b/router/router_transfer.go
+index 0a635ef0bdba5fe985fa3b07dd5da3a090e10017..7593a8cdfcb378b18e42312edfc08fd0642f724e 100644
+--- a/router/router_transfer.go
++++ b/router/router_transfer.go
+@@ -72,7 +72,7 @@ func postTransfers(c *gin.Context) {
+ 			StartOnCompletion: false,
+ 		})
+ 		if err != nil {
+-			if err := manager.Client().SetTransferStatus(context.Background(), trnsfr.Server.ID(), false); err != nil {
++			if err := manager.Client().SetTransferStatus(context.Background(), u.String(), false); err != nil {
+ 				trnsfr.Log().WithField("status", false).WithError(err).Error("failed to set transfer status")
+ 			}
+ 			middleware.CaptureAndAbort(c, err)
+diff --git a/router/tokens/token_store.go b/router/tokens/token_store.go
+index 6728efd17b29c586c96611891b9daf734e6cab7a..a441d6b4a234d742ffa0d7fb287f2dcbbf855e5f 100644
+--- a/router/tokens/token_store.go
++++ b/router/tokens/token_store.go
+@@ -13,16 +13,17 @@ type TokenStore struct {
+ }
+ 
+ var _tokens *TokenStore
++var tokensOnce sync.Once
+ 
+ // Returns the global unique token store cache. This is used to validate
+ // one time token usage by storing any received tokens in a local memory
+ // cache until they are ready to expire.
+ func getTokenStore() *TokenStore {
+-	if _tokens == nil {
++	tokensOnce.Do(func() {
+ 		_tokens = &TokenStore{
+ 			cache: cache.New(time.Minute*60, time.Minute*5),
+ 		}
+-	}
++	})
+ 
+ 	return _tokens
+ }
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 0000000..f2c5845
+index 0000000000000000000000000000000000000000..f2c5845ed6b22afdae4ceaca2379c54b82fd09c8
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
 @@ -0,0 +1,1124 @@
@@ -4941,7 +6256,7 @@ index 0000000..f2c5845
 +	return value
 +}
 diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
-index 57315a9..547d499 100644
+index 57315a96f2d7baba708d8f9bf1333aed935182d6..547d4999fc0779b4e08010d198794c18a3d967d9 100644
 --- a/router/websocket/limiter.go
 +++ b/router/websocket/limiter.go
 @@ -1,6 +1,7 @@
@@ -4991,10 +6306,18 @@ index 57315a9..547d499 100644
 +	return strings.HasPrefix(string(e), "betterfiles:collab:")
 +}
 diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
-index 12e5f81..578e214 100644
+index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4babcbab4 100644
 --- a/router/websocket/listeners.go
 +++ b/router/websocket/listeners.go
-@@ -66,7 +66,7 @@ func (h *Handler) listenForExpiration(ctx context.Context) {
+@@ -3,6 +3,7 @@ package websocket
+ import (
+ 	"context"
+ 	"encoding/json"
++	"strings"
+ 	"sync"
+ 	"time"
+ 
+@@ -66,19 +67,30 @@ func (h *Handler) listenForExpiration(ctx context.Context) {
  	}
  }
  
@@ -5003,18 +6326,94 @@ index 12e5f81..578e214 100644
  	server.StatsEvent,
  	server.StatusEvent,
  	server.ConsoleOutputEvent,
-@@ -78,7 +78,7 @@ var e = []string{
+ 	server.InstallOutputEvent,
+ 	server.InstallStartedEvent,
+ 	server.InstallCompletedEvent,
++	server.ImagePullStartedEvent,
++	server.ImagePullProgressEvent,
++	server.ImagePullCompletedEvent,
+ 	server.DaemonMessageEvent,
+ 	server.BackupCompletedEvent,
  	server.BackupRestoreCompletedEvent,
  	server.TransferLogsEvent,
  	server.TransferStatusEvent,
 -}
 +}, serverImporterListenerEvents...)
++
++var allowedServerEvents = func() map[string]struct{} {
++	events := make(map[string]struct{}, len(e))
++	for _, event := range e {
++		events[event] = struct{}{}
++	}
++	return events
++}()
  
  // ListenForServerEvents will listen for different events happening on a server
  // and send them along to the connected websocket client. This function will
+@@ -93,10 +105,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 	eventChan := make(chan []byte)
+ 	logOutput := make(chan []byte, 8)
+ 	installOutput := make(chan []byte, 4)
++	canReceiveInstall := false
++	if jwt := h.GetJwt(); jwt != nil {
++		canReceiveInstall = jwt.HasPermission(PermissionReceiveInstall)
++	}
+ 
+ 	h.server.Events().On(eventChan) // TODO: make a sinky
+ 	h.server.Sink(system.LogSink).On(logOutput)
+-	h.server.Sink(system.InstallSink).On(installOutput)
++	if canReceiveInstall {
++		h.server.Sink(system.InstallSink).On(installOutput)
++	}
+ 
+ 	onError := func(evt string, err2 error) {
+ 		h.Logger().WithField("event", evt).WithField("error", err2).Error("failed to send event over server websocket")
+@@ -130,6 +148,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 			if err := events.DecodeTo(b, &e); err != nil {
+ 				continue
+ 			}
++			if _, ok := allowedServerEvents[e.Topic]; !ok && !strings.HasPrefix(e.Topic, server.BackupCompletedEvent+":") {
++				continue
++			}
+ 			var sendErr error
+ 			message := Message{Event: Event(e.Topic)}
+ 			if str, ok := e.Data.(string); ok {
+@@ -157,7 +178,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 	// These functions will automatically close the channel if it hasn't been already.
+ 	h.server.Events().Off(eventChan)
+ 	h.server.Sink(system.LogSink).Off(logOutput)
+-	h.server.Sink(system.InstallSink).Off(installOutput)
++	if canReceiveInstall {
++		h.server.Sink(system.InstallSink).Off(installOutput)
++	}
+ 
+ 	// If the internal context is stopped it is either because the parent context
+ 	// got canceled or because we ran into an error. If the "err" variable is nil
+diff --git a/router/websocket/listeners_test.go b/router/websocket/listeners_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc47188709f25f3b9c208840239e671e0f8ee733
+--- /dev/null
++++ b/router/websocket/listeners_test.go
+@@ -0,0 +1,16 @@
++package websocket
++
++import (
++	"testing"
++
++	"github.com/pterodactyl/wings/server"
++)
++
++func TestAllowedServerEvents(t *testing.T) {
++	if _, ok := allowedServerEvents[server.ImagePullProgressEvent]; !ok {
++		t.Fatalf("expected image pull progress event to be allowed")
++	}
++	if _, ok := allowedServerEvents["unexpected internal event"]; ok {
++		t.Fatalf("expected unknown internal event to be blocked")
++	}
++}
 diff --git a/router/websocket/server_importer.go b/router/websocket/server_importer.go
 new file mode 100644
-index 0000000..db03c4a
+index 0000000000000000000000000000000000000000..db03c4aadb86b2e57326e3aad87c3d0c47a69eb7
 --- /dev/null
 +++ b/router/websocket/server_importer.go
 @@ -0,0 +1,42 @@
@@ -5062,7 +6461,7 @@ index 0000000..db03c4a
 +}
 diff --git a/router/websocket/server_importer_events.go b/router/websocket/server_importer_events.go
 new file mode 100644
-index 0000000..af0aabd
+index 0000000000000000000000000000000000000000..af0aabd0f75e2cbc40be0a483cbebb6f50320a82
 --- /dev/null
 +++ b/router/websocket/server_importer_events.go
 @@ -0,0 +1,17 @@
@@ -5085,7 +6484,7 @@ index 0000000..af0aabd
 +}
 diff --git a/router/websocket/server_importer_listener.go b/router/websocket/server_importer_listener.go
 new file mode 100644
-index 0000000..45c0b55
+index 0000000000000000000000000000000000000000..45c0b5565590f1b50484e173816e4300bee2df6e
 --- /dev/null
 +++ b/router/websocket/server_importer_listener.go
 @@ -0,0 +1,8 @@
@@ -5098,7 +6497,7 @@ index 0000000..45c0b55
 +	server.ServerImporterCompletedEvent,
 +}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667..a3a1148 100644
+index 4482667e67723a87eeb47735708f96206806c5db..5213c751c3c7d4c247525dfd4d55592673125245 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
 @@ -36,6 +36,7 @@ const (
@@ -5109,7 +6508,19 @@ index 4482667..a3a1148 100644
  )
  
  type Handler struct {
-@@ -167,6 +168,12 @@ func (h *Handler) SendJson(v Message) error {
+@@ -147,7 +148,10 @@ func (h *Handler) SendJson(v Message) error {
+ 	if j := h.GetJwt(); j != nil {
+ 		// If we're sending installation output but the user does not have the required
+ 		// permissions to see the output, don't send it down the line.
+-		if v.Event == server.InstallOutputEvent {
++		if v.Event == server.InstallOutputEvent ||
++			v.Event == server.ImagePullStartedEvent ||
++			v.Event == server.ImagePullProgressEvent ||
++			v.Event == server.ImagePullCompletedEvent {
+ 			if !j.HasPermission(PermissionReceiveInstall) {
+ 				return nil
+ 			}
+@@ -167,6 +171,12 @@ func (h *Handler) SendJson(v Message) error {
  				return nil
  			}
  		}
@@ -5122,7 +6533,7 @@ index 4482667..a3a1148 100644
  	}
  
  	if err := h.unsafeSendJson(v); err != nil {
-@@ -300,6 +307,14 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
+@@ -300,6 +310,14 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
  		}
  	}
  
@@ -5137,11 +6548,309 @@ index 4482667..a3a1148 100644
  	switch m.Event {
  	case AuthenticationEvent:
  		{
+diff --git a/server/backup/backup.go b/server/backup/backup.go
+index 01e73d0dd40f52cee29578e10c5cc7e19cc508d6..8041b782b98608d8fcf7b91613b044d7014b40a6 100644
+--- a/server/backup/backup.go
++++ b/server/backup/backup.go
+@@ -106,7 +106,7 @@ func (b *Backup) Size() (int64, error) {
+ 	return st.Size(), nil
+ }
+ 
+-// Checksum returns the SHA256 checksum of a backup.
++// Checksum returns the SHA1 checksum of a backup.
+ func (b *Backup) Checksum() ([]byte, error) {
+ 	h := sha1.New()
+ 
+@@ -128,7 +128,7 @@ func (b *Backup) Checksum() ([]byte, error) {
+ // the disk to the caller.
+ func (b *Backup) Details(ctx context.Context, parts []remote.BackupPart) (*ArchiveDetails, error) {
+ 	ad := ArchiveDetails{ChecksumType: "sha1", Parts: parts}
+-	g, ctx := errgroup.WithContext(ctx)
++	g, _ := errgroup.WithContext(ctx)
+ 
+ 	g.Go(func() error {
+ 		resp, err := b.Checksum()
+diff --git a/server/betterconsole_pull_progress.go b/server/betterconsole_pull_progress.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..7766b99c8ba7cfe578aee7e87ca6e3a7ab5cb96c
+--- /dev/null
++++ b/server/betterconsole_pull_progress.go
+@@ -0,0 +1,195 @@
++package server
++
++import (
++	"encoding/json"
++	"fmt"
++	"math"
++	"strings"
++
++	"github.com/buger/jsonparser"
++)
++
++func betterConsoleDockerPullProgress(img string, b []byte) string {
++	id, _ := jsonparser.GetString(b, "id")
++	status, _ := jsonparser.GetString(b, "status")
++	progress, _ := jsonparser.GetString(b, "progress")
++	current, currentErr := jsonparser.GetInt(b, "progressDetail", "current")
++	total, totalErr := jsonparser.GetInt(b, "progressDetail", "total")
++	status = strings.TrimSpace(status)
++	if status == "" && id == "" {
++		return ""
++	}
++
++	displayStatus, phase := betterConsoleDockerPullStatus(status)
++	hasProgressDetail := currentErr == nil && totalErr == nil
++	percent := betterConsoleDockerPullPercent(current, total, phase == "complete")
++	line := betterConsoleDockerPullLine(displayStatus, current, total, hasProgressDetail)
++	image := betterConsoleDockerPullSafeImageRef(img)
++
++	payload, err := json.Marshal(map[string]interface{}{
++		"id":       betterConsoleDockerPullSafeText(id),
++		"image":    image,
++		"label":    betterConsoleDockerPullImageLabel(image),
++		"phase":    phase,
++		"status":   displayStatus,
++		"progress": betterConsoleDockerPullSafeText(progress),
++		"current":  current,
++		"total":    total,
++		"percent":  percent,
++		"line":     line,
++	})
++	if err != nil {
++		return line
++	}
++
++	return string(payload)
++}
++
++func betterConsoleDockerPullInstallLine(b []byte) string {
++	line, _ := jsonparser.GetString(b, "line")
++	if strings.TrimSpace(line) != "" {
++		return strings.TrimSpace(line)
++	}
++
++	status, _ := jsonparser.GetString(b, "status")
++	current, currentErr := jsonparser.GetInt(b, "progressDetail", "current")
++	total, totalErr := jsonparser.GetInt(b, "progressDetail", "total")
++
++	status = strings.TrimSpace(status)
++	if status == "" {
++		return ""
++	}
++
++	displayStatus, phase := betterConsoleDockerPullStatus(status)
++	line = betterConsoleDockerPullLine(displayStatus, current, total, currentErr == nil && totalErr == nil)
++	if phase == "complete" && line == "" {
++		return displayStatus
++	}
++
++	return line
++}
++
++func betterConsoleDockerPullStatus(status string) (string, string) {
++	normalized := strings.ToLower(strings.TrimSpace(status))
++	switch normalized {
++	case "downloading":
++		return "Downloading", "pulling"
++	case "extracting":
++		return "Extracting", "extracting"
++	case "download complete":
++		return "Download complete", "complete"
++	case "pull complete":
++		return "Pull complete", "complete"
++	case "already exists":
++		return "Already exists", "complete"
++	default:
++		if status == "" {
++			return "Pulling", "pulling"
++		}
++		return betterConsoleDockerPullSafeText(status), "status"
++	}
++}
++
++func betterConsoleDockerPullPercent(current int64, total int64, complete bool) float64 {
++	if complete {
++		return 100
++	}
++	if total <= 0 || current <= 0 {
++		return 0
++	}
++
++	percent := (float64(current) / float64(total)) * 100
++	if percent > 100 {
++		return 100
++	}
++	if percent < 0 {
++		return 0
++	}
++
++	return percent
++}
++
++func betterConsoleDockerPullLine(status string, current int64, total int64, complete bool) string {
++	if !complete {
++		return strings.TrimSpace(status)
++	}
++
++	percent := betterConsoleDockerPullPercent(current, total, false)
++	width := 50 - len(status)
++	if width < 8 {
++		width = 8
++	}
++
++	return fmt.Sprintf(
++		"%s %s %.2f%% of %s",
++		status,
++		betterConsoleDockerPullBar(width, percent),
++		percent,
++		betterConsoleDockerPullBytes(total),
++	)
++}
++
++func betterConsoleDockerPullBar(width int, percent float64) string {
++	completed := int(math.Round((percent / 100) * float64(width)))
++	if completed >= width {
++		return "[" + strings.Repeat("=", width) + "]"
++	}
++	if completed < 0 {
++		completed = 0
++	}
++
++	return "[" + strings.Repeat("=", completed) + ">" + strings.Repeat(" ", width-completed-1) + "]"
++}
++
++func betterConsoleDockerPullBytes(value int64) string {
++	if value <= 0 {
++		return "0 B"
++	}
++
++	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
++	size := float64(value)
++	unit := 0
++	for size >= 1024 && unit < len(units)-1 {
++		size /= 1024
++		unit++
++	}
++
++	if unit == 0 {
++		return fmt.Sprintf("%d B", value)
++	}
++
++	return fmt.Sprintf("%.1f %s", size, units[unit])
++}
++
++func betterConsoleDockerPullImageLabel(img string) string {
++	parts := strings.Split(strings.TrimSpace(img), "/")
++	if len(parts) == 0 || parts[len(parts)-1] == "" {
++		return "Docker image"
++	}
++
++	return parts[len(parts)-1]
++}
++
++func betterConsoleDockerPullSafeImageRef(img string) string {
++	img = strings.TrimSpace(img)
++	slash := strings.IndexByte(img, '/')
++	if slash <= 0 {
++		return img
++	}
++
++	registry := img[:slash]
++	if at := strings.LastIndex(registry, "@"); at >= 0 {
++		registry = registry[at+1:]
++	}
++
++	return registry + "/" + img[slash+1:]
++}
++
++func betterConsoleDockerPullSafeText(value string) string {
++	return strings.Map(func(r rune) rune {
++		if r == '\t' || r >= 32 {
++			return r
++		}
++		return -1
++	}, strings.TrimSpace(value))
++}
+diff --git a/server/betterconsole_pull_progress_test.go b/server/betterconsole_pull_progress_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..6831ade0198e498d201ae84141b3ad1058058ad9
+--- /dev/null
++++ b/server/betterconsole_pull_progress_test.go
+@@ -0,0 +1,44 @@
++package server
++
++import (
++	"strings"
++	"testing"
++)
++
++func TestBetterConsoleDockerPullInstallLineWithProgressDetail(t *testing.T) {
++	line := betterConsoleDockerPullInstallLine([]byte(`{"status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	if !strings.HasPrefix(line, "Downloading [") {
++		t.Fatalf("expected downloading progress bar, got %q", line)
++	}
++	if !strings.Contains(line, "50.00% of 1.0 KiB") {
++		t.Fatalf("expected calculated percentage and total bytes, got %q", line)
++	}
++}
++
++func TestBetterConsoleDockerPullInstallLineWithoutProgressDetail(t *testing.T) {
++	line := betterConsoleDockerPullInstallLine([]byte(`{"status":"Pull complete"}`))
++
++	if line != "Pull complete" {
++		t.Fatalf("expected plain status without fake 0 B bar, got %q", line)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressSanitizesImageCredentials(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("user:secret@registry.example.com/private/image:latest", []byte(`{"id":"layer","status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	if strings.Contains(payload, "secret") || strings.Contains(payload, "user:") {
++		t.Fatalf("expected sanitized image payload, got %q", payload)
++	}
++	if !strings.Contains(payload, "registry.example.com/private/image:latest") {
++		t.Fatalf("expected sanitized image reference in payload, got %q", payload)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressStripsControlCharacters(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte("{\"id\":\"lay\u001ber\",\"status\":\"Pull\u001b complete\",\"progress\":\"10\u001b%\"}"))
++
++	if strings.Contains(payload, "\u001b") {
++		t.Fatalf("expected control characters to be stripped, got %q", payload)
++	}
++}
+diff --git a/server/console.go b/server/console.go
+index 0cd2ff66c6288a7e8f1f9f9957c8265e03255a14..33fd38a352193400b3b64ce5a8bbb0092d6c5971 100644
+--- a/server/console.go
++++ b/server/console.go
+@@ -2,6 +2,7 @@ package server
+ 
+ import (
+ 	"fmt"
++	"math"
+ 	"sync"
+ 	"time"
+ 
+@@ -33,7 +34,11 @@ func (s *Server) PublishConsoleOutputFromDaemon(data string) {
+ func (s *Server) Throttler() *ConsoleThrottle {
+ 	s.throttleOnce.Do(func() {
+ 		throttles := config.Get().Throttles
+-		period := time.Duration(throttles.Period) * time.Millisecond
++		periodMillis := throttles.Period
++		if periodMillis > uint64(math.MaxInt64)/uint64(time.Millisecond) {
++			periodMillis = uint64(math.MaxInt64) / uint64(time.Millisecond)
++		}
++		period := time.Duration(periodMillis) * time.Millisecond
+ 
+ 		s.throttler = newConsoleThrottle(throttles.Lines, period)
+ 		s.throttler.strike = func() {
 diff --git a/server/events.go b/server/events.go
-index d08411c..d7876aa 100644
+index d08411cce8e18de88008df04789d40bc24e55ad7..425417398855c830f0898d3169f0feb358e772e8 100644
 --- a/server/events.go
 +++ b/server/events.go
-@@ -7,18 +7,20 @@ import (
+@@ -7,18 +7,23 @@ import (
  
  // Defines all the possible output events for a server.
  const (
@@ -5161,6 +6870,9 @@ index d08411c..d7876aa 100644
 +	InstallOutputEvent           = "install output"
 +	InstallStartedEvent          = "install started"
 +	InstallCompletedEvent        = "install completed"
++	ImagePullStartedEvent        = "image pull started"
++	ImagePullProgressEvent       = "image pull progress"
++	ImagePullCompletedEvent      = "image pull completed"
 +	ConsoleOutputEvent           = "console output"
 +	StatusEvent                  = "status"
 +	StatsEvent                   = "stats"
@@ -5174,9 +6886,129 @@ index d08411c..d7876aa 100644
  )
  
  // Events returns the server's emitter instance.
+diff --git a/server/filesystem/errors.go b/server/filesystem/errors.go
+index b977fe6b2e0545a2c23140cc05be9eb25fc87c34..17833eb3ee35c3d380c3c63375c460f60119916d 100644
+--- a/server/filesystem/errors.go
++++ b/server/filesystem/errors.go
+@@ -2,12 +2,8 @@ package filesystem
+ 
+ import (
+ 	"fmt"
+-	"path/filepath"
+ 
+ 	"emperror.dev/errors"
+-	"github.com/apex/log"
+-
+-	"github.com/pterodactyl/wings/internal/ufs"
+ )
+ 
+ type ErrorCode string
+@@ -85,26 +81,6 @@ func (e *Error) Unwrap() error {
+ 	return e.err
+ }
+ 
+-// Generates an error logger instance with some basic information.
+-func (fs *Filesystem) error(err error) *log.Entry {
+-	return log.WithField("subsystem", "filesystem").WithField("root", fs.Path()).WithField("error", err)
+-}
+-
+-// Handle errors encountered when walking through directories.
+-//
+-// If there is a path resolution error just skip the item entirely. Only return this for a
+-// directory, otherwise return nil. Returning this error for a file will stop the walking
+-// for the remainder of the directory. This is assuming an FileInfo struct was even returned.
+-func (fs *Filesystem) handleWalkerError(err error, f ufs.FileInfo) error {
+-	if !IsErrorCode(err, ErrCodePathResolution) {
+-		return err
+-	}
+-	if f != nil && f.IsDir() {
+-		return filepath.SkipDir
+-	}
+-	return nil
+-}
+-
+ // IsFilesystemError checks if the given error is one of the Filesystem errors.
+ func IsFilesystemError(err error) bool {
+ 	var fserr *Error
+diff --git a/server/filesystem/filesystem.go b/server/filesystem/filesystem.go
+index 112f99648c6a94661b67251ffab26cb91c92b027..5b078075188126212f003a5748b16b706806d9f8 100644
+--- a/server/filesystem/filesystem.go
++++ b/server/filesystem/filesystem.go
+@@ -75,6 +75,12 @@ func (fs *Filesystem) ReadDirStat(path string) ([]ufs.FileInfo, error) {
+ func (fs *Filesystem) File(p string) (ufs.File, Stat, error) {
+ 	f, err := fs.unixFS.Open(p)
+ 	if err != nil {
++		if errors.Is(err, ufs.ErrNotExist) {
++			return nil, Stat{}, newFilesystemError(ErrNotExist, err)
++		}
++		if errors.Is(err, ufs.ErrBadPathResolution) {
++			return nil, Stat{}, newFilesystemError(ErrCodePathResolution, err)
++		}
+ 		return nil, Stat{}, err
+ 	}
+ 	st, err := statFromFile(f)
+diff --git a/server/filesystem/filesystem_test.go b/server/filesystem/filesystem_test.go
+index 67c60d1478af8c3cb8a5e6f3a77fb0b6b9c87817..c17f1cf2d0eeaaedadcbb73341122887e1aef638 100644
+--- a/server/filesystem/filesystem_test.go
++++ b/server/filesystem/filesystem_test.go
+@@ -90,8 +90,15 @@ func TestFilesystem_Openfile(t *testing.T) {
+ 			_, _, err := fs.File("foo/bar.txt")
+ 
+ 			g.Assert(err).IsNotNil()
+-			// TODO
+-			//g.Assert(IsErrorCode(err, ErrNotExist)).IsTrue()
++			g.Assert(IsErrorCode(err, ErrNotExist)).IsTrue()
++		})
++
++		g.It("returns custom error when file resolves outside the root", func() {
++			_, _, err := fs.File("/some/../foo/../../test.txt")
++
++			g.Assert(err).IsNotNil()
++			g.Assert(IsErrorCode(err, ErrCodePathResolution)).IsTrue()
++			g.Assert(errors.Is(err, ufs.ErrBadPathResolution)).IsTrue("err is not ErrBadPathResolution")
+ 		})
+ 
+ 		g.It("returns file stat information", func() {
+diff --git a/server/filesystem/path.go b/server/filesystem/path.go
+index edb1cad6df39eec2f7e26c0d54d8f2438242f6b8..279823a23dd78c2a6e641efd396fdfff80a739dd 100644
+--- a/server/filesystem/path.go
++++ b/server/filesystem/path.go
+@@ -1,9 +1,6 @@
+ package filesystem
+ 
+ import (
+-	"path/filepath"
+-	"strings"
+-
+ 	"emperror.dev/errors"
+ )
+ 
+@@ -22,22 +19,3 @@ func (fs *Filesystem) IsIgnored(paths ...string) error {
+ 	}
+ 	return nil
+ }
+-
+-// Generate a path to the file by cleaning it up and appending the root server path to it. This
+-// DOES NOT guarantee that the file resolves within the server data directory. You'll want to use
+-// the fs.unsafeIsInDataDirectory(p) function to confirm.
+-func (fs *Filesystem) unsafeFilePath(p string) string {
+-	// Calling filepath.Clean on the joined directory will resolve it to the absolute path,
+-	// removing any ../ type of resolution arguments, and leaving us with a direct path link.
+-	//
+-	// This will also trim the existing root path off the beginning of the path passed to
+-	// the function since that can get a bit messy.
+-	return filepath.Clean(filepath.Join(fs.Path(), strings.TrimPrefix(p, fs.Path())))
+-}
+-
+-// Check that that path string starts with the server data directory path. This function DOES NOT
+-// validate that the rest of the path does not end up resolving out of this directory, or that the
+-// targeted file or folder is not a symlink doing the same thing.
+-func (fs *Filesystem) unsafeIsInDataDirectory(p string) bool {
+-	return strings.HasPrefix(strings.TrimSuffix(p, "/")+"/", strings.TrimSuffix(fs.Path(), "/")+"/")
+-}
 diff --git a/server/import.go b/server/import.go
 new file mode 100644
-index 0000000..452855a
+index 0000000000000000000000000000000000000000..452855accf0135e0094f94392b59fb19337cb12c
 --- /dev/null
 +++ b/server/import.go
 @@ -0,0 +1,1833 @@
@@ -7015,7 +8847,7 @@ index 0000000..452855a
 +}
 diff --git a/server/import_progress.go b/server/import_progress.go
 new file mode 100644
-index 0000000..8b5c1d3
+index 0000000000000000000000000000000000000000..8b5c1d338376c96b316b0103b2a2c0425f615f57
 --- /dev/null
 +++ b/server/import_progress.go
 @@ -0,0 +1,217 @@
@@ -7236,9 +9068,132 @@ index 0000000..8b5c1d3
 +		Error:          p.Error,
 +	})
 +}
+diff --git a/server/install.go b/server/install.go
+index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84989291c6 100644
+--- a/server/install.go
++++ b/server/install.go
+@@ -259,6 +259,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+ 	}
+ 
+ 	r, err := ip.client.ImagePull(ip.Server.Context(), ip.Script.ContainerImage, imagePullOptions)
++	safeImage := betterConsoleDockerPullSafeImageRef(ip.Script.ContainerImage)
+ 	if err != nil {
+ 		images, ierr := ip.client.ImageList(ip.Server.Context(), image.ListOptions{})
+ 		if ierr != nil {
+@@ -274,7 +275,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+ 				}
+ 
+ 				log.WithFields(log.Fields{
+-					"image": ip.Script.ContainerImage,
++					"image": safeImage,
+ 					"err":   err.Error(),
+ 				}).Warn("unable to pull requested image from remote source, however the image exists locally")
+ 
+@@ -288,12 +289,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+ 	}
+ 	defer r.Close()
+ 
+-	log.WithField("image", ip.Script.ContainerImage).Debug("pulling docker image... this could take a bit of time")
++	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
++	ip.Server.Events().Publish(ImagePullStartedEvent, "")
++	defer ip.Server.Events().Publish(ImagePullCompletedEvent, "")
+ 
+ 	// Block continuation until the image has been pulled successfully.
+ 	scanner := bufio.NewScanner(r)
+ 	for scanner.Scan() {
+-		log.Debug(scanner.Text())
++		log.Debug(betterConsoleDockerPullSafeText(scanner.Text()))
++		payload := betterConsoleDockerPullProgress(ip.Script.ContainerImage, scanner.Bytes())
++		if payload != "" {
++			ip.Server.Events().Publish(ImagePullProgressEvent, payload)
++		}
++		if line := betterConsoleDockerPullInstallLine(scanner.Bytes()); line != "" {
++			ip.Server.Sink(system.InstallSink).Push([]byte(line))
++		}
+ 	}
+ 
+ 	if err := scanner.Err(); err != nil {
+@@ -505,13 +515,32 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
+ 	}
+ 	defer reader.Close()
+ 
+-	err = system.ScanReader(reader, ip.Server.Sink(system.InstallSink).Push)
++	err = ip.streamRawInstallOutput(reader)
+ 	if err != nil && !errors.Is(err, context.Canceled) {
+ 		ip.Server.Log().WithFields(log.Fields{"container_id": id, "error": err}).Warn("error processing install output lines")
+ 	}
+ 	return nil
+ }
+ 
++func (ip *InstallationProcess) streamRawInstallOutput(reader io.Reader) error {
++	buf := make([]byte, 4096)
++	for {
++		n, err := reader.Read(buf)
++		if n > 0 {
++			chunk := make([]byte, n)
++			copy(chunk, buf[:n])
++			ip.Server.Sink(system.InstallSink).Push(chunk)
++		}
++		if err != nil {
++			if errors.Is(err, io.EOF) {
++				return nil
++			}
++
++			return err
++		}
++	}
++}
++
+ // resourceLimits returns resource limits for the installation container. This
+ // looks at the globally defined install container limits and attempts to use
+ // the higher of the two (defined limits & server limits). This allows for servers
+diff --git a/server/listeners.go b/server/listeners.go
+index d39e6649d6d3e908f503447862693e2ba87144b1..5e186ebc5d21cb811deac8545000f352d0d638e1 100644
+--- a/server/listeners.go
++++ b/server/listeners.go
+@@ -9,19 +9,13 @@ import (
+ 
+ 	"github.com/apex/log"
+ 
++	"github.com/pterodactyl/wings/environment"
+ 	"github.com/pterodactyl/wings/events"
+ 	"github.com/pterodactyl/wings/system"
+ 
+-	"github.com/pterodactyl/wings/environment"
+ 	"github.com/pterodactyl/wings/remote"
+ )
+ 
+-var dockerEvents = []string{
+-	environment.DockerImagePullStatus,
+-	environment.DockerImagePullStarted,
+-	environment.DockerImagePullCompleted,
+-}
+-
+ type diskSpaceLimiter struct {
+ 	o      sync.Once
+ 	mu     sync.Mutex
+@@ -127,10 +121,17 @@ func (s *Server) StartEventListeners() {
+ 							s.OnStateChange()
+ 						}
+ 					case environment.DockerImagePullStatus:
+-						s.Events().Publish(InstallOutputEvent, e.Data)
++						s.Events().Publish(ImagePullProgressEvent, e.Data)
++						if str, ok := e.Data.(string); ok {
++							if line := betterConsoleDockerPullInstallLine([]byte(str)); line != "" {
++								s.Sink(system.LogSink).Push([]byte(line))
++							}
++						}
+ 					case environment.DockerImagePullStarted:
++						s.Events().Publish(ImagePullStartedEvent, "")
+ 						s.PublishConsoleOutputFromDaemon("Pulling Docker container image, this could take a few minutes to complete...")
+ 					case environment.DockerImagePullCompleted:
++						s.Events().Publish(ImagePullCompletedEvent, "")
+ 						s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")
+ 					default:
+ 					}
 diff --git a/server/protocol_monitor.go b/server/protocol_monitor.go
 new file mode 100644
-index 0000000..acea374
+index 0000000000000000000000000000000000000000..acea374a068b0e4b103bddd3af10b4aeb36f71ce
 --- /dev/null
 +++ b/server/protocol_monitor.go
 @@ -0,0 +1,85 @@
@@ -7329,7 +9284,7 @@ index 0000000..acea374
 +}
 diff --git a/server/protocol_stats.go b/server/protocol_stats.go
 new file mode 100644
-index 0000000..1fcc0a6
+index 0000000000000000000000000000000000000000..1fcc0a6b9a82d0fdcae7fe28ab07a7bf17ebf9ca
 --- /dev/null
 +++ b/server/protocol_stats.go
 @@ -0,0 +1,135 @@
@@ -7469,7 +9424,7 @@ index 0000000..1fcc0a6
 +	return stats, nil
 +}
 diff --git a/server/resources.go b/server/resources.go
-index e11adf5..d0ef201 100644
+index e11adf59a791aa1c34507cf0ab2e56e87bf8ddb4..d0ef20173835e88178ea4072829d9f6bc4710466 100644
 --- a/server/resources.go
 +++ b/server/resources.go
 @@ -56,4 +56,6 @@ func (ru *ResourceUsage) Reset() {
@@ -7479,3 +9434,558 @@ index e11adf5..d0ef201 100644
 +	ru.Network.TxPackets = 0
 +	ru.Network.RxPackets = 0
  }
+diff --git a/server/server.go b/server/server.go
+index a1777b047ba40a7d9060d76a298ecf7df6a2284a..83d60861f437b375f7818d2bcee7aaca801f2bd5 100644
+--- a/server/server.go
++++ b/server/server.go
+@@ -74,9 +74,6 @@ type Server struct {
+ 	sftpBag     *system.ContextBag
+ 
+ 	sinks map[system.SinkName]*system.SinkPool
+-
+-	logSink     *system.SinkPool
+-	installSink *system.SinkPool
+ }
+ 
+ // New returns a new server instance with a context and all of the default
+diff --git a/server/transfer/archive.go b/server/transfer/archive.go
+index 26cfddcaa7bff796fde2f7b0d108aecc89c807e8..9f20db67e7b7e8ae9e7e32435d06a68c21e782cb 100644
+--- a/server/transfer/archive.go
++++ b/server/transfer/archive.go
+@@ -18,6 +18,9 @@ func (t *Transfer) Archive() (*Archive, error) {
+ 		if err != nil {
+ 			return nil, fmt.Errorf("transfer: failed to get server disk usage: %w", err)
+ 		}
++		if rawSize < 0 {
++			return nil, fmt.Errorf("transfer: failed to get server disk usage: invalid negative size %d", rawSize)
++		}
+ 
+ 		// Create a new archive instance and assign it to the transfer.
+ 		t.archive = NewArchive(t, uint64(rawSize))
+diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..8530704f05b95c18543ca0797996ec6d9e86bdf0
+--- /dev/null
++++ b/sftp/betterconsole_shell.go
+@@ -0,0 +1,347 @@
++package sftp
++
++import (
++	"bufio"
++	"encoding/json"
++	"fmt"
++	"io"
++	"regexp"
++	"strings"
++	"sync"
++
++	"golang.org/x/crypto/ssh"
++
++	"github.com/pterodactyl/wings/environment"
++	"github.com/pterodactyl/wings/events"
++	"github.com/pterodactyl/wings/internal/models"
++	"github.com/pterodactyl/wings/server"
++	"github.com/pterodactyl/wings/system"
++)
++
++const betterConsoleShellCliName = ".wings"
++const betterConsoleShellMaxLineBytes = 4096
++
++var betterConsoleShellAnsiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
++
++func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Server, handler *Handler, ip string) {
++	logOutput := make(chan []byte, 128)
++	installOutput := make(chan []byte, 32)
++	eventOutput := make(chan []byte, 32)
++	done := make(chan struct{})
++	canReceiveInstall := handler.can("admin.websocket.install")
++	activity := srv.NewRequestActivity(handler.User(), ip)
++
++	srv.Sink(system.LogSink).On(logOutput)
++	if canReceiveInstall {
++		srv.Sink(system.InstallSink).On(installOutput)
++	}
++	srv.Events().On(eventOutput)
++	defer srv.Sink(system.LogSink).Off(logOutput)
++	if canReceiveInstall {
++		defer srv.Sink(system.InstallSink).Off(installOutput)
++	}
++	defer srv.Events().Off(eventOutput)
++
++	term := &betterConsoleSshTerminal{channel: channel}
++	term.writeLine("Better Console live server console")
++	term.writeLine("Connected to Wings. Type a server command and press enter.")
++	term.writeLine("Type \"" + betterConsoleShellCliName + " help\" for daemon commands or \"exit\" to close this SSH console session.")
++	if lines, err := srv.Environment.Readlog(75); err == nil && len(lines) > 0 {
++		for _, line := range lines {
++			term.writeHistory(line)
++		}
++	}
++	term.prompt()
++
++	go func() {
++		for {
++			select {
++			case <-done:
++				return
++			case line, ok := <-logOutput:
++				if !ok {
++					logOutput = nil
++					continue
++				}
++				term.writeConsole(string(line))
++			case line, ok := <-installOutput:
++				if !ok {
++					installOutput = nil
++					continue
++				}
++				term.writeConsole(string(line))
++			case raw, ok := <-eventOutput:
++				if !ok {
++					eventOutput = nil
++					continue
++				}
++				var e events.Event
++				if err := events.DecodeTo(raw, &e); err != nil {
++					continue
++				}
++				if e.Topic == server.InstallOutputEvent && !canReceiveInstall {
++					continue
++				}
++				if e.Topic != server.ConsoleOutputEvent && e.Topic != server.DaemonMessageEvent && e.Topic != server.InstallOutputEvent {
++					continue
++				}
++				term.writeConsole(betterConsoleEventString(e.Data))
++			}
++		}
++	}()
++
++	reader := bufio.NewReader(channel)
++	for {
++		b, err := reader.ReadByte()
++		if err != nil {
++			close(done)
++			if err != io.EOF {
++				term.writeLine("Session closed.")
++			}
++			return
++		}
++
++		switch b {
++		case '\r', '\n':
++			line := strings.TrimSpace(term.commitLine())
++			if line == "" {
++				term.prompt()
++				continue
++			}
++			if line == "exit" || line == "quit" {
++				close(done)
++				term.writeLine("Disconnected from Better Console.")
++				return
++			}
++			if strings.HasPrefix(line, betterConsoleShellCliName) {
++				c.handleBetterConsoleShellCliCommand(term, srv, handler, activity, line)
++			} else if !handler.can("control.console") {
++				term.writeLine("Permission denied: control.console")
++			} else if srv.IsInstalling() {
++				term.writeLine("The server is currently installing.")
++			} else if srv.Environment.State() == environment.ProcessOfflineState {
++				term.writeLine("The server is currently offline.")
++			} else if err := srv.Environment.SendCommand(line); err != nil {
++				term.writeLine("Unable to send command: " + err.Error())
++			} else {
++				srv.SaveActivity(activity, server.ActivityConsoleCommand, models.ActivityMeta{"command": line})
++			}
++			term.prompt()
++		case 0x03:
++			term.cancelLine()
++			term.prompt()
++		case 0x04:
++			close(done)
++			term.writeLine("Disconnected from Better Console.")
++			return
++		case 0x7f, '\b':
++			term.backspace()
++		default:
++			if b < 32 || (b >= 0x80 && b <= 0x9f) {
++				continue
++			}
++			if !term.appendByte(b) {
++				term.writeLine("Command line is too long.")
++				term.clearLine()
++				term.prompt()
++			}
++		}
++	}
++}
++
++func (c *SFTPServer) handleBetterConsoleShellCliCommand(term *betterConsoleSshTerminal, srv *server.Server, handler *Handler, activity server.RequestActivity, line string) {
++	parts := strings.Fields(line)
++	if len(parts) < 2 {
++		term.writeLine("Usage: " + betterConsoleShellCliName + " <help|power|stats>")
++		return
++	}
++
++	switch parts[1] {
++	case "help":
++		term.writeLine("Available commands:")
++		term.writeLine("  " + betterConsoleShellCliName + " help                    Show this help message")
++		term.writeLine("  " + betterConsoleShellCliName + " power start             Start the server")
++		term.writeLine("  " + betterConsoleShellCliName + " power restart           Restart the server")
++		term.writeLine("  " + betterConsoleShellCliName + " power stop              Stop the server")
++		term.writeLine("  " + betterConsoleShellCliName + " power kill              Kill the server")
++		term.writeLine("  " + betterConsoleShellCliName + " stats                   Show server statistics")
++	case "power":
++		c.handleBetterConsoleShellPower(term, srv, handler, activity, parts)
++	case "stats":
++		stats := srv.Proc()
++		term.writeLine("Server Statistics:")
++		term.writeLine(fmt.Sprintf("  Status: %s", srv.Environment.State()))
++		term.writeLine(fmt.Sprintf("  CPU Usage: %.2f%%", stats.CpuAbsolute))
++		term.writeLine(fmt.Sprintf("  Memory Usage: %d bytes", stats.Memory))
++		term.writeLine(fmt.Sprintf("  Disk Usage: %d bytes", stats.Disk))
++		term.writeLine("  Network Usage:")
++		term.writeLine(fmt.Sprintf("    Received: %d bytes", stats.Network.RxBytes))
++		term.writeLine(fmt.Sprintf("    Sent: %d bytes", stats.Network.TxBytes))
++	default:
++		term.writeLine("Unknown daemon command. Type \"" + betterConsoleShellCliName + " help\".")
++	}
++}
++
++func (c *SFTPServer) handleBetterConsoleShellPower(term *betterConsoleSshTerminal, srv *server.Server, handler *Handler, activity server.RequestActivity, parts []string) {
++	if len(parts) < 3 {
++		term.writeLine("Usage: " + betterConsoleShellCliName + " power <start|restart|stop|kill>")
++		return
++	}
++
++	var action server.PowerAction
++	var permission string
++	switch parts[2] {
++	case "start":
++		action = server.PowerActionStart
++		permission = "control.start"
++	case "restart":
++		action = server.PowerActionRestart
++		permission = "control.restart"
++	case "stop":
++		action = server.PowerActionStop
++		permission = "control.stop"
++	case "kill":
++		action = server.PowerActionTerminate
++		permission = "control.stop"
++	default:
++		term.writeLine("Usage: " + betterConsoleShellCliName + " power <start|restart|stop|kill>")
++		return
++	}
++
++	if !handler.can(permission) {
++		term.writeLine("Permission denied: " + permission)
++		return
++	}
++
++	if err := srv.HandlePowerAction(action); err != nil {
++		term.writeLine("Unable to perform power action: " + err.Error())
++		return
++	}
++
++	srv.SaveActivity(activity, models.Event(server.ActivityPowerPrefix+action), nil)
++	term.writeLine("Power action sent: " + string(action))
++}
++
++type betterConsoleSshTerminal struct {
++	channel ssh.Channel
++	mu      sync.Mutex
++	buffer  strings.Builder
++}
++
++func (t *betterConsoleSshTerminal) prompt() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	_, _ = io.WriteString(t.channel, "> ")
++}
++
++func (t *betterConsoleSshTerminal) writeLine(line string) {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	line = betterConsoleSanitizeTerminalLine(line)
++	_, _ = fmt.Fprintf(t.channel, "\r\n%s\r\n", line)
++}
++
++func (t *betterConsoleSshTerminal) writeConsole(line string) {
++	line = strings.TrimRight(line, "\r\n")
++	line = betterConsoleSanitizeTerminalLine(line)
++	if line == "" {
++		return
++	}
++
++	t.mu.Lock()
++	defer t.mu.Unlock()
++
++	current := t.buffer.String()
++	if current != "" {
++		_, _ = io.WriteString(t.channel, "\r\n")
++	}
++	_, _ = fmt.Fprintf(t.channel, "%s\r\n", line)
++	_, _ = io.WriteString(t.channel, "> ")
++	if current != "" {
++		_, _ = io.WriteString(t.channel, current)
++	}
++}
++
++func (t *betterConsoleSshTerminal) writeHistory(line string) {
++	line = strings.TrimRight(line, "\r\n")
++	line = betterConsoleSanitizeTerminalLine(line)
++	if line == "" {
++		return
++	}
++
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	_, _ = fmt.Fprintf(t.channel, "%s\r\n", line)
++}
++
++func (t *betterConsoleSshTerminal) appendByte(b byte) bool {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if t.buffer.Len() >= betterConsoleShellMaxLineBytes {
++		return false
++	}
++	t.buffer.WriteByte(b)
++	_, _ = t.channel.Write([]byte{b})
++	return true
++}
++
++func (t *betterConsoleSshTerminal) backspace() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if t.buffer.Len() == 0 {
++		return
++	}
++	line := t.buffer.String()
++	t.buffer.Reset()
++	t.buffer.WriteString(line[:len(line)-1])
++	_, _ = io.WriteString(t.channel, "\b \b")
++}
++
++func (t *betterConsoleSshTerminal) commitLine() string {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	line := t.buffer.String()
++	t.buffer.Reset()
++	_, _ = io.WriteString(t.channel, "\r\n")
++	return line
++}
++
++func (t *betterConsoleSshTerminal) cancelLine() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	t.buffer.Reset()
++	_, _ = io.WriteString(t.channel, "^C\r\n")
++}
++
++func (t *betterConsoleSshTerminal) clearLine() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	t.buffer.Reset()
++}
++
++func betterConsoleEventString(data interface{}) string {
++	switch v := data.(type) {
++	case string:
++		return v
++	case []byte:
++		return string(v)
++	default:
++		b, err := json.Marshal(v)
++		if err != nil {
++			return fmt.Sprint(v)
++		}
++		return string(b)
++	}
++}
++
++func betterConsoleSanitizeTerminalLine(line string) string {
++	line = betterConsoleShellAnsiRegex.ReplaceAllString(line, "")
++
++	return strings.Map(func(r rune) rune {
++		if r == '\t' || r >= 32 {
++			return r
++		}
++
++		return -1
++	}, line)
++}
+diff --git a/sftp/server.go b/sftp/server.go
+index e2263a4af3009000df4d087743564fee49e671d8..0965725020d1d1d06e79627e69aa3a409eddf88e 100644
+--- a/sftp/server.go
++++ b/sftp/server.go
+@@ -12,6 +12,7 @@ import (
+ 	"regexp"
+ 	"strconv"
+ 	"strings"
++	"time"
+ 
+ 	"emperror.dev/errors"
+ 	"github.com/apex/log"
+@@ -29,6 +30,8 @@ import (
+ // server and sending a flood of usernames.
+ var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
+ 
++const sshHandshakeTimeout = 10 * time.Second
++
+ //goland:noinspection GoNameStartsWithPackageName
+ type SFTPServer struct {
+ 	manager  *server.Manager
+@@ -37,6 +40,14 @@ type SFTPServer struct {
+ 	Listen   string
+ }
+ 
++type sshPtyRequest struct {
++	Term   string
++	Cols   uint32
++	Rows   uint32
++	Width  uint32
++	Height uint32
++}
++
+ func New(m *server.Manager) *SFTPServer {
+ 	cfg := config.Get().System
+ 	return &SFTPServer{
+@@ -118,10 +129,12 @@ func (c *SFTPServer) Run() error {
+ // serve the request or not.
+ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
+ 	// Before beginning a handshake must be performed on the incoming net.Conn
++	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
+ 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
+ 	if err != nil {
+ 		return errors.WithStack(err)
+ 	}
++	_ = conn.SetDeadline(time.Time{})
+ 	defer sconn.Close()
+ 	go ssh.DiscardRequests(reqs)
+ 
+@@ -138,26 +151,64 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
+ 			continue
+ 		}
+ 
+-		go func(in <-chan *ssh.Request) {
+-			for req := range in {
+-				// Channels have a type that is dependent on the protocol. For SFTP
+-				// this is "subsystem" with a payload that (should) be "sftp". Discard
+-				// anything else we receive ("pty", "shell", etc)
+-				ok := req.Type == "subsystem" && len(req.Payload) >= 4 && string(req.Payload[4:]) == "sftp"
+-				_ = req.Reply(ok, nil)
+-			}
+-		}(requests)
+-
+ 		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
+-			if err := c.Handle(sconn, srv, channel); err != nil {
+-				return err
+-			}
++			go c.handleSession(sconn, srv, channel, requests)
++		} else {
++			_ = channel.Close()
+ 		}
+ 	}
+ 
+ 	return nil
+ }
+ 
++func (c *SFTPServer) handleSession(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request) {
++	var requestedPty sshPtyRequest
++
++	for req := range requests {
++		switch req.Type {
++		case "subsystem":
++			ok := len(req.Payload) >= 4 && string(req.Payload[4:]) == "sftp"
++			_ = req.Reply(ok, nil)
++			if ok {
++				if err := c.Handle(conn, srv, channel); err != nil {
++					srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle session")
++				}
++				return
++			}
++		case "pty-req":
++			ok := config.Get().System.Sftp.Shell.Enabled
++			if ok {
++				handler, err := NewHandler(conn, srv)
++				ok = err == nil && handler.can("control.console")
++				if ok {
++					_ = ssh.Unmarshal(req.Payload, &requestedPty)
++				}
++			}
++			_ = req.Reply(ok, nil)
++		case "shell":
++			ok := config.Get().System.Sftp.Shell.Enabled
++			if ok {
++				handler, err := NewHandler(conn, srv)
++				if err != nil || !handler.can("control.console") {
++					_ = req.Reply(false, nil)
++					_ = channel.Close()
++					return
++				}
++				_ = req.Reply(true, nil)
++				if err := c.HandleShell(conn, srv, channel, requests, requestedPty, handler); err != nil {
++					srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle shell session")
++				}
++				return
++			}
++			_ = req.Reply(false, nil)
++		default:
++			_ = req.Reply(false, nil)
++		}
++	}
++
++	_ = channel.Close()
++}
++
+ // Handle spins up a SFTP server instance for the authenticated user's server allowing
+ // them access to the underlying filesystem.
+ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel) error {
+@@ -184,6 +235,28 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
+ 	return nil
+ }
+ 
++// HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
++func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
++	defer channel.Close()
++
++	if !handler.can("control.console") {
++		_, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
++		return nil
++	}
++
++	go func() {
++		for req := range requests {
++			if req.WantReply {
++				_ = req.Reply(false, nil)
++			}
++		}
++	}()
++
++	c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
++
++	return nil
++}
++
+ // Generates a new ED25519 private key that is used for host authentication when
+ // a user connects to the SFTP server.
+ func (c *SFTPServer) generateED25519PrivateKey() error {
+@@ -191,7 +264,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
+ 	if err != nil {
+ 		return errors.Wrap(err, "sftp: failed to generate ED25519 private key")
+ 	}
+-	if err := os.MkdirAll(path.Dir(c.PrivateKeyPath()), 0o755); err != nil {
++	if err := os.MkdirAll(path.Dir(c.PrivateKeyPath()), 0o700); err != nil {
+ 		return errors.Wrap(err, "sftp: could not create internal sftp data directory")
+ 	}
+ 	o, err := os.OpenFile(c.PrivateKeyPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+diff --git a/system/const.go b/system/const.go
+index aebbc68b3a80ed725085d2e5c693722cb332fb3b..6e7730102d226cf44f4ba77386bd1d24cd72259f 100644
+--- a/system/const.go
++++ b/system/const.go
+@@ -1,3 +1,3 @@
+ package system
+ 
+-var Version = "develop"
++var Version = "1.0.0-BetterWings"
