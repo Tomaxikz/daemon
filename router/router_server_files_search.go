@@ -93,14 +93,14 @@ var (
 	}
 
 	resultPool = sync.Pool{
-		New: func() interface{} {
-			s := make([]FileSearchResult, 0, 64)
-			return &s
+		New: func() any {
+			batch := make([]FileSearchResult, 0, batchSize)
+			return &batch
 		},
 	}
 
 	builderPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &strings.Builder{}
 		},
 	}
@@ -112,6 +112,7 @@ const (
 	maxPathLength   = 4096
 	maxFilenameLen  = 255
 	jobChannelSize  = 2048
+	resultChanSize  = 64
 	batchSize       = 16
 	maxContentBytes = 1024 * 1024
 )
@@ -128,7 +129,7 @@ type searchContext struct {
 	maxDepth      int
 	contentSearch bool
 	results       []FileSearchResult
-	resultsMu     sync.Mutex
+	resultCount   atomic.Int64
 	truncated     atomic.Bool
 	totalScanned  atomic.Int64
 	done          chan struct{}
@@ -254,42 +255,82 @@ func (sc *searchContext) hasEnoughResults() bool {
 	if sc.maxResults <= 0 {
 		return false
 	}
-	sc.resultsMu.Lock()
-	count := len(sc.results)
-	sc.resultsMu.Unlock()
-	return count >= sc.maxResults
+	return int(sc.resultCount.Load()) >= sc.maxResults
 }
 
-func (sc *searchContext) addResults(batch []FileSearchResult) bool {
+func getSearchResultBatch() []FileSearchResult {
+	batch := resultPool.Get().(*[]FileSearchResult)
+	return (*batch)[:0]
+}
+
+func putSearchResultBatch(batch []FileSearchResult) {
+	if batch == nil {
+		return
+	}
+	if cap(batch) > batchSize*4 {
+		return
+	}
+	batch = batch[:0]
+	resultPool.Put(&batch)
+}
+
+func buildSearchPath(dir string, name string) string {
+	builder := builderPool.Get().(*strings.Builder)
+	builder.Reset()
+	defer builderPool.Put(builder)
+
+	if dir == "" || dir == "/" {
+		builder.Grow(len(name) + 1)
+		builder.WriteByte('/')
+		builder.WriteString(name)
+		return builder.String()
+	}
+
+	builder.Grow(len(dir) + len(name) + 1)
+	builder.WriteString(dir)
+	builder.WriteByte('/')
+	builder.WriteString(name)
+	return builder.String()
+}
+
+func (sc *searchContext) submitResults(batch []FileSearchResult) bool {
 	if len(batch) == 0 {
 		return false
 	}
+	sc.resultCount.Add(int64(len(batch)))
 
-	if sc.maxResults <= 0 {
-		sc.resultsMu.Lock()
-		sc.results = append(sc.results, batch...)
-		sc.resultsMu.Unlock()
-		return false
-	}
-
-	sc.resultsMu.Lock()
-	remaining := sc.maxResults - len(sc.results)
-	if remaining <= 0 {
-		sc.resultsMu.Unlock()
-		sc.truncated.Store(true)
+	select {
+	case sc.resultChan <- batch:
+		return sc.hasEnoughResults()
+	case <-sc.done:
+		putSearchResultBatch(batch)
 		return true
 	}
+}
 
-	if len(batch) > remaining {
-		batch = batch[:remaining]
-		sc.truncated.Store(true)
+func (sc *searchContext) collectResults() {
+	for batch := range sc.resultChan {
+		if sc.maxResults <= 0 {
+			sc.results = append(sc.results, batch...)
+			putSearchResultBatch(batch)
+			continue
+		}
+
+		remaining := sc.maxResults - len(sc.results)
+		if remaining <= 0 {
+			sc.truncated.Store(true)
+			putSearchResultBatch(batch)
+			continue
+		}
+
+		if len(batch) > remaining {
+			sc.results = append(sc.results, batch[:remaining]...)
+			sc.truncated.Store(true)
+		} else {
+			sc.results = append(sc.results, batch...)
+		}
+		putSearchResultBatch(batch)
 	}
-
-	sc.results = append(sc.results, batch...)
-	full := len(sc.results) >= sc.maxResults
-	sc.resultsMu.Unlock()
-
-	return full
 }
 
 func (sc *searchContext) enqueueJob(job walkJob) {
@@ -320,27 +361,6 @@ func (sc *searchContext) finishJob() {
 	}
 }
 
-func buildRelativePath(rootLen int, fullPath string) string {
-	if len(fullPath) <= rootLen {
-		return "/"
-	}
-
-	rel := fullPath[rootLen:]
-	if len(rel) == 0 {
-		return "/"
-	}
-
-	if rel[0] != '/' && rel[0] != '\\' {
-		rel = "/" + rel
-	}
-
-	if strings.ContainsRune(rel, '\\') {
-		rel = strings.ReplaceAll(rel, "\\", "/")
-	}
-
-	return rel
-}
-
 func getDirectory(path string) string {
 	lastSlash := strings.LastIndexByte(path, '/')
 	if lastSlash <= 0 {
@@ -352,19 +372,26 @@ func getDirectory(path string) string {
 func (sc *searchContext) worker(wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	localBatch := make([]FileSearchResult, 0, batchSize)
+	localBatch := getSearchResultBatch()
+	defer func() {
+		if localBatch != nil && len(localBatch) == 0 {
+			putSearchResultBatch(localBatch)
+		}
+	}()
 
 	for {
 		select {
 		case <-sc.done:
 			if len(localBatch) > 0 {
-				sc.addResults(localBatch)
+				sc.submitResults(localBatch)
+				localBatch = nil
 			}
 			return
 		case job, ok := <-sc.jobChan:
 			if !ok {
 				if len(localBatch) > 0 {
-					sc.addResults(localBatch)
+					sc.submitResults(localBatch)
+					localBatch = nil
 				}
 				return
 			}
@@ -407,10 +434,7 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 						continue
 					}
 
-					fullPath := path.Join(job.path, name)
-					if !strings.HasPrefix(fullPath, "/") {
-						fullPath = "/" + fullPath
-					}
+					fullPath := buildSearchPath(job.path, name)
 
 					if len(fullPath) > maxPathLength {
 						continue
@@ -434,12 +458,12 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 					localBatch = append(localBatch, result)
 
 					if len(localBatch) >= batchSize {
-						if sc.addResults(localBatch) {
-							localBatch = localBatch[:0]
+						if sc.submitResults(localBatch) {
+							localBatch = getSearchResultBatch()
 							sc.stop()
 							break
 						}
-						localBatch = localBatch[:0]
+						localBatch = getSearchResultBatch()
 					}
 				}
 
@@ -461,10 +485,10 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 			}
 
 			if len(localBatch) > 0 {
-				if sc.addResults(localBatch) {
+				if sc.submitResults(localBatch) {
 					sc.stop()
 				}
-				localBatch = localBatch[:0]
+				localBatch = getSearchResultBatch()
 			}
 
 			sc.finishJob()
@@ -533,6 +557,7 @@ func getServerFilesSearch(c *gin.Context) {
 		results:       make([]FileSearchResult, 0, resultsCap),
 		done:          make(chan struct{}),
 		jobChan:       make(chan walkJob, jobChannelSize),
+		resultChan:    make(chan []FileSearchResult, resultChanSize),
 	}
 
 	go func() {
@@ -544,6 +569,13 @@ func getServerFilesSearch(c *gin.Context) {
 
 	workerCount := getWorkerCount()
 	var wg sync.WaitGroup
+	var collector sync.WaitGroup
+
+	collector.Add(1)
+	go func() {
+		defer collector.Done()
+		sc.collectResults()
+	}()
 
 	for i := 0; i < workerCount; i++ {
 		wg.Add(1)
@@ -558,6 +590,8 @@ func getServerFilesSearch(c *gin.Context) {
 	}
 
 	wg.Wait()
+	close(sc.resultChan)
+	collector.Wait()
 
 	searchTimeMs := time.Since(startTime).Milliseconds()
 

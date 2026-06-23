@@ -540,10 +540,6 @@ func (fs *UnixFS) Lstatat(dirfd int, name string) (FileInfo, error) {
 	return fs._fstatat("lstatat", dirfd, name, AT_SYMLINK_NOFOLLOW)
 }
 
-func (fs *UnixFS) fstat(name string, flags int) (FileInfo, error) {
-	return fs._fstat("fstat", name, flags)
-}
-
 func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
 	dirfd, name, closeFd, err := fs.safePath(name)
 	defer closeFd()
@@ -551,10 +547,6 @@ func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
 		return nil, err
 	}
 	return fs._fstatat(op, dirfd, name, flags)
-}
-
-func (fs *UnixFS) fstatat(dirfd int, name string, flags int) (FileInfo, error) {
-	return fs._fstatat("fstatat", dirfd, name, flags)
 }
 
 func (fs *UnixFS) _fstatat(op string, dirfd int, name string, flags int) (FileInfo, error) {

@@ -1,245 +1,3 @@
-diff --git a/.github/workflows/development-release.yaml b/.github/workflows/development-release.yaml
-new file mode 100644
-index 0000000000000000000000000000000000000000..1b7e0b8fd6591d47d7be517e086d20188b7a2db7
---- /dev/null
-+++ b/.github/workflows/development-release.yaml
-@@ -0,0 +1,80 @@
-+name: Development Release
-+
-+on:
-+  push:
-+    branches:
-+      - develop
-+  workflow_dispatch:
-+
-+concurrency:
-+  group: development-release-${{ github.ref }}
-+  cancel-in-progress: true
-+
-+jobs:
-+  release:
-+    name: Build and Publish Development Release
-+    runs-on: ubuntu-24.04
-+    permissions:
-+      contents: write
-+    steps:
-+      - name: Code checkout
-+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-+
-+      - name: Setup Go
-+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-+        with:
-+          go-version: 1.25.5
-+
-+      - name: Build binaries
-+        env:
-+          CGO_ENABLED: 0
-+          SRC_PATH: github.com/pterodactyl/wings
-+        run: |
-+          set -euo pipefail
-+
-+          mkdir -p dist
-+          version="dev-${GITHUB_SHA:0:7}"
-+
-+          for arch in amd64 arm64; do
-+            GOOS=linux GOARCH="${arch}" go build -v -trimpath -ldflags="-s -w -X ${SRC_PATH}/system.Version=${version}" -o "dist/wings_linux_${arch}" "${SRC_PATH}"
-+            chmod 755 "dist/wings_linux_${arch}"
-+
-+            GOOS=linux GOARCH="${arch}" go build -v -trimpath -ldflags="-X ${SRC_PATH}/system.Version=${version}" -o "dist/wings_linux_${arch}_debug" "${SRC_PATH}"
-+            chmod 755 "dist/wings_linux_${arch}_debug"
-+          done
-+
-+          sha256sum dist/* > dist/SHA256SUMS
-+
-+      - name: Publish rolling prerelease
-+        env:
-+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-+          TAG_NAME: dev-latest
-+          RELEASE_TITLE: Wings development build
-+        run: |
-+          set -euo pipefail
-+
-+          git config user.name "github-actions[bot]"
-+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-+          git tag -f "${TAG_NAME}" "${GITHUB_SHA}"
-+          git push origin "refs/tags/${TAG_NAME}" --force
-+
-+          cat > RELEASE_NOTES.md <<EOF
-+          Automated development build from \`${GITHUB_REF_NAME}\`.
-+
-+          Commit: ${GITHUB_SHA}
-+          Workflow: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
-+          EOF
-+
-+          if gh release view "${TAG_NAME}" >/dev/null 2>&1; then
-+            gh release edit "${TAG_NAME}" \
-+              --title "${RELEASE_TITLE}" \
-+              --notes-file RELEASE_NOTES.md \
-+              --prerelease
-+          else
-+            gh release create "${TAG_NAME}" \
-+              --title "${RELEASE_TITLE}" \
-+              --notes-file RELEASE_NOTES.md \
-+              --prerelease
-+          fi
-+
-+          gh release upload "${TAG_NAME}" dist/* --clobber
-diff --git a/.github/workflows/docker.yaml b/.github/workflows/docker.yaml
-deleted file mode 100644
-index 476cdfb35553eabaa8d54f0218927da3e54304e3..0000000000000000000000000000000000000000
---- a/.github/workflows/docker.yaml
-+++ /dev/null
-@@ -1,81 +0,0 @@
--name: Docker
--
--on:
--  push:
--    branches:
--      - develop
--  release:
--    types:
--      - published
--
--jobs:
--  build-and-push:
--    name: Build and Push
--    runs-on: ubuntu-24.04
--    # Always run against a tag, even if the commit into the tag has [docker skip] within the commit message.
--    if: "!contains(github.ref, 'develop') || (!contains(github.event.head_commit.message, 'skip docker') && !contains(github.event.head_commit.message, 'docker skip'))"
--    permissions:
--      contents: read
--      packages: write
--    steps:
--      - name: Code checkout
--        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
--
--      - name: Docker metadata
--        id: docker_meta
--        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
--        with:
--          images: ghcr.io/${{ github.repository }}
--          flavor: |
--            latest=false
--          tags: |
--            type=raw,value=latest,enable=${{ github.event_name == 'release' && github.event.action == 'published' && github.event.release.prerelease == false }}
--            type=ref,event=tag
--            type=ref,event=branch
--
--      - name: Setup QEMU
--        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
--
--      - name: Setup Docker buildx
--        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
--
--      - name: Login to GitHub Container Registry
--        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
--        with:
--          registry: ghcr.io
--          username: ${{ github.actor }}
--          password: ${{ secrets.GITHUB_TOKEN }}
--
--      - name: Get Build Information
--        id: build_info
--        run: |
--          echo "version_tag=${GITHUB_REF/refs\/tags\/v/}" >> "$GITHUB_OUTPUT"
--          echo "short_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
--
--      - name: Build and Push (tag)
--        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
--        if: "github.event_name == 'release' && github.event.action == 'published'"
--        with:
--          context: .
--          file: ./Dockerfile
--          push: true
--          platforms: linux/amd64,linux/arm64
--          build-args: |
--            VERSION=${{ steps.build_info.outputs.version_tag }}
--          labels: ${{ steps.docker_meta.outputs.labels }}
--          tags: ${{ steps.docker_meta.outputs.tags }}
--
--      - name: Build and Push (develop)
--        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
--        if: "github.event_name == 'push' && contains(github.ref, 'develop')"
--        with:
--          context: .
--          file: ./Dockerfile
--          push: ${{ github.event_name != 'pull_request' }}
--          platforms: linux/amd64,linux/arm64
--          build-args: |
--            VERSION=dev-${{ steps.build_info.outputs.short_sha }}
--          labels: ${{ steps.docker_meta.outputs.labels }}
--          tags: ${{ steps.docker_meta.outputs.tags }}
--          cache-from: type=gha
--          cache-to: type=gha,mode=max
-diff --git a/.github/workflows/push.yaml b/.github/workflows/push.yaml
-index 89791d3c37badbb8c9560e9ae40345a3e33029dc..1b4db729013a7954661d3c0c0f69c2e144ed565e 100644
---- a/.github/workflows/push.yaml
-+++ b/.github/workflows/push.yaml
-@@ -16,7 +16,7 @@ jobs:
-       fail-fast: false
-       matrix:
-         os: [ubuntu-24.04]
--        go: ["1.24.11", "1.25.5"]
-+        go: ["1.25.5"]
-         goos: [linux]
-         goarch: [amd64, arm64]
-     permissions:
-@@ -63,14 +63,14 @@ jobs:
- 
-       - name: Upload Release Artifact
-         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
--        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.24.11' }}
-+        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.25.5' }}
-         with:
-           name: wings_linux_${{ matrix.goarch }}
-           path: dist/wings
- 
-       - name: Upload Debug Artifact
-         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
--        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.24.11' }}
-+        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.25.5' }}
-         with:
-           name: wings_linux_${{ matrix.goarch }}_debug
-           path: dist/wings_debug
-diff --git a/.github/workflows/release.yaml b/.github/workflows/release.yaml
-index c564c3dc60cefbac7688856fbf2092e09b0c9595..fb027ba39e1e8721fa26bd99fc29ed8bb166e553 100644
---- a/.github/workflows/release.yaml
-+++ b/.github/workflows/release.yaml
-@@ -16,7 +16,7 @@ jobs:
-       - name: Setup Go
-         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-         with:
--          go-version: 1.24.11
-+          go-version: 1.25.5
- 
-       - name: Build release binaries
-         env:
-diff --git a/README.md b/README.md
-index d4f8497410ce7abacdb3c36f3d5cd9a7d9f94afe..2120c6ca54f518a945ba5d4c1e70692546c846ee 100644
---- a/README.md
-+++ b/README.md
-@@ -13,6 +13,21 @@ instances, fetch server logs, generate backups, and control all aspects of the s
- In addition, Wings ships with a built-in SFTP server allowing your system to remain free of Pterodactyl specific
- dependencies, and allowing users to authenticate with the same credentials they would normally use to access the Panel.
- 
-+## Fork Notes
-+
-+This repository is a fork of [pterodactyl/wings](https://github.com/pterodactyl/wings) with a small set of daemon-side
-+fixes and hardening changes. For the Rust rewrite, see [Wings-rs](https://github.com/calagopus/wings).
-+
-+Notable changes in this fork include:
-+
-+* File download requests return a proper not-found response when the target file does not exist, instead of bubbling up
-+  as an internal server error.
-+* File downloads use stricter path and file-type validation before serving content.
-+* File downloads and stream responses use `http.ServeContent`, enabling HTTP range and conditional request handling.
-+* File downloads are capped to the file size observed when the request starts, matching the fixed-byte behavior used by
-+  Wings-rs-style downloads so later file growth does not extend the response.
-+* Download responses include safer headers such as `X-Content-Type-Options: nosniff`.
-+
- ## Sponsors
- 
- I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.
 diff --git a/cmd/configure.go b/cmd/configure.go
 index 03553b8d6cdbb0ffb142962112fd3ae73de3994a..e51c8292f774afe8209e8650ae995b355c87fe6c 100644
 --- a/cmd/configure.go
@@ -820,7 +578,7 @@ index 5d5c8720307f3d0c717d159eb9be6f851ac25925..b33ff4db83f45aec221044297d95d407
 +	TxDropped uint64 `json:"tx_dropped"`
  }
 diff --git a/go.mod b/go.mod
-index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..99b1cce9b0385623fd608c950d3052809aed56d1 100644
+index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..701a5a9c7cf704d21cbb310efade53ea88468334 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -1,8 +1,6 @@
@@ -842,15 +600,7 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..99b1cce9b0385623fd608c950d305280
  	github.com/cenkalti/backoff/v4 v4.3.0
  	github.com/creasty/defaults v1.8.0
  	github.com/docker/docker v28.3.3+incompatible
-@@ -24,6 +22,7 @@ require (
- 	github.com/gammazero/workerpool v1.1.3
- 	github.com/gbrlsnchs/jwt/v3 v3.0.1
- 	github.com/gin-gonic/gin v1.10.1
-+	github.com/glebarez/go-sqlite v1.22.0
- 	github.com/glebarez/sqlite v1.11.0
- 	github.com/go-co-op/gocron v1.37.0
- 	github.com/google/uuid v1.6.0
-@@ -40,11 +39,13 @@ require (
+@@ -40,11 +38,13 @@ require (
  	github.com/patrickmn/go-cache v2.1.0+incompatible
  	github.com/pkg/sftp v1.13.10
  	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
@@ -867,14 +617,6 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..99b1cce9b0385623fd608c950d305280
  	gopkg.in/ini.v1 v1.67.0
  	gopkg.in/yaml.v2 v2.4.0
  	gopkg.in/yaml.v3 v3.0.1
-@@ -73,7 +74,6 @@ require (
- 	github.com/felixge/httpsnoop v1.0.4 // indirect
- 	github.com/gammazero/deque v1.0.0 // indirect
- 	github.com/gin-contrib/sse v1.0.0 // indirect
--	github.com/glebarez/go-sqlite v1.22.0 // indirect
- 	github.com/go-logr/logr v1.4.2 // indirect
- 	github.com/go-logr/stdr v1.2.2 // indirect
- 	github.com/go-playground/locales v0.14.1 // indirect
 @@ -129,10 +129,9 @@ require (
  	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
  	golang.org/x/arch v0.15.0 // indirect
@@ -998,10 +740,32 @@ index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..e778c3b04c057454c47015e4e44f0979
  golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
  golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 diff --git a/internal/ufs/fs_unix.go b/internal/ufs/fs_unix.go
-index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a8ea1d135 100644
+index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbcc340e761 100644
 --- a/internal/ufs/fs_unix.go
 +++ b/internal/ufs/fs_unix.go
-@@ -656,6 +656,9 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
+@@ -540,10 +540,6 @@ func (fs *UnixFS) Lstatat(dirfd int, name string) (FileInfo, error) {
+ 	return fs._fstatat("lstatat", dirfd, name, AT_SYMLINK_NOFOLLOW)
+ }
+ 
+-func (fs *UnixFS) fstat(name string, flags int) (FileInfo, error) {
+-	return fs._fstat("fstat", name, flags)
+-}
+-
+ func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
+ 	dirfd, name, closeFd, err := fs.safePath(name)
+ 	defer closeFd()
+@@ -553,10 +549,6 @@ func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
+ 	return fs._fstatat(op, dirfd, name, flags)
+ }
+ 
+-func (fs *UnixFS) fstatat(dirfd int, name string, flags int) (FileInfo, error) {
+-	return fs._fstatat("fstatat", dirfd, name, flags)
+-}
+-
+ func (fs *UnixFS) _fstatat(op string, dirfd int, name string, flags int) (FileInfo, error) {
+ 	var s fileStat
+ 	if err := ignoringEINTR(func() error {
+@@ -656,6 +648,9 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
  // was configured to enable openat2 support, unix.Openat2 will be used instead
  // of unix.Openat due to having better security properties for our use-case.
  func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, error) {
@@ -1011,7 +775,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a
  	if flag&O_NOFOLLOW == 0 {
  		flag |= O_NOFOLLOW
  	}
-@@ -664,7 +667,7 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -664,7 +659,7 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  	for {
  		var err error
  		if fs.useOpenat2 {
@@ -1020,7 +784,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a
  		} else {
  			fd, err = fs._openat(dirfd, name, flag, uint32(syscallMode(mode)))
  		}
-@@ -690,7 +693,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -690,7 +685,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  	finalPath, err := filepath.EvalSymlinks(filepath.Join("/proc/self/fd/", strconv.Itoa(fd)))
  	if err != nil {
  		if !errors.Is(err, ErrNotExist) {
@@ -1030,7 +794,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a
  		}
  
  		// The target of one of the symlinks (EvalSymlinks is recursive)
-@@ -698,7 +702,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -698,7 +694,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  		// that for further validation instead.
  		var pErr *PathError
  		if !errors.As(err, &pErr) {
@@ -1040,7 +804,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a
  		}
  
  		// Update the final path to whatever directory or path didn't exist while
-@@ -714,7 +719,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -714,7 +711,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  		if fs.useOpenat2 {
  			op = "openat2"
  		}
@@ -1050,7 +814,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a
  			Op:   op,
  			Path: name,
  			Err:  ErrBadPathResolution,
-@@ -722,6 +728,10 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -722,6 +720,10 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  	}
  
  	// Return the file descriptor and any potential error.
@@ -1061,6 +825,22 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..c6cd5875a4b8b10e380d1171baefce7a
  	return fd, err
  }
  
+diff --git a/internal/ufs/walk_unix.go b/internal/ufs/walk_unix.go
+index 065afc22956b1b272cc5577da627787a16722891..c8167524d3080d4abb410cac4ad762049d1c8c77 100644
+--- a/internal/ufs/walk_unix.go
++++ b/internal/ufs/walk_unix.go
+@@ -304,11 +304,3 @@ func (de dirent) Open() (File, error) {
+ 	return de.fs.OpenFileat(de.dirfd, de.name, O_RDONLY, 0)
+ 	// return de.fs.OpenFile(de.path, O_RDONLY, 0)
+ }
+-
+-// reset releases memory held by entry err and name, and resets mode type to 0.
+-func (de *dirent) reset() {
+-	de.name = ""
+-	de.path = ""
+-	de.modeType = 0
+-	de.dirfd = 0
+-}
 diff --git a/router/nsm_router.go b/router/nsm_router.go
 new file mode 100644
 index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e62970dfc
@@ -1091,7 +871,7 @@ index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac76065242c834f37f74a68fdba2211df96125..1b62f0667ea23cd14d6f9593c8cbc899ec31a07f 100644
+index bdac76065242c834f37f74a68fdba2211df96125..2a6203426d090d3dd8957fc39730c6f4619b96da 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -1131,6 +911,14 @@ index bdac76065242c834f37f74a68fdba2211df96125..1b62f0667ea23cd14d6f9593c8cbc899
  			files.GET("/list-directory", getServerListDirectory)
  			files.PUT("/rename", putServerRenameFiles)
  			files.POST("/copy", postServerCopyFile)
+@@ -101,6 +112,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 			files.POST("/compress", postServerCompressFiles)
+ 			files.POST("/decompress", postServerDecompressFiles)
+ 			files.POST("/chmod", postServerChmodFile)
++			files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)
+ 
+ 			files.GET("/pull", middleware.RemoteDownloadEnabled(), getServerPullingFiles)
+ 			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
 index 0000000000000000000000000000000000000000..69b4a96f0704f17087e66d7ad70aef2d9fedfeaf
@@ -1611,162 +1399,6 @@ index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26d
 +		if !bytes.Equal(got, want) {
 +			t.Fatalf("expected %q, got %q", want, got)
 +		}
-+	})
-+}
-diff --git a/router/router_importer.go b/router/router_importer.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..bca4c70f1b5f81eb1337ce85d1740a04c1f86807
---- /dev/null
-+++ b/router/router_importer.go
-@@ -0,0 +1,150 @@
-+package router
-+
-+import (
-+	"net/http"
-+
-+	"github.com/apex/log"
-+	"github.com/gin-gonic/gin"
-+	"github.com/pterodactyl/wings/router/middleware"
-+	"github.com/pterodactyl/wings/server"
-+)
-+
-+func postServerImport(c *gin.Context) {
-+	s := ExtractServer(c)
-+	logger := middleware.ExtractLogger(c)
-+
-+	var data struct {
-+		User               string `json:"user"`
-+		Password           string `json:"password"`
-+		SshKey             string `json:"ssh_key"`
-+		SshKeyPassphrase   string `json:"ssh_key_passphrase"`
-+		HostKeyFingerprint string `json:"host_key_fingerprint"`
-+		Hote               string `json:"hote"`
-+		Port               int    `json:"port"`
-+		Srclocation        string `json:"srclocation"`
-+		Dstlocation        string `json:"dstlocation"`
-+		Wipe               bool   `json:"wipe"`
-+		Type               string `json:"type"`
-+		AuthMethod         string `json:"auth_method"`
-+		ProgressMode       string `json:"progress_mode"`
-+	}
-+
-+	if err := c.BindJSON(&data); err != nil {
-+		middleware.CaptureAndAbort(c, err)
-+		return
-+	}
-+
-+	if s.ExecutingPowerAction() {
-+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-+			"error": "Cannot execute server import while another power action is running.",
-+		})
-+		return
-+	}
-+
-+	if s.IsImporting() {
-+		logger.Warn("server import rejected because another import is already running")
-+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-+			"error": "A server import is already running for this server.",
-+		})
-+		return
-+	}
-+
-+	logger.WithFields(log.Fields{
-+		"type":      data.Type,
-+		"host":      data.Hote,
-+		"port":      data.Port,
-+		"src":       data.Srclocation,
-+		"dst":       data.Dstlocation,
-+		"wipe":      data.Wipe,
-+		"progress":  data.ProgressMode,
-+		"selective": false,
-+	}).Info("accepted server import request")
-+
-+	go func(srv *server.Server) {
-+		if err := srv.ImportNew(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.ProgressMode, data.Wipe); err != nil {
-+			srv.Log().WithField("error", err).Error("failed to complete server import process")
-+		}
-+	}(s)
-+
-+	c.Status(http.StatusAccepted)
-+}
-+
-+func postServerImportSelected(c *gin.Context) {
-+	s := ExtractServer(c)
-+	logger := middleware.ExtractLogger(c)
-+
-+	var data struct {
-+		User               string   `json:"user"`
-+		Password           string   `json:"password"`
-+		SshKey             string   `json:"ssh_key"`
-+		SshKeyPassphrase   string   `json:"ssh_key_passphrase"`
-+		HostKeyFingerprint string   `json:"host_key_fingerprint"`
-+		Hote               string   `json:"hote"`
-+		Port               int      `json:"port"`
-+		Srclocation        string   `json:"srclocation"`
-+		Dstlocation        string   `json:"dstlocation"`
-+		Wipe               bool     `json:"wipe"`
-+		Type               string   `json:"type"`
-+		AuthMethod         string   `json:"auth_method"`
-+		ProgressMode       string   `json:"progress_mode"`
-+		SelectedItems      []string `json:"selected_items"`
-+	}
-+
-+	if err := c.BindJSON(&data); err != nil {
-+		middleware.CaptureAndAbort(c, err)
-+		return
-+	}
-+
-+	if s.ExecutingPowerAction() {
-+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-+			"error": "Cannot execute server import while another power action is running.",
-+		})
-+		return
-+	}
-+
-+	if s.IsImporting() {
-+		logger.Warn("selective server import rejected because another import is already running")
-+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-+			"error": "A server import is already running for this server.",
-+		})
-+		return
-+	}
-+
-+	logger.WithFields(log.Fields{
-+		"type":      data.Type,
-+		"host":      data.Hote,
-+		"port":      data.Port,
-+		"src":       data.Srclocation,
-+		"dst":       data.Dstlocation,
-+		"wipe":      data.Wipe,
-+		"progress":  data.ProgressMode,
-+		"selective": true,
-+		"items":     len(data.SelectedItems),
-+	}).Info("accepted selective server import request")
-+
-+	go func(srv *server.Server) {
-+		if err := srv.ImportNewSelected(data.User, data.Password, data.SshKey, data.SshKeyPassphrase, data.HostKeyFingerprint, data.Hote, data.Port, data.Srclocation, data.Dstlocation, data.Type, data.AuthMethod, data.ProgressMode, data.Wipe, data.SelectedItems); err != nil {
-+			srv.Log().WithField("error", err).Error("failed to complete selective server import process")
-+		}
-+	}(s)
-+
-+	c.Status(http.StatusAccepted)
-+}
-+
-+func getServerImporterProgress(c *gin.Context) {
-+	s := ExtractServer(c)
-+
-+	progress, ok := s.GetImportProgressSnapshot()
-+	if !ok {
-+		c.JSON(http.StatusOK, gin.H{
-+			"is_importing": false,
-+			"progress":     nil,
-+		})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{
-+		"is_importing": s.IsImporting(),
-+		"progress":     progress,
 +	})
 +}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
@@ -2273,10 +1905,10 @@ index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625
 +}
 diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..404ddc35019a4fb8d762bcce6ad446180034ccc8
+index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7df283e95b
 --- /dev/null
 +++ b/router/router_server_betterfiles_collaboration.go
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,39 @@
 +package router
 +
 +import (
@@ -2284,6 +1916,7 @@ index 0000000000000000000000000000000000000000..404ddc35019a4fb8d762bcce6ad44618
 +	"strings"
 +
 +	"github.com/gin-gonic/gin"
++
 +	"github.com/pterodactyl/wings/router/middleware"
 +	"github.com/pterodactyl/wings/router/websocket"
 +)
@@ -2314,1081 +1947,6 @@ index 0000000000000000000000000000000000000000..404ddc35019a4fb8d762bcce6ad44618
 +
 +	closed := websocket.CloseBetterFilesCollaborationSessions(s.ID(), mode, reason)
 +	c.JSON(http.StatusOK, gin.H{"closed": closed})
-+}
-diff --git a/router/router_server_database.go b/router/router_server_database.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..29c0ed29aaa50f8dbe9c96473f3950a8f6179bc7
---- /dev/null
-+++ b/router/router_server_database.go
-@@ -0,0 +1,1069 @@
-+package router
-+
-+import (
-+	"database/sql"
-+	"fmt"
-+	"io"
-+	"net/http"
-+	"net/url"
-+	"os"
-+	"path"
-+	"sort"
-+	"strconv"
-+	"strings"
-+
-+	"github.com/gin-gonic/gin"
-+	_ "github.com/glebarez/go-sqlite"
-+	"github.com/pterodactyl/wings/router/middleware"
-+	serverfs "github.com/pterodactyl/wings/server/filesystem"
-+)
-+
-+const (
-+	betterFilesDatabaseMaxFile         = 256 * 1024 * 1024
-+	betterFilesDatabaseDefaultPageSize = 25
-+	betterFilesDatabaseMaxPageSize     = 100
-+	betterFilesDatabaseMaxSearchCols   = 16
-+	betterFilesDatabaseMaxSearchLength = 200
-+)
-+
-+type betterFilesDatabaseTableSummary struct {
-+	Name string `json:"name"`
-+	Type string `json:"type"`
-+}
-+
-+type betterFilesDatabaseColumn struct {
-+	Name       string `json:"name"`
-+	Type       string `json:"type"`
-+	Nullable   bool   `json:"nullable"`
-+	Default    any    `json:"default"`
-+	PrimaryKey bool   `json:"primary_key"`
-+}
-+
-+type betterFilesDatabaseIndex struct {
-+	Name   string `json:"name"`
-+	Unique bool   `json:"unique"`
-+	Origin string `json:"origin"`
-+}
-+
-+type betterFilesDatabasePagination struct {
-+	Total       int `json:"total"`
-+	PerPage     int `json:"per_page"`
-+	CurrentPage int `json:"current_page"`
-+	TotalPages  int `json:"total_pages"`
-+}
-+
-+type betterFilesDatabaseInitializeRequest struct {
-+	File string `json:"file"`
-+}
-+
-+type betterFilesDatabaseCreateTableRequest struct {
-+	File    string                                 `json:"file"`
-+	Name    string                                 `json:"name"`
-+	Columns []betterFilesDatabaseCreateTableColumn `json:"columns"`
-+}
-+
-+type betterFilesDatabaseCreateTableColumn struct {
-+	Name string `json:"name"`
-+	Type string `json:"type"`
-+}
-+
-+type betterFilesDatabaseUpdateCellRequest struct {
-+	File   string `json:"file"`
-+	Table  string `json:"table"`
-+	RowID  int64  `json:"row_id"`
-+	Column string `json:"column"`
-+	Value  any    `json:"value"`
-+}
-+
-+type betterFilesDatabaseInsertRowRequest struct {
-+	File   string         `json:"file"`
-+	Table  string         `json:"table"`
-+	Values map[string]any `json:"values"`
-+}
-+
-+type betterFilesDatabaseDeleteRowRequest struct {
-+	File  string `json:"file"`
-+	Table string `json:"table"`
-+	RowID int64  `json:"row_id"`
-+}
-+
-+func getServerDatabaseInspect(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	db, displayPath, cleanup, ok := betterFilesOpenServerDatabase(c, s.Filesystem(), c.Query("file"))
-+	if !ok {
-+		return
-+	}
-+	defer cleanup()
-+
-+	tables, err := betterFilesDatabaseTables(db)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{
-+		"file":   displayPath,
-+		"tables": tables,
-+	})
-+}
-+
-+func getServerDatabaseTable(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	db, displayPath, cleanup, ok := betterFilesOpenServerDatabase(c, s.Filesystem(), c.Query("file"))
-+	if !ok {
-+		return
-+	}
-+	defer cleanup()
-+
-+	tableName := strings.TrimSpace(c.Query("table"))
-+	if tableName == "" || len(tableName) > 255 {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database table."})
-+		return
-+	}
-+
-+	page := betterFilesDatabaseBoundedInt(c.Query("page"), 1, 1, 100000)
-+	perPage := betterFilesDatabaseBoundedInt(c.Query("per_page"), betterFilesDatabaseDefaultPageSize, 1, betterFilesDatabaseMaxPageSize)
-+	search := strings.TrimSpace(c.Query("search"))
-+	if len(search) > betterFilesDatabaseMaxSearchLength {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Database search query is too long."})
-+		return
-+	}
-+
-+	tables, err := betterFilesDatabaseTables(db)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	tableSummary, ok := betterFilesDatabaseFindTable(tables, tableName)
-+	if !ok {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Database table was not found."})
-+		return
-+	}
-+	editable := tableSummary.Type == "table" && betterFilesDatabaseTableHasRowID(db, tableName)
-+
-+	columns, err := betterFilesDatabaseColumns(db, tableName)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	indexes, err := betterFilesDatabaseIndexes(db, tableName)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	where, args := betterFilesDatabaseSearchWhere(columns, search)
-+	total, err := betterFilesDatabaseCountRows(db, tableName, where, args)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	rows, err := betterFilesDatabaseRows(db, tableName, where, args, perPage, (page-1)*perPage, editable)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	totalPages := 1
-+	if total > 0 {
-+		totalPages = (total + perPage - 1) / perPage
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{
-+		"file":     displayPath,
-+		"table":    tableName,
-+		"columns":  columns,
-+		"indexes":  indexes,
-+		"editable": editable,
-+		"rows":     rows,
-+		"pagination": betterFilesDatabasePagination{
-+			Total:       total,
-+			PerPage:     perPage,
-+			CurrentPage: page,
-+			TotalPages:  totalPages,
-+		},
-+		"search": search,
-+	})
-+}
-+
-+func postServerDatabaseInitialize(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	var request betterFilesDatabaseInitializeRequest
-+	if err := c.ShouldBindJSON(&request); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database initialization request."})
-+		return
-+	}
-+
-+	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), request.File)
-+	if !ok {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database path."})
-+		return
-+	}
-+	defer file.Close()
-+	if !betterFilesIsDatabaseFile(displayPath) {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .db, .sqlite, and .sqlite3 files can be initialized."})
-+		return
-+	}
-+
-+	stat, err := file.Stat()
-+	if err != nil {
-+		middleware.CaptureAndAbort(c, err)
-+		return
-+	}
-+	if stat.IsDir() || stat.Size() != 0 {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only empty database files can be initialized."})
-+		return
-+	}
-+
-+	db, commit, cleanup, err := betterFilesOpenSQLiteWritableCopy(s.Filesystem(), displayPath, file, stat)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	defer cleanup()
-+
-+	if _, err := db.Exec("PRAGMA user_version = 1"); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unable to initialize SQLite database: %s", err.Error())})
-+		return
-+	}
-+	if err := commit(); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Unable to initialize SQLite database: %s", err.Error())})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{"file": displayPath})
-+}
-+
-+func postServerDatabaseTable(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	var request betterFilesDatabaseCreateTableRequest
-+	if err := c.ShouldBindJSON(&request); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database table create request."})
-+		return
-+	}
-+
-+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
-+	if !ok {
-+		return
-+	}
-+	defer cleanup()
-+
-+	if err := betterFilesDatabaseCreateTable(db, request.Name, request.Columns); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	if err := commit(); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{"table": strings.TrimSpace(request.Name)})
-+}
-+
-+func patchServerDatabaseCell(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	var request betterFilesDatabaseUpdateCellRequest
-+	if err := c.ShouldBindJSON(&request); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database cell update request."})
-+		return
-+	}
-+
-+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
-+	if !ok {
-+		return
-+	}
-+	defer cleanup()
-+
-+	if err := betterFilesDatabaseUpdateCell(db, request.Table, request.RowID, request.Column, request.Value); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	if err := commit(); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{"updated": true})
-+}
-+
-+func postServerDatabaseRow(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	var request betterFilesDatabaseInsertRowRequest
-+	if err := c.ShouldBindJSON(&request); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database row insert request."})
-+		return
-+	}
-+
-+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
-+	if !ok {
-+		return
-+	}
-+	defer cleanup()
-+
-+	rowID, err := betterFilesDatabaseInsertRow(db, request.Table, request.Values)
-+	if err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	if err := commit(); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{"row_id": rowID})
-+}
-+
-+func deleteServerDatabaseRow(c *gin.Context) {
-+	s := middleware.ExtractServer(c)
-+	var request betterFilesDatabaseDeleteRowRequest
-+	if err := c.ShouldBindJSON(&request); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database row delete request."})
-+		return
-+	}
-+
-+	db, commit, cleanup, ok := betterFilesOpenServerDatabaseWritable(c, s.Filesystem(), request.File)
-+	if !ok {
-+		return
-+	}
-+	defer cleanup()
-+
-+	if err := betterFilesDatabaseDeleteRow(db, request.Table, request.RowID); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+	if err := commit(); err != nil {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return
-+	}
-+
-+	c.JSON(http.StatusOK, gin.H{"deleted": true})
-+}
-+
-+func betterFilesOpenServerDatabase(c *gin.Context, fs *serverfs.Filesystem, rawFile string) (*sql.DB, string, func(), bool) {
-+	file, displayPath, ok := betterFilesOpenServerRegularFile(fs, rawFile)
-+	if !ok {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database path."})
-+		return nil, "", func() {}, false
-+	}
-+	if !betterFilesIsDatabaseFile(displayPath) {
-+		file.Close()
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .db, .sqlite, and .sqlite3 files can be viewed as databases."})
-+		return nil, "", func() {}, false
-+	}
-+
-+	stat, err := file.Stat()
-+	if err != nil {
-+		file.Close()
-+		middleware.CaptureAndAbort(c, err)
-+		return nil, "", func() {}, false
-+	}
-+	if stat.IsDir() || stat.Size() <= 0 || stat.Size() > betterFilesDatabaseMaxFile {
-+		file.Close()
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Database is empty, too large, or is not a file."})
-+		return nil, "", func() {}, false
-+	}
-+
-+	tempPath, err := betterFilesCopyDatabaseToTemp(fs, displayPath, file)
-+	if err != nil {
-+		file.Close()
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return nil, "", func() {}, false
-+	}
-+	db, err := betterFilesOpenSQLiteReadOnly(tempPath)
-+	if err != nil {
-+		file.Close()
-+		betterFilesRemoveSQLiteTempFiles(tempPath)
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return nil, "", func() {}, false
-+	}
-+
-+	return db, displayPath, func() {
-+		_ = db.Close()
-+		_ = file.Close()
-+		betterFilesRemoveSQLiteTempFiles(tempPath)
-+	}, true
-+}
-+
-+func betterFilesOpenServerDatabaseWritable(c *gin.Context, fs *serverfs.Filesystem, rawFile string) (*sql.DB, func() error, func(), bool) {
-+	file, displayPath, ok := betterFilesOpenServerRegularFile(fs, rawFile)
-+	if !ok {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid database path."})
-+		return nil, func() error { return nil }, func() {}, false
-+	}
-+	if !betterFilesIsDatabaseFile(displayPath) {
-+		file.Close()
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only .db, .sqlite, and .sqlite3 files can be edited as databases."})
-+		return nil, func() error { return nil }, func() {}, false
-+	}
-+
-+	stat, err := file.Stat()
-+	if err != nil {
-+		file.Close()
-+		middleware.CaptureAndAbort(c, err)
-+		return nil, func() error { return nil }, func() {}, false
-+	}
-+	if stat.IsDir() || stat.Size() <= 0 || stat.Size() > betterFilesDatabaseMaxFile {
-+		file.Close()
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Database is empty, too large, or is not a file."})
-+		return nil, func() error { return nil }, func() {}, false
-+	}
-+
-+	db, commit, cleanup, err := betterFilesOpenSQLiteWritableCopy(fs, displayPath, file, stat)
-+	if err != nil {
-+		file.Close()
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-+		return nil, func() error { return nil }, func() {}, false
-+	}
-+
-+	return db, commit, func() {
-+		cleanup()
-+		_ = file.Close()
-+	}, true
-+}
-+
-+func betterFilesCopyDatabaseToTemp(fs *serverfs.Filesystem, displayPath string, source io.ReadSeeker) (string, error) {
-+	if _, err := source.Seek(0, io.SeekStart); err != nil {
-+		return "", err
-+	}
-+	temp, err := os.CreateTemp("", "betterfiles-db-*")
-+	if err != nil {
-+		return "", fmt.Errorf("Unable to create temporary SQLite database: %w", err)
-+	}
-+	tempPath := temp.Name()
-+	if _, err := io.Copy(temp, source); err != nil {
-+		_ = temp.Close()
-+		_ = os.Remove(tempPath)
-+		return "", fmt.Errorf("Unable to copy SQLite database: %w", err)
-+	}
-+	if err := temp.Close(); err != nil {
-+		betterFilesRemoveSQLiteTempFiles(tempPath)
-+		return "", fmt.Errorf("Unable to prepare temporary SQLite database: %w", err)
-+	}
-+	for _, suffix := range betterFilesSQLiteSidecarSuffixes {
-+		if err := betterFilesCopyDatabaseSidecar(fs, displayPath+suffix, tempPath+suffix); err != nil {
-+			betterFilesRemoveSQLiteTempFiles(tempPath)
-+			return "", err
-+		}
-+	}
-+	return tempPath, nil
-+}
-+
-+func betterFilesCopyDatabaseSidecar(fs *serverfs.Filesystem, displayPath string, tempPath string) error {
-+	sidecar, stat, err := fs.File(displayPath)
-+	if err != nil {
-+		if os.IsNotExist(err) {
-+			return nil
-+		}
-+		return fmt.Errorf("Unable to open SQLite sidecar file: %w", err)
-+	}
-+	defer sidecar.Close()
-+	if stat.IsDir() || !stat.Mode().IsRegular() || stat.Size() > betterFilesDatabaseMaxFile {
-+		return fmt.Errorf("SQLite sidecar file is too large or is not a file")
-+	}
-+	temp, err := os.OpenFile(tempPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, stat.Mode().Perm())
-+	if err != nil {
-+		return fmt.Errorf("Unable to create temporary SQLite sidecar file: %w", err)
-+	}
-+	defer temp.Close()
-+	if _, err := io.Copy(temp, sidecar); err != nil {
-+		return fmt.Errorf("Unable to copy SQLite sidecar file: %w", err)
-+	}
-+	return nil
-+}
-+
-+func betterFilesRemoveSQLiteTempFiles(tempPath string) {
-+	_ = os.Remove(tempPath)
-+	for _, suffix := range betterFilesSQLiteSidecarSuffixes {
-+		_ = os.Remove(tempPath + suffix)
-+	}
-+}
-+
-+func betterFilesRemoveServerSQLiteSidecars(fs *serverfs.Filesystem, displayPath string) error {
-+	for _, suffix := range betterFilesSQLiteSidecarSuffixes {
-+		err := fs.Delete(displayPath + suffix)
-+		if err == nil || os.IsNotExist(err) {
-+			continue
-+		}
-+		return fmt.Errorf("Unable to remove SQLite sidecar file: %w", err)
-+	}
-+	return nil
-+}
-+
-+func betterFilesOpenSQLiteWritableCopy(fs *serverfs.Filesystem, displayPath string, source io.ReadSeeker, stat os.FileInfo) (*sql.DB, func() error, func(), error) {
-+	tempPath, err := betterFilesCopyDatabaseToTemp(fs, displayPath, source)
-+	if err != nil {
-+		return nil, nil, nil, err
-+	}
-+	db, err := betterFilesOpenSQLiteWritable(tempPath)
-+	if err != nil {
-+		betterFilesRemoveSQLiteTempFiles(tempPath)
-+		return nil, nil, nil, err
-+	}
-+
-+	closed := false
-+	cleanup := func() {
-+		if !closed {
-+			_ = db.Close()
-+			closed = true
-+		}
-+		betterFilesRemoveSQLiteTempFiles(tempPath)
-+	}
-+	commit := func() error {
-+		if !closed {
-+			if err := db.Close(); err != nil {
-+				return fmt.Errorf("Unable to close SQLite database: %w", err)
-+			}
-+			closed = true
-+		}
-+		temp, err := os.Open(tempPath)
-+		if err != nil {
-+			return fmt.Errorf("Unable to reopen temporary SQLite database: %w", err)
-+		}
-+		defer temp.Close()
-+		info, err := temp.Stat()
-+		if err != nil {
-+			return fmt.Errorf("Unable to inspect temporary SQLite database: %w", err)
-+		}
-+		if err := fs.Write(displayPath, temp, info.Size(), stat.Mode().Perm()); err != nil {
-+			return err
-+		}
-+		return betterFilesRemoveServerSQLiteSidecars(fs, displayPath)
-+	}
-+
-+	return db, commit, cleanup, nil
-+}
-+
-+var betterFilesSQLiteSidecarSuffixes = []string{"-wal", "-shm", "-journal"}
-+
-+func betterFilesOpenSQLiteReadOnly(hostPath string) (*sql.DB, error) {
-+	u := url.URL{Scheme: "file", Path: hostPath}
-+	values := u.Query()
-+	values.Set("mode", "ro")
-+	u.RawQuery = values.Encode()
-+
-+	db, err := sql.Open("sqlite", u.String())
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to open SQLite database: %w", err)
-+	}
-+	db.SetMaxOpenConns(1)
-+	db.SetMaxIdleConns(1)
-+
-+	if _, err := db.Exec("PRAGMA query_only = ON"); err != nil {
-+		_ = db.Close()
-+		return nil, fmt.Errorf("Unable to enable read-only SQLite mode: %w", err)
-+	}
-+	if _, err := db.Exec("PRAGMA busy_timeout = 250"); err != nil {
-+		_ = db.Close()
-+		return nil, fmt.Errorf("Unable to configure SQLite timeout: %w", err)
-+	}
-+	if err := db.Ping(); err != nil {
-+		_ = db.Close()
-+		return nil, fmt.Errorf("Unable to read SQLite database: %w", err)
-+	}
-+
-+	return db, nil
-+}
-+
-+func betterFilesOpenSQLiteWritable(hostPath string) (*sql.DB, error) {
-+	u := url.URL{Scheme: "file", Path: hostPath}
-+	values := u.Query()
-+	values.Set("mode", "rwc")
-+	u.RawQuery = values.Encode()
-+
-+	db, err := sql.Open("sqlite", u.String())
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to open SQLite database for writing: %w", err)
-+	}
-+	db.SetMaxOpenConns(1)
-+	db.SetMaxIdleConns(1)
-+
-+	if _, err := db.Exec("PRAGMA journal_mode = DELETE"); err != nil {
-+		_ = db.Close()
-+		return nil, fmt.Errorf("Unable to configure SQLite journal mode: %w", err)
-+	}
-+	if _, err := db.Exec("PRAGMA busy_timeout = 250"); err != nil {
-+		_ = db.Close()
-+		return nil, fmt.Errorf("Unable to configure SQLite timeout: %w", err)
-+	}
-+	if err := db.Ping(); err != nil {
-+		_ = db.Close()
-+		return nil, fmt.Errorf("Unable to write SQLite database: %w", err)
-+	}
-+
-+	return db, nil
-+}
-+
-+func betterFilesDatabaseTables(db *sql.DB) ([]betterFilesDatabaseTableSummary, error) {
-+	rows, err := db.Query("SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' ORDER BY lower(name)")
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to list database tables: %w", err)
-+	}
-+	defer rows.Close()
-+
-+	tables := make([]betterFilesDatabaseTableSummary, 0, 16)
-+	for rows.Next() {
-+		var table betterFilesDatabaseTableSummary
-+		if err := rows.Scan(&table.Name, &table.Type); err != nil {
-+			return nil, fmt.Errorf("Unable to read database table metadata: %w", err)
-+		}
-+		tables = append(tables, table)
-+	}
-+	if err := rows.Err(); err != nil {
-+		return nil, fmt.Errorf("Unable to read database tables: %w", err)
-+	}
-+
-+	return tables, nil
-+}
-+
-+func betterFilesDatabaseFindTable(tables []betterFilesDatabaseTableSummary, name string) (betterFilesDatabaseTableSummary, bool) {
-+	for _, table := range tables {
-+		if table.Name == name {
-+			return table, true
-+		}
-+	}
-+
-+	return betterFilesDatabaseTableSummary{}, false
-+}
-+
-+func betterFilesDatabaseTableHasRowID(db *sql.DB, table string) bool {
-+	var schema sql.NullString
-+	if err := db.QueryRow("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&schema); err != nil {
-+		return false
-+	}
-+	if !schema.Valid {
-+		return false
-+	}
-+
-+	return !strings.Contains(strings.ToUpper(schema.String), "WITHOUT ROWID")
-+}
-+
-+func betterFilesDatabaseColumns(db *sql.DB, table string) ([]betterFilesDatabaseColumn, error) {
-+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", betterFilesDatabaseIdent(table)))
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to read database columns: %w", err)
-+	}
-+	defer rows.Close()
-+
-+	columns := make([]betterFilesDatabaseColumn, 0, 16)
-+	for rows.Next() {
-+		var cid int
-+		var name string
-+		var columnType sql.NullString
-+		var notNull int
-+		var defaultValue sql.NullString
-+		var primaryKey int
-+
-+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-+			return nil, fmt.Errorf("Unable to read database column metadata: %w", err)
-+		}
-+
-+		var normalizedDefault any
-+		if defaultValue.Valid {
-+			normalizedDefault = defaultValue.String
-+		}
-+
-+		columns = append(columns, betterFilesDatabaseColumn{
-+			Name:       name,
-+			Type:       strings.ToUpper(columnType.String),
-+			Nullable:   notNull == 0,
-+			Default:    normalizedDefault,
-+			PrimaryKey: primaryKey > 0,
-+		})
-+		_ = cid
-+	}
-+	if err := rows.Err(); err != nil {
-+		return nil, fmt.Errorf("Unable to read database columns: %w", err)
-+	}
-+
-+	return columns, nil
-+}
-+
-+func betterFilesDatabaseIndexes(db *sql.DB, table string) ([]betterFilesDatabaseIndex, error) {
-+	rows, err := db.Query(fmt.Sprintf("PRAGMA index_list(%s)", betterFilesDatabaseIdent(table)))
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to read database indexes: %w", err)
-+	}
-+	defer rows.Close()
-+
-+	indexes := make([]betterFilesDatabaseIndex, 0, 8)
-+	for rows.Next() {
-+		var seq int
-+		var name string
-+		var unique int
-+		var origin sql.NullString
-+		var partial int
-+
-+		if err := rows.Scan(&seq, &name, &unique, &origin, &partial); err != nil {
-+			return nil, fmt.Errorf("Unable to read database index metadata: %w", err)
-+		}
-+
-+		indexes = append(indexes, betterFilesDatabaseIndex{
-+			Name:   name,
-+			Unique: unique == 1,
-+			Origin: origin.String,
-+		})
-+		_, _ = seq, partial
-+	}
-+	if err := rows.Err(); err != nil {
-+		return nil, fmt.Errorf("Unable to read database indexes: %w", err)
-+	}
-+
-+	sort.SliceStable(indexes, func(i, j int) bool {
-+		return strings.ToLower(indexes[i].Name) < strings.ToLower(indexes[j].Name)
-+	})
-+
-+	return indexes, nil
-+}
-+
-+func betterFilesDatabaseCountRows(db *sql.DB, table string, where string, args []any) (int, error) {
-+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s%s", betterFilesDatabaseIdent(table), where)
-+	var total int
-+	if err := db.QueryRow(query, args...).Scan(&total); err != nil {
-+		return 0, fmt.Errorf("Unable to count database rows: %w", err)
-+	}
-+
-+	return total, nil
-+}
-+
-+func betterFilesDatabaseRows(db *sql.DB, table string, where string, args []any, limit int, offset int, includeRowID bool) ([]map[string]any, error) {
-+	queryArgs := append([]any{}, args...)
-+	queryArgs = append(queryArgs, limit, offset)
-+
-+	selectClause := "*"
-+	if includeRowID {
-+		selectClause = "rowid AS __betterfiles_rowid__, *"
-+	}
-+	query := fmt.Sprintf("SELECT %s FROM %s%s LIMIT ? OFFSET ?", selectClause, betterFilesDatabaseIdent(table), where)
-+	rows, err := db.Query(query, queryArgs...)
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to read database rows: %w", err)
-+	}
-+	defer rows.Close()
-+
-+	names, err := rows.Columns()
-+	if err != nil {
-+		return nil, fmt.Errorf("Unable to read database result columns: %w", err)
-+	}
-+
-+	results := make([]map[string]any, 0, limit)
-+	values := make([]any, len(names))
-+	scanTargets := make([]any, len(names))
-+	for i := range values {
-+		scanTargets[i] = &values[i]
-+	}
-+
-+	for rows.Next() {
-+		for i := range values {
-+			values[i] = nil
-+		}
-+		if err := rows.Scan(scanTargets...); err != nil {
-+			return nil, fmt.Errorf("Unable to scan database row: %w", err)
-+		}
-+
-+		row := make(map[string]any, len(names))
-+		for i, name := range names {
-+			row[name] = betterFilesDatabaseValue(values[i])
-+		}
-+		results = append(results, row)
-+	}
-+	if err := rows.Err(); err != nil {
-+		return nil, fmt.Errorf("Unable to read database rows: %w", err)
-+	}
-+
-+	return results, nil
-+}
-+
-+func betterFilesDatabaseCreateTable(db *sql.DB, table string, columns []betterFilesDatabaseCreateTableColumn) error {
-+	table = strings.TrimSpace(table)
-+	if !betterFilesDatabaseValidName(table) {
-+		return fmt.Errorf("Invalid database table name.")
-+	}
-+	if len(columns) == 0 || len(columns) > 64 {
-+		return fmt.Errorf("A database table needs between 1 and 64 columns.")
-+	}
-+
-+	seen := make(map[string]struct{}, len(columns))
-+	definitions := make([]string, 0, len(columns))
-+	for _, column := range columns {
-+		name := strings.TrimSpace(column.Name)
-+		if !betterFilesDatabaseValidName(name) {
-+			return fmt.Errorf("Invalid database column name.")
-+		}
-+		if _, ok := seen[strings.ToLower(name)]; ok {
-+			return fmt.Errorf("Duplicate database column name: %s", name)
-+		}
-+		seen[strings.ToLower(name)] = struct{}{}
-+
-+		columnType, ok := betterFilesDatabaseColumnType(column.Type)
-+		if !ok {
-+			return fmt.Errorf("Invalid database column type for %s.", name)
-+		}
-+
-+		definitions = append(definitions, fmt.Sprintf("%s %s", betterFilesDatabaseIdent(name), columnType))
-+	}
-+
-+	query := fmt.Sprintf("CREATE TABLE %s (%s)", betterFilesDatabaseIdent(table), strings.Join(definitions, ", "))
-+	if _, err := db.Exec(query); err != nil {
-+		return fmt.Errorf("Unable to create database table: %w", err)
-+	}
-+
-+	return nil
-+}
-+
-+func betterFilesDatabaseUpdateCell(db *sql.DB, table string, rowID int64, column string, value any) error {
-+	if rowID <= 0 {
-+		return fmt.Errorf("Invalid database row.")
-+	}
-+	columns, err := betterFilesDatabaseWritableColumns(db, table)
-+	if err != nil {
-+		return err
-+	}
-+	if _, ok := columns[column]; !ok {
-+		return fmt.Errorf("Database column was not found.")
-+	}
-+
-+	result, err := db.Exec(
-+		fmt.Sprintf("UPDATE %s SET %s = ? WHERE rowid = ?", betterFilesDatabaseIdent(table), betterFilesDatabaseIdent(column)),
-+		betterFilesDatabaseWriteValue(value),
-+		rowID,
-+	)
-+	if err != nil {
-+		return fmt.Errorf("Unable to update database cell: %w", err)
-+	}
-+
-+	return betterFilesDatabaseRequireAffected(result, "Database row was not found.")
-+}
-+
-+func betterFilesDatabaseInsertRow(db *sql.DB, table string, values map[string]any) (int64, error) {
-+	columns, err := betterFilesDatabaseWritableColumns(db, table)
-+	if err != nil {
-+		return 0, err
-+	}
-+
-+	names := make([]string, 0, len(values))
-+	for name := range values {
-+		if _, ok := columns[name]; !ok {
-+			return 0, fmt.Errorf("Database column was not found: %s", name)
-+		}
-+		names = append(names, name)
-+	}
-+	sort.Strings(names)
-+
-+	args := make([]any, 0, len(names))
-+	idents := make([]string, 0, len(names))
-+	placeholders := make([]string, 0, len(names))
-+	for _, name := range names {
-+		idents = append(idents, betterFilesDatabaseIdent(name))
-+		placeholders = append(placeholders, "?")
-+		args = append(args, betterFilesDatabaseWriteValue(values[name]))
-+	}
-+
-+	query := fmt.Sprintf("INSERT INTO %s DEFAULT VALUES", betterFilesDatabaseIdent(table))
-+	if len(names) > 0 {
-+		query = fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", betterFilesDatabaseIdent(table), strings.Join(idents, ", "), strings.Join(placeholders, ", "))
-+	}
-+
-+	result, err := db.Exec(query, args...)
-+	if err != nil {
-+		return 0, fmt.Errorf("Unable to insert database row: %w", err)
-+	}
-+
-+	rowID, err := result.LastInsertId()
-+	if err != nil {
-+		return 0, nil
-+	}
-+
-+	return rowID, nil
-+}
-+
-+func betterFilesDatabaseDeleteRow(db *sql.DB, table string, rowID int64) error {
-+	if rowID <= 0 {
-+		return fmt.Errorf("Invalid database row.")
-+	}
-+	if _, err := betterFilesDatabaseWritableColumns(db, table); err != nil {
-+		return err
-+	}
-+
-+	result, err := db.Exec(fmt.Sprintf("DELETE FROM %s WHERE rowid = ?", betterFilesDatabaseIdent(table)), rowID)
-+	if err != nil {
-+		return fmt.Errorf("Unable to delete database row: %w", err)
-+	}
-+
-+	return betterFilesDatabaseRequireAffected(result, "Database row was not found.")
-+}
-+
-+func betterFilesDatabaseWritableColumns(db *sql.DB, table string) (map[string]betterFilesDatabaseColumn, error) {
-+	tables, err := betterFilesDatabaseTables(db)
-+	if err != nil {
-+		return nil, err
-+	}
-+	tableSummary, ok := betterFilesDatabaseFindTable(tables, table)
-+	if !ok {
-+		return nil, fmt.Errorf("Database table was not found.")
-+	}
-+	if tableSummary.Type != "table" {
-+		return nil, fmt.Errorf("Database views cannot be edited.")
-+	}
-+	if !betterFilesDatabaseTableHasRowID(db, table) {
-+		return nil, fmt.Errorf("This table cannot be edited because it does not expose SQLite row IDs.")
-+	}
-+
-+	columns, err := betterFilesDatabaseColumns(db, table)
-+	if err != nil {
-+		return nil, err
-+	}
-+	result := make(map[string]betterFilesDatabaseColumn, len(columns))
-+	for _, column := range columns {
-+		result[column.Name] = column
-+	}
-+
-+	return result, nil
-+}
-+
-+func betterFilesDatabaseRequireAffected(result sql.Result, message string) error {
-+	affected, err := result.RowsAffected()
-+	if err != nil {
-+		return nil
-+	}
-+	if affected == 0 {
-+		return fmt.Errorf("%s", message)
-+	}
-+
-+	return nil
-+}
-+
-+func betterFilesDatabaseWriteValue(value any) any {
-+	switch typed := value.(type) {
-+	case nil:
-+		return nil
-+	case string:
-+		return typed
-+	case float64:
-+		return typed
-+	case bool:
-+		return typed
-+	default:
-+		return fmt.Sprint(typed)
-+	}
-+}
-+
-+func betterFilesDatabaseSearchWhere(columns []betterFilesDatabaseColumn, search string) (string, []any) {
-+	if search == "" || len(columns) == 0 {
-+		return "", nil
-+	}
-+
-+	limit := len(columns)
-+	if limit > betterFilesDatabaseMaxSearchCols {
-+		limit = betterFilesDatabaseMaxSearchCols
-+	}
-+
-+	parts := make([]string, 0, limit)
-+	args := make([]any, 0, limit)
-+	needle := "%" + betterFilesDatabaseEscapeLike(search) + "%"
-+	for _, column := range columns[:limit] {
-+		parts = append(parts, fmt.Sprintf("CAST(%s AS TEXT) LIKE ? ESCAPE '\\'", betterFilesDatabaseIdent(column.Name)))
-+		args = append(args, needle)
-+	}
-+
-+	return " WHERE (" + strings.Join(parts, " OR ") + ")", args
-+}
-+
-+func betterFilesDatabaseValue(value any) any {
-+	switch typed := value.(type) {
-+	case nil:
-+		return nil
-+	case []byte:
-+		if betterFilesDatabaseLooksBinary(typed) {
-+			return fmt.Sprintf("[BLOB %d bytes]", len(typed))
-+		}
-+		return string(typed)
-+	default:
-+		return typed
-+	}
-+}
-+
-+func betterFilesDatabaseLooksBinary(value []byte) bool {
-+	if len(value) == 0 {
-+		return false
-+	}
-+
-+	limit := len(value)
-+	if limit > 512 {
-+		limit = 512
-+	}
-+	for _, b := range value[:limit] {
-+		if b == 0 || (b < 32 && b != '\n' && b != '\r' && b != '\t') {
-+			return true
-+		}
-+	}
-+
-+	return false
-+}
-+
-+func betterFilesDatabaseBoundedInt(raw string, fallback int, minimum int, maximum int) int {
-+	value, err := strconv.Atoi(strings.TrimSpace(raw))
-+	if err != nil {
-+		return fallback
-+	}
-+	if value < minimum {
-+		return minimum
-+	}
-+	if value > maximum {
-+		return maximum
-+	}
-+
-+	return value
-+}
-+
-+func betterFilesDatabaseIdent(value string) string {
-+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
-+}
-+
-+func betterFilesDatabaseEscapeLike(value string) string {
-+	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-+	return replacer.Replace(value)
-+}
-+
-+func betterFilesDatabaseValidName(value string) bool {
-+	value = strings.TrimSpace(value)
-+	if value == "" || len(value) > 64 {
-+		return false
-+	}
-+	for _, char := range value {
-+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' {
-+			continue
-+		}
-+		return false
-+	}
-+
-+	return true
-+}
-+
-+func betterFilesDatabaseColumnType(value string) (string, bool) {
-+	switch strings.ToUpper(strings.TrimSpace(value)) {
-+	case "TEXT":
-+		return "TEXT", true
-+	case "INTEGER":
-+		return "INTEGER", true
-+	case "INTEGER PRIMARY KEY":
-+		return "INTEGER PRIMARY KEY", true
-+	case "REAL":
-+		return "REAL", true
-+	case "BLOB":
-+		return "BLOB", true
-+	case "NUMERIC":
-+		return "NUMERIC", true
-+	default:
-+		return "", false
-+	}
-+}
-+
-+func betterFilesIsDatabaseFile(value string) bool {
-+	switch strings.ToLower(path.Ext(value)) {
-+	case ".db", ".sqlite", ".sqlite3":
-+		return true
-+	default:
-+		return false
-+	}
 +}
 diff --git a/router/router_server_files.go b/router/router_server_files.go
 index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee2dbbbf52 100644
@@ -3486,10 +2044,10 @@ index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee
  	if err != nil {
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384c5092784
+index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d31286d521da9
 --- /dev/null
 +++ b/router/router_server_files_search.go
-@@ -0,0 +1,577 @@
+@@ -0,0 +1,611 @@
 +package router
 +
 +import (
@@ -3585,14 +2143,14 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +	}
 +
 +	resultPool = sync.Pool{
-+		New: func() interface{} {
-+			s := make([]FileSearchResult, 0, 64)
-+			return &s
++		New: func() any {
++			batch := make([]FileSearchResult, 0, batchSize)
++			return &batch
 +		},
 +	}
 +
 +	builderPool = sync.Pool{
-+		New: func() interface{} {
++		New: func() any {
 +			return &strings.Builder{}
 +		},
 +	}
@@ -3604,6 +2162,7 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +	maxPathLength   = 4096
 +	maxFilenameLen  = 255
 +	jobChannelSize  = 2048
++	resultChanSize  = 64
 +	batchSize       = 16
 +	maxContentBytes = 1024 * 1024
 +)
@@ -3620,7 +2179,7 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +	maxDepth      int
 +	contentSearch bool
 +	results       []FileSearchResult
-+	resultsMu     sync.Mutex
++	resultCount   atomic.Int64
 +	truncated     atomic.Bool
 +	totalScanned  atomic.Int64
 +	done          chan struct{}
@@ -3746,42 +2305,82 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +	if sc.maxResults <= 0 {
 +		return false
 +	}
-+	sc.resultsMu.Lock()
-+	count := len(sc.results)
-+	sc.resultsMu.Unlock()
-+	return count >= sc.maxResults
++	return int(sc.resultCount.Load()) >= sc.maxResults
 +}
 +
-+func (sc *searchContext) addResults(batch []FileSearchResult) bool {
++func getSearchResultBatch() []FileSearchResult {
++	batch := resultPool.Get().(*[]FileSearchResult)
++	return (*batch)[:0]
++}
++
++func putSearchResultBatch(batch []FileSearchResult) {
++	if batch == nil {
++		return
++	}
++	if cap(batch) > batchSize*4 {
++		return
++	}
++	batch = batch[:0]
++	resultPool.Put(&batch)
++}
++
++func buildSearchPath(dir string, name string) string {
++	builder := builderPool.Get().(*strings.Builder)
++	builder.Reset()
++	defer builderPool.Put(builder)
++
++	if dir == "" || dir == "/" {
++		builder.Grow(len(name) + 1)
++		builder.WriteByte('/')
++		builder.WriteString(name)
++		return builder.String()
++	}
++
++	builder.Grow(len(dir) + len(name) + 1)
++	builder.WriteString(dir)
++	builder.WriteByte('/')
++	builder.WriteString(name)
++	return builder.String()
++}
++
++func (sc *searchContext) submitResults(batch []FileSearchResult) bool {
 +	if len(batch) == 0 {
 +		return false
 +	}
++	sc.resultCount.Add(int64(len(batch)))
 +
-+	if sc.maxResults <= 0 {
-+		sc.resultsMu.Lock()
-+		sc.results = append(sc.results, batch...)
-+		sc.resultsMu.Unlock()
-+		return false
-+	}
-+
-+	sc.resultsMu.Lock()
-+	remaining := sc.maxResults - len(sc.results)
-+	if remaining <= 0 {
-+		sc.resultsMu.Unlock()
-+		sc.truncated.Store(true)
++	select {
++	case sc.resultChan <- batch:
++		return sc.hasEnoughResults()
++	case <-sc.done:
++		putSearchResultBatch(batch)
 +		return true
 +	}
++}
 +
-+	if len(batch) > remaining {
-+		batch = batch[:remaining]
-+		sc.truncated.Store(true)
++func (sc *searchContext) collectResults() {
++	for batch := range sc.resultChan {
++		if sc.maxResults <= 0 {
++			sc.results = append(sc.results, batch...)
++			putSearchResultBatch(batch)
++			continue
++		}
++
++		remaining := sc.maxResults - len(sc.results)
++		if remaining <= 0 {
++			sc.truncated.Store(true)
++			putSearchResultBatch(batch)
++			continue
++		}
++
++		if len(batch) > remaining {
++			sc.results = append(sc.results, batch[:remaining]...)
++			sc.truncated.Store(true)
++		} else {
++			sc.results = append(sc.results, batch...)
++		}
++		putSearchResultBatch(batch)
 +	}
-+
-+	sc.results = append(sc.results, batch...)
-+	full := len(sc.results) >= sc.maxResults
-+	sc.resultsMu.Unlock()
-+
-+	return full
 +}
 +
 +func (sc *searchContext) enqueueJob(job walkJob) {
@@ -3812,27 +2411,6 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +	}
 +}
 +
-+func buildRelativePath(rootLen int, fullPath string) string {
-+	if len(fullPath) <= rootLen {
-+		return "/"
-+	}
-+
-+	rel := fullPath[rootLen:]
-+	if len(rel) == 0 {
-+		return "/"
-+	}
-+
-+	if rel[0] != '/' && rel[0] != '\\' {
-+		rel = "/" + rel
-+	}
-+
-+	if strings.ContainsRune(rel, '\\') {
-+		rel = strings.ReplaceAll(rel, "\\", "/")
-+	}
-+
-+	return rel
-+}
-+
 +func getDirectory(path string) string {
 +	lastSlash := strings.LastIndexByte(path, '/')
 +	if lastSlash <= 0 {
@@ -3844,19 +2422,26 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +func (sc *searchContext) worker(wg *sync.WaitGroup) {
 +	defer wg.Done()
 +
-+	localBatch := make([]FileSearchResult, 0, batchSize)
++	localBatch := getSearchResultBatch()
++	defer func() {
++		if localBatch != nil && len(localBatch) == 0 {
++			putSearchResultBatch(localBatch)
++		}
++	}()
 +
 +	for {
 +		select {
 +		case <-sc.done:
 +			if len(localBatch) > 0 {
-+				sc.addResults(localBatch)
++				sc.submitResults(localBatch)
++				localBatch = nil
 +			}
 +			return
 +		case job, ok := <-sc.jobChan:
 +			if !ok {
 +				if len(localBatch) > 0 {
-+					sc.addResults(localBatch)
++					sc.submitResults(localBatch)
++					localBatch = nil
 +				}
 +				return
 +			}
@@ -3899,10 +2484,7 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +						continue
 +					}
 +
-+					fullPath := path.Join(job.path, name)
-+					if !strings.HasPrefix(fullPath, "/") {
-+						fullPath = "/" + fullPath
-+					}
++					fullPath := buildSearchPath(job.path, name)
 +
 +					if len(fullPath) > maxPathLength {
 +						continue
@@ -3926,12 +2508,12 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +					localBatch = append(localBatch, result)
 +
 +					if len(localBatch) >= batchSize {
-+						if sc.addResults(localBatch) {
-+							localBatch = localBatch[:0]
++						if sc.submitResults(localBatch) {
++							localBatch = getSearchResultBatch()
 +							sc.stop()
 +							break
 +						}
-+						localBatch = localBatch[:0]
++						localBatch = getSearchResultBatch()
 +					}
 +				}
 +
@@ -3953,10 +2535,10 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +			}
 +
 +			if len(localBatch) > 0 {
-+				if sc.addResults(localBatch) {
++				if sc.submitResults(localBatch) {
 +					sc.stop()
 +				}
-+				localBatch = localBatch[:0]
++				localBatch = getSearchResultBatch()
 +			}
 +
 +			sc.finishJob()
@@ -4025,6 +2607,7 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +		results:       make([]FileSearchResult, 0, resultsCap),
 +		done:          make(chan struct{}),
 +		jobChan:       make(chan walkJob, jobChannelSize),
++		resultChan:    make(chan []FileSearchResult, resultChanSize),
 +	}
 +
 +	go func() {
@@ -4036,6 +2619,13 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +
 +	workerCount := getWorkerCount()
 +	var wg sync.WaitGroup
++	var collector sync.WaitGroup
++
++	collector.Add(1)
++	go func() {
++		defer collector.Done()
++		sc.collectResults()
++	}()
 +
 +	for i := 0; i < workerCount; i++ {
 +		wg.Add(1)
@@ -4050,6 +2640,8 @@ index 0000000000000000000000000000000000000000..a5d789d77b56ec51fc788c05804ac384
 +	}
 +
 +	wg.Wait()
++	close(sc.resultChan)
++	collector.Wait()
 +
 +	searchTimeMs := time.Since(startTime).Milliseconds()
 +
