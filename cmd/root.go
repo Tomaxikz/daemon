@@ -330,9 +330,10 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 	// Create a new HTTP server instance to handle inbound requests from the Panel
 	// and external clients.
 	s := &http.Server{
-		Addr:      api.Host + ":" + strconv.Itoa(api.Port),
-		Handler:   router.Configure(manager, pclient),
-		TLSConfig: config.DefaultTLSConfig,
+		Addr:              api.Host + ":" + strconv.Itoa(api.Port),
+		Handler:           router.Configure(manager, pclient),
+		TLSConfig:         config.DefaultTLSConfig,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	profile, _ := cmd.Flags().GetBool("pprof")
@@ -345,7 +346,13 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 
 		profilePort, _ := cmd.Flags().GetInt("pprof-port")
 		go func() {
-			http.ListenAndServe(fmt.Sprintf("localhost:%d", profilePort), nil)
+			profileServer := &http.Server{
+				Addr:              fmt.Sprintf("localhost:%d", profilePort),
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+			if err := profileServer.ListenAndServe(); err != nil {
+				log.WithError(err).Error("failed to serve pprof server")
+			}
 		}()
 	}
 
@@ -365,7 +372,12 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 
 		// Start the autocert server.
 		go func() {
-			if err := http.ListenAndServe(":http", m.HTTPHandler(nil)); err != nil {
+			autoTLSServer := &http.Server{
+				Addr:              ":http",
+				Handler:           m.HTTPHandler(nil),
+				ReadHeaderTimeout: 10 * time.Second,
+			}
+			if err := autoTLSServer.ListenAndServe(); err != nil {
 				log.WithError(err).Error("failed to serve autocert http server")
 			}
 		}()

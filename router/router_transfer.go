@@ -72,7 +72,7 @@ func postTransfers(c *gin.Context) {
 			StartOnCompletion: false,
 		})
 		if err != nil {
-			if err := manager.Client().SetTransferStatus(context.Background(), trnsfr.Server.ID(), false); err != nil {
+			if err := manager.Client().SetTransferStatus(context.Background(), u.String(), false); err != nil {
 				trnsfr.Log().WithField("status", false).WithError(err).Error("failed to set transfer status")
 			}
 			middleware.CaptureAndAbort(c, err)

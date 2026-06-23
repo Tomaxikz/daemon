@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -33,7 +34,11 @@ func (s *Server) PublishConsoleOutputFromDaemon(data string) {
 func (s *Server) Throttler() *ConsoleThrottle {
 	s.throttleOnce.Do(func() {
 		throttles := config.Get().Throttles
-		period := time.Duration(throttles.Period) * time.Millisecond
+		periodMillis := throttles.Period
+		if periodMillis > uint64(math.MaxInt64)/uint64(time.Millisecond) {
+			periodMillis = uint64(math.MaxInt64) / uint64(time.Millisecond)
+		}
+		period := time.Duration(periodMillis) * time.Millisecond
 
 		s.throttler = newConsoleThrottle(throttles.Lines, period)
 		s.throttler.strike = func() {

@@ -37,6 +37,36 @@ func TestCleanDownloadFilePath(t *testing.T) {
 	}
 }
 
+func TestCleanUploadFilename(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+		ok   bool
+	}{
+		{name: "simple", in: "world.zip", want: "world.zip", ok: true},
+		{name: "spaces", in: "my world.zip", want: "my world.zip", ok: true},
+		{name: "empty", in: "", ok: false},
+		{name: "dot", in: ".", ok: false},
+		{name: "dot dot", in: "..", ok: false},
+		{name: "forward slash", in: "../world.zip", ok: false},
+		{name: "nested path", in: "saves/world.zip", ok: false},
+		{name: "backslash", in: `saves\world.zip`, ok: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := cleanUploadFilename(tt.in)
+			if ok != tt.ok {
+				t.Fatalf("expected ok %t, got %t", tt.ok, ok)
+			}
+			if got != tt.want {
+				t.Fatalf("expected filename %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestFixedDownloadReader(t *testing.T) {
 	t.Run("reads unchanged file", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "download.txt")

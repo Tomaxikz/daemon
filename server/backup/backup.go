@@ -106,7 +106,7 @@ func (b *Backup) Size() (int64, error) {
 	return st.Size(), nil
 }
 
-// Checksum returns the SHA256 checksum of a backup.
+// Checksum returns the SHA1 checksum of a backup.
 func (b *Backup) Checksum() ([]byte, error) {
 	h := sha1.New()
 
@@ -128,7 +128,7 @@ func (b *Backup) Checksum() ([]byte, error) {
 // the disk to the caller.
 func (b *Backup) Details(ctx context.Context, parts []remote.BackupPart) (*ArchiveDetails, error) {
 	ad := ArchiveDetails{ChecksumType: "sha1", Parts: parts}
-	g, ctx := errgroup.WithContext(ctx)
+	g, _ := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		resp, err := b.Checksum()

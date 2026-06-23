@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
@@ -28,6 +29,8 @@ import (
 // at least in the expected format. This is very basic protection against random bots finding the SFTP
 // server and sending a flood of usernames.
 var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
+
+const sshHandshakeTimeout = 10 * time.Second
 
 //goland:noinspection GoNameStartsWithPackageName
 type SFTPServer struct {
@@ -126,10 +129,12 @@ func (c *SFTPServer) Run() error {
 // serve the request or not.
 func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
 	// Before beginning a handshake must be performed on the incoming net.Conn
+	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
 		return errors.WithStack(err)
 	}
+	_ = conn.SetDeadline(time.Time{})
 	defer sconn.Close()
 	go ssh.DiscardRequests(reqs)
 
@@ -259,7 +264,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
 	if err != nil {
 		return errors.Wrap(err, "sftp: failed to generate ED25519 private key")
 	}
-	if err := os.MkdirAll(path.Dir(c.PrivateKeyPath()), 0o755); err != nil {
+	if err := os.MkdirAll(path.Dir(c.PrivateKeyPath()), 0o700); err != nil {
 		return errors.Wrap(err, "sftp: could not create internal sftp data directory")
 	}
 	o, err := os.OpenFile(c.PrivateKeyPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)

@@ -656,6 +656,9 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
 // was configured to enable openat2 support, unix.Openat2 will be used instead
 // of unix.Openat due to having better security properties for our use-case.
 func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, error) {
+	if flag < 0 {
+		return 0, &PathError{Op: "open", Path: name, Err: unix.EINVAL}
+	}
 	if flag&O_NOFOLLOW == 0 {
 		flag |= O_NOFOLLOW
 	}
@@ -664,7 +667,7 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, 
 	for {
 		var err error
 		if fs.useOpenat2 {
-			fd, err = fs._openat2(dirfd, name, uint64(flag), uint64(syscallMode(mode)))
+			fd, err = fs._openat2(dirfd, name, uint64(flag), uint64(syscallMode(mode))) // #nosec G115 -- negative flags are rejected above.
 		} else {
 			fd, err = fs._openat(dirfd, name, flag, uint32(syscallMode(mode)))
 		}

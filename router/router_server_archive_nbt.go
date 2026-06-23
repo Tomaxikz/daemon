@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"errors"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path"
@@ -418,6 +419,10 @@ func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, file 
 		file, err := entry.Open()
 		if err != nil {
 			return extracted, err
+		}
+		if entry.UncompressedSize64 > uint64(math.MaxInt64) {
+			file.Close()
+			return extracted, errors.New("Archive entry is too large to extract.")
 		}
 		err = fs.Write(outputPath, file, int64(entry.UncompressedSize64), entry.FileInfo().Mode().Perm())
 		file.Close()

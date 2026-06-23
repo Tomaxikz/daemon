@@ -124,9 +124,6 @@ func configureCmdRun(cmd *cobra.Command, args []string) {
 		panic(err)
 	}
 
-	fmt.Printf("%+v", req.Header)
-	fmt.Println(req.URL.String())
-
 	res, err := c.Do(req)
 	if err != nil {
 		fmt.Println("Failed to fetch configuration from the panel.\n", err.Error())
@@ -145,6 +142,9 @@ func configureCmdRun(cmd *cobra.Command, args []string) {
 	}
 
 	b, err := io.ReadAll(res.Body)
+	if err != nil {
+		panic(err)
+	}
 
 	cfg, err := config.NewAtPath(configPath)
 	if err != nil {

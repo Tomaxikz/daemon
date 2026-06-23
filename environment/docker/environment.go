@@ -163,7 +163,14 @@ func (e *Environment) ExitState() (uint32, bool, error) {
 		}
 		return 0, false, errors.WrapIf(err, "environment/docker: failed to inspect container")
 	}
-	return uint32(c.State.ExitCode), c.State.OOMKilled, nil
+	if c.State.ExitCode < 0 {
+		return 0, c.State.OOMKilled, fmt.Errorf("environment/docker: invalid negative container exit code %d", c.State.ExitCode)
+	}
+	const maxUint32 = int64(1<<32 - 1)
+	if int64(c.State.ExitCode) > maxUint32 {
+		return 0, c.State.OOMKilled, fmt.Errorf("environment/docker: invalid oversized container exit code %d", c.State.ExitCode)
+	}
+	return uint32(c.State.ExitCode), c.State.OOMKilled, nil // #nosec G115 -- range checked above.
 }
 
 // Config returns the environment configuration allowing a process to make

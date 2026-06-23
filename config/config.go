@@ -30,6 +30,8 @@ import (
 
 const DefaultLocation = "/etc/pterodactyl/config.yml"
 
+var systemUsernamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*\$?$`)
+
 // DefaultTLSConfig sets sane defaults to use when configuring the internal
 // webserver to listen for public connections.
 //
@@ -518,6 +520,10 @@ func EnsurePterodactylUser() error {
 	}
 
 	log.WithField("username", _config.System.Username).Info("checking for pterodactyl system user")
+	if len(_config.System.Username) > 32 || !systemUsernamePattern.MatchString(_config.System.Username) {
+		return fmt.Errorf("invalid system username %q", _config.System.Username)
+	}
+
 	u, err := user.Lookup(_config.System.Username)
 	// If an error is returned but it isn't the unknown user error just abort
 	// the process entirely. If we did find a user, return it immediately.
@@ -531,11 +537,13 @@ func EnsurePterodactylUser() error {
 		return nil
 	}
 
-	command := fmt.Sprintf("useradd --system --no-create-home --shell /usr/sbin/nologin %s", _config.System.Username)
+	command := "useradd"
+	args := []string{"--system", "--no-create-home", "--shell", "/usr/sbin/nologin", _config.System.Username}
 	// Alpine Linux is the only OS we currently support that doesn't work with the useradd
 	// command, so in those cases we just modify the command a bit to work as expected.
 	if strings.HasPrefix(sysName, "alpine") {
-		command = fmt.Sprintf("adduser -S -D -H -G %[1]s -s /sbin/nologin %[1]s", _config.System.Username)
+		command = "adduser"
+		args = []string{"-S", "-D", "-H", "-G", _config.System.Username, "-s", "/sbin/nologin", _config.System.Username}
 		// We have to create the group first on Alpine, so do that here before continuing on
 		// to the user creation process.
 		if _, err := exec.Command("addgroup", "-S", _config.System.Username).Output(); err != nil {
@@ -543,8 +551,7 @@ func EnsurePterodactylUser() error {
 		}
 	}
 
-	split := strings.Split(command, " ")
-	if _, err := exec.Command(split[0], split[1:]...).Output(); err != nil {
+	if _, err := exec.Command(command, args...).Output(); err != nil {
 		return err
 	}
 	u, err = user.Lookup(_config.System.Username)

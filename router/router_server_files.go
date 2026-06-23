@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -575,7 +574,7 @@ func postServerUploadFiles(c *gin.Context) {
 	}
 
 	s, ok := manager.Get(token.ServerUuid)
-	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileUpload) {
+	if !ok || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "The requested resource was not found on this server.",
 		})
@@ -598,34 +597,65 @@ func postServerUploadFiles(c *gin.Context) {
 		return
 	}
 
-	directory := c.Query("directory")
+	directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))
+	if directory == "." {
+		directory = "/"
+	}
 
 	maxFileSize := config.Get().Api.UploadLimit
+	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
+	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "Upload limit is not configured correctly.",
+		})
+		return
+	}
 	maxFileSizeBytes := maxFileSize * 1024 * 1024
 	var totalSize int64
 	for _, header := range headers {
-		if header.Size > maxFileSizeBytes {
+		if header.Size < 0 || header.Size > maxFileSizeBytes {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 				"error": "File " + header.Filename + " is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
 			})
 			return
 		}
 		totalSize += header.Size
+		if totalSize > maxFileSizeBytes {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "Total upload size is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
+			})
+			return
+		}
 	}
 
 	for _, header := range headers {
+		filename, ok := cleanUploadFilename(header.Filename)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid upload filename.",
+			})
+			return
+		}
+
 		// We run this in a different method so I can use defer without any of
 		// the consequences caused by calling it in a loop.
-		if err := handleFileUpload(filepath.Join(directory, header.Filename), s, header); err != nil {
+		if err := handleFileUpload(path.Join(directory, filename), s, header); err != nil {
 			middleware.CaptureAndAbort(c, err)
 			return
 		} else {
 			s.SaveActivity(s.NewRequestActivity(token.UserUuid, c.ClientIP()), server.ActivityFileUploaded, models.ActivityMeta{
-				"file":      header.Filename,
-				"directory": filepath.Clean(directory),
+				"file":      filename,
+				"directory": directory,
 			})
 		}
 	}
+}
+
+func cleanUploadFilename(name string) (string, bool) {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
+		return "", false
+	}
+	return name, true
 }
 
 func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {

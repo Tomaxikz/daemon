@@ -1,8 +1,6 @@
 module github.com/pterodactyl/wings
 
-go 1.24.0
-
-toolchain go1.24.1
+go 1.25.0
 
 require (
 	emperror.dev/errors v0.8.1
@@ -13,7 +11,7 @@ require (
 	github.com/apex/log v1.9.0
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/beevik/etree v1.5.0
-	github.com/buger/jsonparser v1.1.1
+	github.com/buger/jsonparser v1.1.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/creasty/defaults v1.8.0
 	github.com/docker/docker v28.3.3+incompatible
@@ -24,6 +22,7 @@ require (
 	github.com/gammazero/workerpool v1.1.3
 	github.com/gbrlsnchs/jwt/v3 v3.0.1
 	github.com/gin-gonic/gin v1.10.1
+	github.com/glebarez/go-sqlite v1.22.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-co-op/gocron v1.37.0
 	github.com/google/uuid v1.6.0
@@ -43,9 +42,10 @@ require (
 	github.com/secsy/goftp v0.0.0-20200609142545-aa2de14babf4
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.46.0
-	golang.org/x/sync v0.19.0
-	golang.org/x/sys v0.39.0
+	golang.org/x/crypto v0.53.0
+	golang.org/x/sync v0.21.0
+	golang.org/x/sys v0.46.0
+	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af
 	gopkg.in/ini.v1 v1.67.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -56,7 +56,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Microsoft/hcsshim v0.12.9 // indirect
 	github.com/STARRY-S/zip v0.2.3 // indirect
-	github.com/Tnze/go-mc v1.20.3-0.20241224032005-539b4a3a7f03 // indirect
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.1 // indirect
@@ -75,7 +74,6 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gammazero/deque v1.0.0 // indirect
 	github.com/gin-contrib/sse v1.0.0 // indirect
-	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
@@ -131,10 +129,9 @@ require (
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/arch v0.15.0 // indirect
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/term v0.38.0 // indirect
-	golang.org/x/text v0.32.0 // indirect
-	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
+	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/term v0.44.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gotest.tools/v3 v3.0.2 // indirect

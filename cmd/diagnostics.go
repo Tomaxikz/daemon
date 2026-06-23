@@ -32,6 +32,7 @@ import (
 const (
 	DefaultHastebinUrl = "https://ptero.co"
 	DefaultLogLines    = 200
+	MaxLogLines        = 10000
 )
 
 var diagnosticsArgs struct {
@@ -167,11 +168,16 @@ func diagnosticsCmdRun(*cobra.Command, []string) {
 
 	printHeader(output, "Latest Wings Logs")
 	if diagnosticsArgs.IncludeLogs {
+		if diagnosticsArgs.LogLines < 0 {
+			diagnosticsArgs.LogLines = 0
+		} else if diagnosticsArgs.LogLines > MaxLogLines {
+			diagnosticsArgs.LogLines = MaxLogLines
+		}
 		p := "/var/log/pterodactyl/wings.log"
 		if cfg != nil {
 			p = path.Join(cfg.System.LogDirectory, "wings.log")
 		}
-		if c, err := exec.Command("tail", "-n", strconv.Itoa(diagnosticsArgs.LogLines), p).Output(); err != nil {
+		if c, err := exec.Command("tail", "-n", strconv.Itoa(diagnosticsArgs.LogLines), "--", p).Output(); err != nil {
 			fmt.Fprintln(output, "No logs found or an error occurred.")
 		} else {
 			fmt.Fprintf(output, "%s\n", string(c))
