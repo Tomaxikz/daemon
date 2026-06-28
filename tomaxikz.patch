@@ -5715,10 +5715,10 @@ index d08411cce8e18de88008df04789d40bc24e55ad7..425417398855c830f0898d3169f0feb3
  // Events returns the server's emitter instance.
 diff --git a/server/file_history.go b/server/file_history.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..af676190fa887988897954c6e551e7128a968196
+index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717ca8a08f58
 --- /dev/null
 +++ b/server/file_history.go
-@@ -0,0 +1,779 @@
+@@ -0,0 +1,783 @@
 +package server
 +
 +import (
@@ -6022,7 +6022,11 @@ index 0000000000000000000000000000000000000000..af676190fa887988897954c6e551e712
 +		}
 +		previous, err := reconstructHistoryRevision(tx, latest.id, cfg.ZstdLevel)
 +		if err != nil {
-+			return 0, err
++			revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
++			if err != nil {
++				return 0, err
++			}
++			break
 +		}
 +		revisionID, err = insertCompactHistoryRevision(tx, fileID, latest.id, latest.chainID, previous, user, after, nowMs, cfg.ZstdLevel)
 +		if err != nil {
@@ -6500,15 +6504,21 @@ index 0000000000000000000000000000000000000000..af676190fa887988897954c6e551e712
 +}
 diff --git a/server/file_history_test.go b/server/file_history_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..570f70e168d3c00dd2ebc5e846047da3098ce04f
+index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af92b9280e
 --- /dev/null
 +++ b/server/file_history_test.go
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,140 @@
 +package server
 +
 +import (
 +	"bytes"
++	"database/sql"
 +	"testing"
++	"time"
++
++	_ "github.com/glebarez/sqlite"
++
++	"github.com/pterodactyl/wings/config"
 +)
 +
 +func TestFileHistoryDeltaRoundTrip(t *testing.T) {
@@ -6582,6 +6592,60 @@ index 0000000000000000000000000000000000000000..570f70e168d3c00dd2ebc5e846047da3
 +	}
 +	if !isLikelyBinaryHistoryContent([]byte{0x01, 0x02, 0x03, 0x04, 't', 'e', 'x', 't'}) {
 +		t.Fatal("expected control-heavy content to be skipped")
++	}
++}
++
++func TestFileHistoryRecordStartsSnapshotAfterCorruptLatestRevision(t *testing.T) {
++	db, err := sql.Open("sqlite", ":memory:")
++	if err != nil {
++		t.Fatalf("failed to open sqlite: %v", err)
++	}
++	defer db.Close()
++
++	store := &fileHistoryStore{db: db}
++	if err := store.init(); err != nil {
++		t.Fatalf("failed to init store: %v", err)
++	}
++
++	cfg := config.FileHistoryConfiguration{
++		Enabled:             true,
++		ZstdLevel:           3,
++		AnchorInterval:      4,
++		KeepChains:          2,
++		FileSizeCap:         1024 * 1024,
++		PerFileDiskBudget:   1024 * 1024,
++		PerServerDiskBudget: 1024 * 1024,
++	}
++
++	first := []byte("motd=first\n")
++	firstID, err := store.record("/server.properties", nil, first, "user-a", cfg)
++	if err != nil {
++		t.Fatalf("failed to record initial revision: %v", err)
++	}
++
++	fileID, err := findHistoryFile(db, "/server.properties")
++	if err != nil {
++		t.Fatalf("failed to find file: %v", err)
++	}
++	if _, err := db.Exec(`
++		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
++		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
++		fileID, firstID, time.Now().UTC().UnixMilli(), len(first), "user-a", firstID, []byte("not a zstd delta"), contentHash(first)); err != nil {
++		t.Fatalf("failed to insert corrupt revision: %v", err)
++	}
++
++	after := []byte("motd=recovered\n")
++	recoveredID, err := store.record("/server.properties", first, after, "user-b", cfg)
++	if err != nil {
++		t.Fatalf("failed to record after corrupt latest revision: %v", err)
++	}
++
++	content, err := reconstructHistoryRevision(db, recoveredID, cfg.ZstdLevel)
++	if err != nil {
++		t.Fatalf("failed to reconstruct recovered revision: %v", err)
++	}
++	if !bytes.Equal(content, after) {
++		t.Fatal("recovered revision content does not match")
 +	}
 +}
 diff --git a/server/filesystem/errors.go b/server/filesystem/errors.go

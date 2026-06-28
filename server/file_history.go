@@ -301,7 +301,11 @@ func (s *fileHistoryStore) record(path string, before []byte, after []byte, user
 		}
 		previous, err := reconstructHistoryRevision(tx, latest.id, cfg.ZstdLevel)
 		if err != nil {
-			return 0, err
+			revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
+			if err != nil {
+				return 0, err
+			}
+			break
 		}
 		revisionID, err = insertCompactHistoryRevision(tx, fileID, latest.id, latest.chainID, previous, user, after, nowMs, cfg.ZstdLevel)
 		if err != nil {

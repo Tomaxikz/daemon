@@ -2,7 +2,13 @@ package server
 
 import (
 	"bytes"
+	"database/sql"
 	"testing"
+	"time"
+
+	_ "github.com/glebarez/sqlite"
+
+	"github.com/pterodactyl/wings/config"
 )
 
 func TestFileHistoryDeltaRoundTrip(t *testing.T) {
@@ -76,5 +82,59 @@ func TestFileHistoryBinaryContentFilter(t *testing.T) {
 	}
 	if !isLikelyBinaryHistoryContent([]byte{0x01, 0x02, 0x03, 0x04, 't', 'e', 'x', 't'}) {
 		t.Fatal("expected control-heavy content to be skipped")
+	}
+}
+
+func TestFileHistoryRecordStartsSnapshotAfterCorruptLatestRevision(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("failed to open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	store := &fileHistoryStore{db: db}
+	if err := store.init(); err != nil {
+		t.Fatalf("failed to init store: %v", err)
+	}
+
+	cfg := config.FileHistoryConfiguration{
+		Enabled:             true,
+		ZstdLevel:           3,
+		AnchorInterval:      4,
+		KeepChains:          2,
+		FileSizeCap:         1024 * 1024,
+		PerFileDiskBudget:   1024 * 1024,
+		PerServerDiskBudget: 1024 * 1024,
+	}
+
+	first := []byte("motd=first\n")
+	firstID, err := store.record("/server.properties", nil, first, "user-a", cfg)
+	if err != nil {
+		t.Fatalf("failed to record initial revision: %v", err)
+	}
+
+	fileID, err := findHistoryFile(db, "/server.properties")
+	if err != nil {
+		t.Fatalf("failed to find file: %v", err)
+	}
+	if _, err := db.Exec(`
+		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		fileID, firstID, time.Now().UTC().UnixMilli(), len(first), "user-a", firstID, []byte("not a zstd delta"), contentHash(first)); err != nil {
+		t.Fatalf("failed to insert corrupt revision: %v", err)
+	}
+
+	after := []byte("motd=recovered\n")
+	recoveredID, err := store.record("/server.properties", first, after, "user-b", cfg)
+	if err != nil {
+		t.Fatalf("failed to record after corrupt latest revision: %v", err)
+	}
+
+	content, err := reconstructHistoryRevision(db, recoveredID, cfg.ZstdLevel)
+	if err != nil {
+		t.Fatalf("failed to reconstruct recovered revision: %v", err)
+	}
+	if !bytes.Equal(content, after) {
+		t.Fatal("recovered revision content does not match")
 	}
 }
