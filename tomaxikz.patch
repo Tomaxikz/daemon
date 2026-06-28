@@ -868,6 +868,134 @@ index 065afc22956b1b272cc5577da627787a16722891..c8167524d3080d4abb410cac4ad76204
 -	de.modeType = 0
 -	de.dirfd = 0
 -}
+diff --git a/router/middleware/middleware.go b/router/middleware/middleware.go
+index 190871149a34778f688b62a62f2ca093614809c7..d999eb2ee598b488ad5a6da6cd91adc08e5a77c1 100644
+--- a/router/middleware/middleware.go
++++ b/router/middleware/middleware.go
+@@ -102,10 +102,20 @@ func SetAccessControlHeaders() gin.HandlerFunc {
+ 		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+ 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")
+ 
++		if isStreamDownloadRequest(c) {
++			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
++			c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
++			c.Header("Vary", "Origin, Access-Control-Request-Headers")
++		}
++
+ 		// CORS for Private Networks (RFC1918)
+ 		// @see https://developer.chrome.com/blog/private-network-access-update/?utm_source=devtools
+ 		if allowPrivateNetwork {
+-			c.Header("Access-Control-Request-Private-Network", "true")
++			if isStreamDownloadRequest(c) {
++				c.Header("Access-Control-Allow-Private-Network", "true")
++			} else {
++				c.Header("Access-Control-Request-Private-Network", "true")
++			}
+ 		}
+ 
+ 		// Maximum age allowable under Chromium v76 is 2 hours, so just use that since
+@@ -136,6 +146,10 @@ func SetAccessControlHeaders() gin.HandlerFunc {
+ 	}
+ }
+ 
++func isStreamDownloadRequest(c *gin.Context) bool {
++	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
++}
++
+ // ServerExists will ensure that the requested server exists in this setup.
+ // Returns a 404 if we cannot locate it. If the server is found it is set into
+ // the request context, and the logger for the context is also updated to include
+diff --git a/router/middleware/middleware_test.go b/router/middleware/middleware_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..56c478cd7bc74fe6adc8e570371215e3eb515e3e
+--- /dev/null
++++ b/router/middleware/middleware_test.go
+@@ -0,0 +1,85 @@
++package middleware
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/config"
++)
++
++func TestSetAccessControlHeadersAllowsRangeStreaming(t *testing.T) {
++	config.Set(&config.Configuration{
++		PanelLocation:           "https://panel.example.com",
++		AllowedOrigins:          []string{"https://cdn.example.com"},
++		AllowCORSPrivateNetwork: true,
++		AuthenticationToken:     "token",
++		AuthenticationTokenId:   "token-id",
++	})
++
++	gin.SetMode(gin.TestMode)
++	router := gin.New()
++	router.Use(SetAccessControlHeaders())
++	router.GET("/download/stream", func(c *gin.Context) {
++		c.Status(http.StatusNoContent)
++	})
++	router.GET("/download/file", func(c *gin.Context) {
++		c.Status(http.StatusNoContent)
++	})
++
++	t.Run("stream route exposes range headers", func(t *testing.T) {
++		request := httptest.NewRequest(http.MethodOptions, "/download/stream", nil)
++		request.Header.Set("Origin", "https://cdn.example.com")
++		request.Header.Set("Access-Control-Request-Headers", "range")
++		recorder := httptest.NewRecorder()
++
++		router.ServeHTTP(recorder, request)
++
++		if recorder.Code != http.StatusNoContent {
++			t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "https://cdn.example.com" {
++			t.Fatalf("expected allowed origin to match request origin, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Range") {
++			t.Fatalf("expected Range in allowed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "If-Range") {
++			t.Fatalf("expected If-Range in allowed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Content-Range") {
++			t.Fatalf("expected Content-Range in exposed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Last-Modified") {
++			t.Fatalf("expected Last-Modified in exposed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
++			t.Fatalf("expected private network CORS header, got %q", got)
++		}
++	})
++
++	t.Run("download route keeps default headers", func(t *testing.T) {
++		request := httptest.NewRequest(http.MethodOptions, "/download/file", nil)
++		request.Header.Set("Origin", "https://cdn.example.com")
++		request.Header.Set("Access-Control-Request-Headers", "range")
++		recorder := httptest.NewRecorder()
++
++		router.ServeHTTP(recorder, request)
++
++		if recorder.Code != http.StatusNoContent {
++			t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); strings.Contains(got, "Range") {
++			t.Fatalf("expected default headers without Range, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); got != "" {
++			t.Fatalf("expected no exposed headers on normal download route, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "" {
++			t.Fatalf("expected no stream private network header, got %q", got)
++		}
++	})
++}
 diff --git a/router/nsm_router.go b/router/nsm_router.go
 new file mode 100644
 index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e62970dfc
@@ -951,17 +1079,24 @@ index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..69b4a96f0704f17087e66d7ad70aef2d9fedfeaf
+index 0000000000000000000000000000000000000000..9afddc7af0c83cd106b628acee1eeb17b6471949
 --- /dev/null
 +++ b/router/router_cdn_stream.go
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,48 @@
 +package router
 +
-+import "github.com/gin-gonic/gin"
++import (
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/router/tokens"
++)
 +
 +// Handles streaming a specific file with HTTP Range support.
 +func getDownloadStream(c *gin.Context) {
-+	df, ok := getTokenDownloadFile(c)
++	df, ok := getTokenStreamFile(c)
 +	if !ok {
 +		return
 +	}
@@ -969,67 +1104,39 @@ index 0000000000000000000000000000000000000000..69b4a96f0704f17087e66d7ad70aef2d
 +
 +	serveDownloadFile(c, df, "inline", true, false)
 +}
-diff --git a/router/router_download.go b/router/router_download.go
-index ec098236f32f76a98e2afac8839992a0d8965dd9..49ef8de4d7db93258d97fd7d10a054607650af95 100644
---- a/router/router_download.go
-+++ b/router/router_download.go
-@@ -28,7 +28,7 @@ func getDownloadBackup(c *gin.Context) {
- 	}
- 
- 	// Get the server using the UUID from the token.
--	if _, ok := manager.Get(token.ServerUuid); !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.BackupDownload) {
-+	if _, ok := manager.Get(token.ServerUuid); !ok || !token.HasScope(tokens.BackupDownload) || !token.IsUniqueRequest() {
- 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
- 			"error": "The requested resource was not found on this server.",
- 		})
-@@ -74,37 +74,11 @@ func getDownloadBackup(c *gin.Context) {
- 
- // Handles downloading a specific file for a server.
- func getDownloadFile(c *gin.Context) {
--	manager := middleware.ExtractManager(c)
--	token := tokens.FilePayload{}
--	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
--		middleware.CaptureAndAbort(c, err)
-+	df, ok := getTokenDownloadFile(c)
++
++func getTokenStreamFile(c *gin.Context) (*downloadFile, bool) {
++	manager := middleware.ExtractManager(c)
++	token := tokens.FilePayload{}
++	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return nil, false
++	}
++
++	s, ok := manager.Get(token.ServerUuid)
++	if !ok || !token.HasScope(tokens.FileDownload) {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return nil, false
++	}
++
++	filePath, ok := cleanDownloadFilePath(token.FilePath)
 +	if !ok {
- 		return
- 	}
-+	defer df.Close()
- 
--	s, ok := manager.Get(token.ServerUuid)
--	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileDownload) {
--		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
--			"error": "The requested resource was not found on this server.",
--		})
--		return
--	}
--
--	f, st, err := s.Filesystem().File(token.FilePath)
--	if err != nil {
--		middleware.CaptureAndAbort(c, err)
--		return
--	}
--	defer f.Close()
--	if st.IsDir() {
--		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
--			"error": "The requested resource was not found on this server.",
--		})
--		return
--	}
--
--	c.Header("Content-Length", strconv.Itoa(int(st.Size())))
--	c.Header("Content-Disposition", "attachment; filename="+strconv.Quote(st.Name()))
--	c.Header("Content-Type", "application/octet-stream")
--
--	_, _ = bufio.NewReader(f).WriteTo(c.Writer)
-+	serveDownloadFile(c, df, "attachment", false, true)
- }
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++			"error": "Invalid file path.",
++		})
++		return nil, false
++	}
++
++	return openDownloadFile(c, s.Filesystem(), filePath)
++}
 diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..4d21e8d700f6b5179324a509b72cc739525443aa
+index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828f18c68dd
 --- /dev/null
 +++ b/router/router_download_helpers.go
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,206 @@
 +package router
 +
 +import (
@@ -1049,7 +1156,6 @@ index 0000000000000000000000000000000000000000..4d21e8d700f6b5179324a509b72cc739
 +
 +	"github.com/pterodactyl/wings/internal/ufs"
 +	"github.com/pterodactyl/wings/router/middleware"
-+	"github.com/pterodactyl/wings/router/tokens"
 +	serverfs "github.com/pterodactyl/wings/server/filesystem"
 +)
 +
@@ -1060,33 +1166,6 @@ index 0000000000000000000000000000000000000000..4d21e8d700f6b5179324a509b72cc739
 +
 +func (df *downloadFile) Close() error {
 +	return df.file.Close()
-+}
-+
-+func getTokenDownloadFile(c *gin.Context) (*downloadFile, bool) {
-+	manager := middleware.ExtractManager(c)
-+	token := tokens.FilePayload{}
-+	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
-+		middleware.CaptureAndAbort(c, err)
-+		return nil, false
-+	}
-+
-+	s, ok := manager.Get(token.ServerUuid)
-+	if !ok || !token.HasScope(tokens.FileDownload) || !token.IsUniqueRequest() {
-+		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-+			"error": "The requested resource was not found on this server.",
-+		})
-+		return nil, false
-+	}
-+
-+	filePath, ok := cleanDownloadFilePath(token.FilePath)
-+	if !ok {
-+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-+			"error": "Invalid file path.",
-+		})
-+		return nil, false
-+	}
-+
-+	return openDownloadFile(c, s.Filesystem(), filePath)
 +}
 +
 +func openDownloadFile(c *gin.Context, fs *serverfs.Filesystem, filePath string) (*downloadFile, bool) {
@@ -1154,6 +1233,9 @@ index 0000000000000000000000000000000000000000..4d21e8d700f6b5179324a509b72cc739
 +	c.Header("Content-Type", downloadContentType(df, inline))
 +	c.Header("ETag", downloadETag(df.info))
 +	c.Header("X-Content-Type-Options", "nosniff")
++	if inline {
++		c.Header("Cross-Origin-Resource-Policy", "cross-origin")
++	}
 +
 +	content := io.ReadSeeker(df.file)
 +	if fixedSize {

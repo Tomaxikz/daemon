@@ -1,0 +1,5148 @@
+diff --git a/config/config.go b/config/config.go
+index a83936d882d9b13e7c8b063941856759d78acb40..b976cdd3917dc600763f2d8330b3c60bd1b8e5c3 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -138,6 +138,9 @@ type SystemConfiguration struct {
+ 	// Directory where local backups will be stored on the machine.
+ 	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`
+ 
++	// FileHistory controls bounded per-file revision storage for panel file edits.
++	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
++
+ 	// TmpDirectory specifies where temporary files for Pterodactyl installation processes
+ 	// should be created. This supports environments running docker-in-docker.
+ 	TmpDirectory string `default:"/tmp/pterodactyl" json:"-" yaml:"tmp_directory"`
+@@ -255,6 +258,16 @@ type SystemConfiguration struct {
+ 	OpenatMode string `default:"auto" yaml:"openat_mode"`
+ }
+ 
++type FileHistoryConfiguration struct {
++	Enabled             bool   `default:"true" yaml:"enabled"`
++	ZstdLevel           int    `default:"12" yaml:"zstd_level"`
++	AnchorInterval      uint64 `default:"4" yaml:"anchor_interval"`
++	KeepChains          uint64 `default:"2" yaml:"keep_chains"`
++	FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
++	PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
++	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
++}
++
+ type CrashDetection struct {
+ 	// CrashDetectionEnabled sets if crash detection is enabled globally for all servers on this node.
+ 	CrashDetectionEnabled bool `default:"true" yaml:"enabled"`
+diff --git a/environment/docker/client_accessor.go b/environment/docker/client_accessor.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f543654187eee676
+--- /dev/null
++++ b/environment/docker/client_accessor.go
+@@ -0,0 +1,7 @@
++package docker
++
++import "github.com/docker/docker/client"
++
++func (e *Environment) Client() *client.Client {
++	return e.client
++}
+diff --git a/router/middleware/middleware.go b/router/middleware/middleware.go
+index 190871149a34778f688b62a62f2ca093614809c7..d999eb2ee598b488ad5a6da6cd91adc08e5a77c1 100644
+--- a/router/middleware/middleware.go
++++ b/router/middleware/middleware.go
+@@ -102,10 +102,20 @@ func SetAccessControlHeaders() gin.HandlerFunc {
+ 		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+ 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")
+ 
++		if isStreamDownloadRequest(c) {
++			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
++			c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
++			c.Header("Vary", "Origin, Access-Control-Request-Headers")
++		}
++
+ 		// CORS for Private Networks (RFC1918)
+ 		// @see https://developer.chrome.com/blog/private-network-access-update/?utm_source=devtools
+ 		if allowPrivateNetwork {
+-			c.Header("Access-Control-Request-Private-Network", "true")
++			if isStreamDownloadRequest(c) {
++				c.Header("Access-Control-Allow-Private-Network", "true")
++			} else {
++				c.Header("Access-Control-Request-Private-Network", "true")
++			}
+ 		}
+ 
+ 		// Maximum age allowable under Chromium v76 is 2 hours, so just use that since
+@@ -136,6 +146,10 @@ func SetAccessControlHeaders() gin.HandlerFunc {
+ 	}
+ }
+ 
++func isStreamDownloadRequest(c *gin.Context) bool {
++	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
++}
++
+ // ServerExists will ensure that the requested server exists in this setup.
+ // Returns a 404 if we cannot locate it. If the server is found it is set into
+ // the request context, and the logger for the context is also updated to include
+diff --git a/router/middleware/middleware_test.go b/router/middleware/middleware_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..56c478cd7bc74fe6adc8e570371215e3eb515e3e
+--- /dev/null
++++ b/router/middleware/middleware_test.go
+@@ -0,0 +1,85 @@
++package middleware
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/config"
++)
++
++func TestSetAccessControlHeadersAllowsRangeStreaming(t *testing.T) {
++	config.Set(&config.Configuration{
++		PanelLocation:           "https://panel.example.com",
++		AllowedOrigins:          []string{"https://cdn.example.com"},
++		AllowCORSPrivateNetwork: true,
++		AuthenticationToken:     "token",
++		AuthenticationTokenId:   "token-id",
++	})
++
++	gin.SetMode(gin.TestMode)
++	router := gin.New()
++	router.Use(SetAccessControlHeaders())
++	router.GET("/download/stream", func(c *gin.Context) {
++		c.Status(http.StatusNoContent)
++	})
++	router.GET("/download/file", func(c *gin.Context) {
++		c.Status(http.StatusNoContent)
++	})
++
++	t.Run("stream route exposes range headers", func(t *testing.T) {
++		request := httptest.NewRequest(http.MethodOptions, "/download/stream", nil)
++		request.Header.Set("Origin", "https://cdn.example.com")
++		request.Header.Set("Access-Control-Request-Headers", "range")
++		recorder := httptest.NewRecorder()
++
++		router.ServeHTTP(recorder, request)
++
++		if recorder.Code != http.StatusNoContent {
++			t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Origin"); got != "https://cdn.example.com" {
++			t.Fatalf("expected allowed origin to match request origin, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Range") {
++			t.Fatalf("expected Range in allowed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "If-Range") {
++			t.Fatalf("expected If-Range in allowed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Content-Range") {
++			t.Fatalf("expected Content-Range in exposed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Last-Modified") {
++			t.Fatalf("expected Last-Modified in exposed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
++			t.Fatalf("expected private network CORS header, got %q", got)
++		}
++	})
++
++	t.Run("download route keeps default headers", func(t *testing.T) {
++		request := httptest.NewRequest(http.MethodOptions, "/download/file", nil)
++		request.Header.Set("Origin", "https://cdn.example.com")
++		request.Header.Set("Access-Control-Request-Headers", "range")
++		recorder := httptest.NewRecorder()
++
++		router.ServeHTTP(recorder, request)
++
++		if recorder.Code != http.StatusNoContent {
++			t.Fatalf("expected status %d, got %d", http.StatusNoContent, recorder.Code)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); strings.Contains(got, "Range") {
++			t.Fatalf("expected default headers without Range, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); got != "" {
++			t.Fatalf("expected no exposed headers on normal download route, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "" {
++			t.Fatalf("expected no stream private network header, got %q", got)
++		}
++	})
++}
+diff --git a/router/router.go b/router/router.go
+index bdac76065242c834f37f74a68fdba2211df96125..432bed6c8797998b24d53d8587f9f5754fef1b2b 100644
+--- a/router/router.go
++++ b/router/router.go
+@@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 	// These routes use signed URLs to validate access to the resource being requested.
+ 	router.GET("/download/backup", getDownloadBackup)
+ 	router.GET("/download/file", getDownloadFile)
++	router.GET("/download/stream", getDownloadStream)
+ 	router.POST("/upload/file", postServerUploadFiles)
+ 
+ 	// This route is special it sits above all the other requests because we are
+@@ -77,6 +78,13 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 		server.DELETE("", deleteServer)
+ 
+ 		server.GET("/logs", getServerLogs)
++		git := server.Group("/git")
++		{
++			git.GET("/status", getServerGitStatus)
++			git.POST("/clone", postServerGitClone)
++			git.POST("/pull", postServerGitPull)
++			git.POST("/diff", postServerGitDiff)
++		}
+ 		server.POST("/power", postServerPower)
+ 		server.POST("/commands", postServerCommands)
+ 		server.POST("/install", postServerInstall)
+@@ -92,6 +100,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 		files := server.Group("/files")
+ 		{
+ 			files.GET("/contents", getServerFileContents)
++			files.GET("/revisions", getServerFileRevisions)
++			files.GET("/revisions/:revision", getServerFileRevision)
++			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
++			files.GET("/search", getServerFilesSearch)
++			files.GET("/archive/list", getServerArchiveList)
++			files.POST("/archive/extract", postServerArchiveExtract)
+ 			files.GET("/list-directory", getServerListDirectory)
+ 			files.PUT("/rename", putServerRenameFiles)
+ 			files.POST("/copy", postServerCopyFile)
+@@ -101,6 +115,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 			files.POST("/compress", postServerCompressFiles)
+ 			files.POST("/decompress", postServerDecompressFiles)
+ 			files.POST("/chmod", postServerChmodFile)
++			files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)
+ 
+ 			files.GET("/pull", middleware.RemoteDownloadEnabled(), getServerPullingFiles)
+ 			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
+diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..9afddc7af0c83cd106b628acee1eeb17b6471949
+--- /dev/null
++++ b/router/router_cdn_stream.go
+@@ -0,0 +1,48 @@
++package router
++
++import (
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/router/tokens"
++)
++
++// Handles streaming a specific file with HTTP Range support.
++func getDownloadStream(c *gin.Context) {
++	df, ok := getTokenStreamFile(c)
++	if !ok {
++		return
++	}
++	defer df.Close()
++
++	serveDownloadFile(c, df, "inline", true, false)
++}
++
++func getTokenStreamFile(c *gin.Context) (*downloadFile, bool) {
++	manager := middleware.ExtractManager(c)
++	token := tokens.FilePayload{}
++	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return nil, false
++	}
++
++	s, ok := manager.Get(token.ServerUuid)
++	if !ok || !token.HasScope(tokens.FileDownload) {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return nil, false
++	}
++
++	filePath, ok := cleanDownloadFilePath(token.FilePath)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++			"error": "Invalid file path.",
++		})
++		return nil, false
++	}
++
++	return openDownloadFile(c, s.Filesystem(), filePath)
++}
+diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828f18c68dd
+--- /dev/null
++++ b/router/router_download_helpers.go
+@@ -0,0 +1,206 @@
++package router
++
++import (
++	"errors"
++	"io"
++	"mime"
++	"net/http"
++	pathpkg "path"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"unicode/utf8"
++
++	"github.com/gabriel-vasile/mimetype"
++	"github.com/gin-gonic/gin"
++	"golang.org/x/sys/unix"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++type downloadFile struct {
++	file ufs.File
++	info ufs.FileInfo
++}
++
++func (df *downloadFile) Close() error {
++	return df.file.Close()
++}
++
++func openDownloadFile(c *gin.Context, fs *serverfs.Filesystem, filePath string) (*downloadFile, bool) {
++	info, err := fs.UnixFS().Lstat(filePath)
++	if err != nil {
++		abortDownloadFileError(c, err)
++		return nil, false
++	}
++	if info.IsDir() {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return nil, false
++	}
++	if !info.Mode().IsRegular() {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++			"error": "Cannot open files of this type.",
++		})
++		return nil, false
++	}
++
++	file, err := fs.UnixFS().OpenFile(filePath, ufs.O_RDONLY|unix.O_NONBLOCK, 0)
++	if err != nil {
++		abortDownloadFileError(c, err)
++		return nil, false
++	}
++
++	openedInfo, err := file.Stat()
++	if err != nil {
++		_ = file.Close()
++		abortDownloadFileError(c, err)
++		return nil, false
++	}
++	if openedInfo.IsDir() {
++		_ = file.Close()
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return nil, false
++	}
++	if !openedInfo.Mode().IsRegular() {
++		_ = file.Close()
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++			"error": "Cannot open files of this type.",
++		})
++		return nil, false
++	}
++
++	return &downloadFile{file: file, info: openedInfo}, true
++}
++
++func abortDownloadFileError(c *gin.Context, err error) {
++	if errors.Is(err, ufs.ErrNotExist) || errors.Is(err, ufs.ErrBadPathResolution) {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
++			"error": "The requested resource was not found on this server.",
++		})
++		return
++	}
++	middleware.CaptureAndAbort(c, err)
++}
++
++func serveDownloadFile(c *gin.Context, df *downloadFile, disposition string, inline bool, fixedSize bool) {
++	c.Header("Accept-Ranges", "bytes")
++	c.Header("Content-Disposition", disposition+"; filename="+strconv.Quote(df.info.Name()))
++	c.Header("Content-Type", downloadContentType(df, inline))
++	c.Header("ETag", downloadETag(df.info))
++	c.Header("X-Content-Type-Options", "nosniff")
++	if inline {
++		c.Header("Cross-Origin-Resource-Policy", "cross-origin")
++	}
++
++	content := io.ReadSeeker(df.file)
++	if fixedSize {
++		content = newFixedDownloadReader(df.file, df.info.Size())
++	}
++	http.ServeContent(c.Writer, c.Request, df.info.Name(), df.info.ModTime(), content)
++}
++
++func downloadContentType(df *downloadFile, inline bool) string {
++	if !inline {
++		return "application/octet-stream"
++	}
++	if contentType := mime.TypeByExtension(filepath.Ext(df.info.Name())); contentType != "" {
++		return contentType
++	}
++
++	m, err := mimetype.DetectReader(df.file)
++	_, _ = df.file.Seek(0, io.SeekStart)
++	if err == nil && m != nil {
++		return m.String()
++	}
++	return "application/octet-stream"
++}
++
++func downloadETag(info ufs.FileInfo) string {
++	return `W/"` + strconv.FormatInt(info.Size(), 16) + `-` + strconv.FormatInt(info.ModTime().UnixNano(), 16) + `"`
++}
++
++type fixedDownloadReader struct {
++	reader io.ReadSeeker
++	size   int64
++	offset int64
++}
++
++func newFixedDownloadReader(reader io.ReadSeeker, size int64) *fixedDownloadReader {
++	return &fixedDownloadReader{
++		reader: reader,
++		size:   size,
++	}
++}
++
++func (r *fixedDownloadReader) Read(p []byte) (int, error) {
++	if r.offset >= r.size {
++		return 0, io.EOF
++	}
++
++	remaining := r.size - r.offset
++	if int64(len(p)) > remaining {
++		p = p[:int(remaining)]
++	}
++
++	n, err := r.reader.Read(p)
++	if n == 0 && errors.Is(err, io.EOF) {
++		for i := range p {
++			p[i] = 0
++		}
++		r.offset += int64(len(p))
++		return len(p), nil
++	}
++
++	r.offset += int64(n)
++	return n, err
++}
++
++func (r *fixedDownloadReader) Seek(offset int64, whence int) (int64, error) {
++	var target int64
++	switch whence {
++	case io.SeekStart:
++		target = offset
++	case io.SeekCurrent:
++		target = r.offset + offset
++	case io.SeekEnd:
++		target = r.size + offset
++	default:
++		return 0, errors.New("invalid whence")
++	}
++	if target < 0 {
++		return 0, errors.New("negative position")
++	}
++	if _, err := r.reader.Seek(target, io.SeekStart); err != nil {
++		return 0, err
++	}
++	r.offset = target
++	return target, nil
++}
++
++func cleanDownloadFilePath(value string) (string, bool) {
++	value = strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
++	if value == "" || strings.Contains(value, "\x00") || !utf8.ValidString(value) || len(value) > 4096 {
++		return "", false
++	}
++	if !strings.HasPrefix(value, "/") {
++		value = "/" + value
++	}
++	for _, segment := range strings.Split(value, "/") {
++		if segment == ".." {
++			return "", false
++		}
++	}
++
++	cleaned := pathpkg.Clean(value)
++	if cleaned == "." || cleaned == "/" || !strings.HasPrefix(cleaned, "/") {
++		return "", false
++	}
++
++	return cleaned, true
++}
+diff --git a/router/router_download_helpers_test.go b/router/router_download_helpers_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..df4e9c9f38e2babfcea178d9370eb873d50f3d19
+--- /dev/null
++++ b/router/router_download_helpers_test.go
+@@ -0,0 +1,134 @@
++package router
++
++import (
++	"bytes"
++	"io"
++	"os"
++	"path/filepath"
++	"testing"
++)
++
++func TestCleanDownloadFilePath(t *testing.T) {
++	tests := []struct {
++		name string
++		in   string
++		want string
++		ok   bool
++	}{
++		{name: "relative file", in: "foo/bar.txt", want: "/foo/bar.txt", ok: true},
++		{name: "absolute file", in: "/foo/bar.txt", want: "/foo/bar.txt", ok: true},
++		{name: "backslashes", in: `foo\bar.txt`, want: "/foo/bar.txt", ok: true},
++		{name: "empty", in: "", ok: false},
++		{name: "root", in: "/", ok: false},
++		{name: "traversal", in: "/foo/../bar.txt", ok: false},
++		{name: "nul byte", in: "foo\x00bar.txt", ok: false},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got, ok := cleanDownloadFilePath(tt.in)
++			if ok != tt.ok {
++				t.Fatalf("expected ok %t, got %t", tt.ok, ok)
++			}
++			if got != tt.want {
++				t.Fatalf("expected path %q, got %q", tt.want, got)
++			}
++		})
++	}
++}
++
++func TestFixedDownloadReader(t *testing.T) {
++	t.Run("reads unchanged file", func(t *testing.T) {
++		path := filepath.Join(t.TempDir(), "download.txt")
++		if err := os.WriteFile(path, []byte("download contents"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		f, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer f.Close()
++
++		info, err := f.Stat()
++		if err != nil {
++			t.Fatal(err)
++		}
++
++		got, err := os.ReadFile(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		buf := make([]byte, len(got))
++		n, err := newFixedDownloadReader(f, info.Size()).Read(buf)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if string(buf[:n]) != string(got) {
++			t.Fatalf("expected %q, got %q", string(got), string(buf[:n]))
++		}
++	})
++
++	t.Run("caps file growth to original size", func(t *testing.T) {
++		path := filepath.Join(t.TempDir(), "download.txt")
++		if err := os.WriteFile(path, []byte("download"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		f, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer f.Close()
++
++		info, err := f.Stat()
++		if err != nil {
++			t.Fatal(err)
++		}
++		reader := newFixedDownloadReader(f, info.Size())
++
++		if err := os.WriteFile(path, []byte("download with extra bytes"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		got, err := io.ReadAll(reader)
++		if err != nil {
++			t.Fatal(err)
++		}
++		if string(got) != "download" {
++			t.Fatalf("expected %q, got %q", "download", string(got))
++		}
++	})
++
++	t.Run("pads when file shrinks before fixed size is read", func(t *testing.T) {
++		path := filepath.Join(t.TempDir(), "download.txt")
++		if err := os.WriteFile(path, []byte("download"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		f, err := os.Open(path)
++		if err != nil {
++			t.Fatal(err)
++		}
++		defer f.Close()
++
++		info, err := f.Stat()
++		if err != nil {
++			t.Fatal(err)
++		}
++		reader := newFixedDownloadReader(f, info.Size())
++
++		if err := os.WriteFile(path, []byte("down"), 0o644); err != nil {
++			t.Fatal(err)
++		}
++
++		got, err := io.ReadAll(reader)
++		if err != nil {
++			t.Fatal(err)
++		}
++		want := append([]byte("down"), bytes.Repeat([]byte{0}, 4)...)
++		if !bytes.Equal(got, want) {
++			t.Fatalf("expected %q, got %q", want, got)
++		}
++	})
++}
+diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625c32f97e0
+--- /dev/null
++++ b/router/router_server_archive_nbt.go
+@@ -0,0 +1,496 @@
++package router
++
++import (
++	"archive/tar"
++	"archive/zip"
++	"compress/gzip"
++	"errors"
++	"io"
++	"math"
++	"net/http"
++	"os"
++	"path"
++	"sort"
++	"strings"
++	"unicode/utf8"
++
++	"github.com/gin-gonic/gin"
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const (
++	betterFilesArchiveMaxEntries = 5000
++	betterFilesArchiveMaxFile    = 512 * 1024 * 1024
++	betterFilesArchiveMaxExtract = 2000
++)
++
++type betterFilesArchiveEntry struct {
++	Name             string `json:"name"`
++	Path             string `json:"path"`
++	Directory        string `json:"directory"`
++	IsDirectory      bool   `json:"is_directory"`
++	CompressedSize   uint64 `json:"compressed_size"`
++	UncompressedSize uint64 `json:"uncompressed_size"`
++	ModifiedAt       string `json:"modified_at"`
++}
++
++type betterFilesArchiveExtractSelection struct {
++	Path        string `json:"path"`
++	IsDirectory bool   `json:"is_directory"`
++}
++
++type betterFilesArchiveExtractRequest struct {
++	File        string                               `json:"file"`
++	Destination string                               `json:"destination"`
++	Entries     []betterFilesArchiveExtractSelection `json:"entries"`
++}
++
++func getServerArchiveList(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), c.Query("file"))
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive path."})
++		return
++	}
++	defer file.Close()
++
++	stat, err := file.Stat()
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	if stat.IsDir() || stat.Size() > betterFilesArchiveMaxFile {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Archive is too large or is not a file."})
++		return
++	}
++	if !betterFilesIsArchiveFile(displayPath) {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Only zip, jar, war, tar, tar.gz, and tgz archives can be viewed inline."})
++		return
++	}
++
++	entries, totalEntries, err := betterFilesListArchiveEntries(file, displayPath)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
++		return
++	}
++
++	sort.SliceStable(entries, func(i, j int) bool {
++		if entries[i].IsDirectory != entries[j].IsDirectory {
++			return entries[i].IsDirectory
++		}
++		return strings.ToLower(entries[i].Path) < strings.ToLower(entries[j].Path)
++	})
++
++	c.JSON(http.StatusOK, gin.H{
++		"file":          displayPath,
++		"entries":       entries,
++		"truncated":     totalEntries > betterFilesArchiveMaxEntries,
++		"total_entries": totalEntries,
++	})
++}
++
++func postServerArchiveExtract(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	var request betterFilesArchiveExtractRequest
++	if err := c.ShouldBindJSON(&request); err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive extraction request."})
++		return
++	}
++
++	if len(request.Entries) == 0 || len(request.Entries) > betterFilesArchiveMaxExtract {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Select between 1 and 2000 archive entries to extract."})
++		return
++	}
++
++	file, displayPath, ok := betterFilesOpenServerRegularFile(s.Filesystem(), request.File)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive path."})
++		return
++	}
++	defer file.Close()
++	destinationDisplay, ok := betterFilesResolveServerDirectory(s.Filesystem(), request.Destination, true)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid extraction destination."})
++		return
++	}
++
++	stat, err := file.Stat()
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	if stat.IsDir() || stat.Size() > betterFilesArchiveMaxFile || !betterFilesIsArchiveFile(displayPath) {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Archive is too large or is not supported."})
++		return
++	}
++
++	selections, err := betterFilesCleanArchiveSelections(request.Entries)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
++		return
++	}
++
++	count, err := betterFilesExtractArchiveEntries(s.Filesystem(), file, displayPath, destinationDisplay, selections)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
++		return
++	}
++
++	c.JSON(http.StatusOK, gin.H{
++		"file":        displayPath,
++		"destination": destinationDisplay,
++		"extracted":   count,
++	})
++}
++
++func betterFilesCleanServerPath(raw string, allowRoot bool) (string, bool) {
++	cleaned := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
++	if cleaned == "" || strings.Contains(cleaned, "\x00") || !utf8.ValidString(cleaned) || len(cleaned) > 4096 {
++		return "", false
++	}
++	if !strings.HasPrefix(cleaned, "/") {
++		cleaned = "/" + cleaned
++	}
++	for _, segment := range strings.Split(cleaned, "/") {
++		if segment == ".." {
++			return "", false
++		}
++	}
++
++	displayPath := path.Clean(cleaned)
++	if displayPath == "." || (!allowRoot && displayPath == "/") || !strings.HasPrefix(displayPath, "/") {
++		return "", false
++	}
++
++	return displayPath, true
++}
++
++func betterFilesOpenServerRegularFile(fs *serverfs.Filesystem, raw string) (ufs.File, string, bool) {
++	displayPath, ok := betterFilesCleanServerPath(raw, false)
++	if !ok {
++		return nil, "", false
++	}
++
++	file, stat, err := fs.File(displayPath)
++	if err != nil {
++		return nil, "", false
++	}
++	if stat.IsDir() || !stat.Mode().IsRegular() {
++		file.Close()
++		return nil, "", false
++	}
++	return file, displayPath, true
++}
++
++func betterFilesResolveServerDirectory(fs *serverfs.Filesystem, raw string, mustExist bool) (string, bool) {
++	displayPath, ok := betterFilesCleanServerPath(raw, true)
++	if !ok {
++		return "", false
++	}
++
++	stat, err := fs.Stat(displayPath)
++	if err != nil {
++		return displayPath, !mustExist
++	}
++	if !stat.IsDir() {
++		return "", false
++	}
++
++	return displayPath, true
++}
++
++func betterFilesIsArchiveFile(value string) bool {
++	return betterFilesIsZipFile(value) || betterFilesIsTarFile(value)
++}
++
++func betterFilesIsZipFile(value string) bool {
++	ext := strings.ToLower(path.Ext(value))
++	return ext == ".zip" || ext == ".jar" || ext == ".war"
++}
++
++func betterFilesIsTarFile(value string) bool {
++	lower := strings.ToLower(value)
++	return strings.HasSuffix(lower, ".tar") || strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
++}
++
++func betterFilesListArchiveEntries(file ufs.File, displayPath string) ([]betterFilesArchiveEntry, int, error) {
++	if betterFilesIsZipFile(displayPath) {
++		return betterFilesListZipEntries(file)
++	}
++	if betterFilesIsTarFile(displayPath) {
++		return betterFilesListTarEntries(file, displayPath)
++	}
++	return nil, 0, errors.New("unsupported archive type")
++}
++
++func betterFilesListZipEntries(file ufs.File) ([]betterFilesArchiveEntry, int, error) {
++	stat, err := file.Stat()
++	if err != nil {
++		return nil, 0, err
++	}
++	reader, err := zip.NewReader(file, stat.Size())
++	if err != nil {
++		return nil, 0, errors.New("could not open zip archive")
++	}
++
++	entryCapacity := len(reader.File)
++	if entryCapacity > betterFilesArchiveMaxEntries {
++		entryCapacity = betterFilesArchiveMaxEntries
++	}
++	entries := make([]betterFilesArchiveEntry, 0, entryCapacity)
++	for idx, entry := range reader.File {
++		if idx >= betterFilesArchiveMaxEntries {
++			break
++		}
++		normalized, ok := betterFilesCleanArchiveEntryPath(entry.Name)
++		if !ok {
++			continue
++		}
++
++		entries = append(entries, betterFilesArchiveEntry{
++			Name:             path.Base(normalized),
++			Path:             "/" + normalized,
++			Directory:        betterFilesArchiveEntryDirectory(normalized),
++			IsDirectory:      entry.FileInfo().IsDir(),
++			CompressedSize:   uint64(entry.CompressedSize64),
++			UncompressedSize: uint64(entry.UncompressedSize64),
++			ModifiedAt:       entry.Modified.Format("2006-01-02T15:04:05Z07:00"),
++		})
++	}
++
++	return entries, len(reader.File), nil
++}
++
++func betterFilesListTarEntries(file ufs.File, displayPath string) ([]betterFilesArchiveEntry, int, error) {
++	if _, err := file.Seek(0, io.SeekStart); err != nil {
++		return nil, 0, err
++	}
++	var archiveReader io.Reader = file
++	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") || strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
++		gzipReader, err := gzip.NewReader(file)
++		if err != nil {
++			return nil, 0, errors.New("could not open gzip archive")
++		}
++		defer gzipReader.Close()
++		archiveReader = gzipReader
++	}
++
++	tarReader := tar.NewReader(archiveReader)
++	entries := make([]betterFilesArchiveEntry, 0, 128)
++	totalEntries := 0
++	for {
++		header, err := tarReader.Next()
++		if errors.Is(err, io.EOF) {
++			break
++		}
++		if err != nil {
++			return nil, totalEntries, errors.New("could not read tar archive")
++		}
++		totalEntries++
++		if totalEntries > betterFilesArchiveMaxEntries {
++			continue
++		}
++
++		normalized, ok := betterFilesCleanArchiveEntryPath(header.Name)
++		if !ok {
++			continue
++		}
++		isDirectory := header.FileInfo().IsDir() || header.Typeflag == tar.TypeDir
++		uncompressedSize := uint64(0)
++		if header.Size > 0 {
++			uncompressedSize = uint64(header.Size)
++		}
++
++		entries = append(entries, betterFilesArchiveEntry{
++			Name:             path.Base(normalized),
++			Path:             "/" + normalized,
++			Directory:        betterFilesArchiveEntryDirectory(normalized),
++			IsDirectory:      isDirectory,
++			CompressedSize:   0,
++			UncompressedSize: uncompressedSize,
++			ModifiedAt:       header.ModTime.Format("2006-01-02T15:04:05Z07:00"),
++		})
++	}
++
++	return entries, totalEntries, nil
++}
++
++func betterFilesCleanArchiveEntryPath(value string) (string, bool) {
++	entryPath := path.Clean(strings.ReplaceAll(value, "\\", "/"))
++	entryPath = strings.TrimPrefix(entryPath, "/")
++	if entryPath == "." || entryPath == "" || strings.HasPrefix(entryPath, "../") || strings.Contains(entryPath, "/../") {
++		return "", false
++	}
++	return entryPath, true
++}
++
++func betterFilesArchiveEntryDirectory(entryPath string) string {
++	directory := path.Dir(entryPath)
++	if directory == "." {
++		return "/"
++	}
++	return "/" + directory
++}
++
++func betterFilesCleanArchiveSelections(entries []betterFilesArchiveExtractSelection) ([]betterFilesArchiveExtractSelection, error) {
++	selections := make([]betterFilesArchiveExtractSelection, 0, len(entries))
++	seen := map[string]struct{}{}
++	for _, entry := range entries {
++		cleaned, ok := betterFilesCleanArchiveEntryPath(entry.Path)
++		if !ok {
++			return nil, errors.New("Archive selection contains an invalid path.")
++		}
++		key := cleaned
++		if entry.IsDirectory {
++			key += "/"
++		}
++		if _, exists := seen[key]; exists {
++			continue
++		}
++		seen[key] = struct{}{}
++		selections = append(selections, betterFilesArchiveExtractSelection{
++			Path:        cleaned,
++			IsDirectory: entry.IsDirectory,
++		})
++	}
++	return selections, nil
++}
++
++func betterFilesArchiveSelectionMatches(entryPath string, selections []betterFilesArchiveExtractSelection) bool {
++	for _, selection := range selections {
++		if selection.IsDirectory {
++			if entryPath == selection.Path || strings.HasPrefix(entryPath, selection.Path+"/") {
++				return true
++			}
++			continue
++		}
++		if entryPath == selection.Path {
++			return true
++		}
++	}
++	return false
++}
++
++type betterFilesArchiveWritableFilesystem interface {
++	Write(string, io.Reader, int64, os.FileMode) error
++	CreateDirectory(string, string) error
++}
++
++func betterFilesExtractArchiveEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
++	if betterFilesIsZipFile(displayPath) {
++		return betterFilesExtractZipEntries(fs, file, destination, selections)
++	}
++	if betterFilesIsTarFile(displayPath) {
++		return betterFilesExtractTarEntries(fs, file, displayPath, destination, selections)
++	}
++	return 0, errors.New("unsupported archive type")
++}
++
++func betterFilesExtractOutputPath(destination string, entryPath string) string {
++	return path.Clean(path.Join(destination, entryPath))
++}
++
++func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
++	stat, err := file.Stat()
++	if err != nil {
++		return 0, err
++	}
++	reader, err := zip.NewReader(file, stat.Size())
++	if err != nil {
++		return 0, errors.New("could not open zip archive")
++	}
++
++	extracted := 0
++	for _, entry := range reader.File {
++		normalized, ok := betterFilesCleanArchiveEntryPath(entry.Name)
++		if !ok || !betterFilesArchiveSelectionMatches(normalized, selections) {
++			continue
++		}
++		outputPath := betterFilesExtractOutputPath(destination, normalized)
++		if entry.FileInfo().IsDir() {
++			if err := fs.CreateDirectory(path.Base(outputPath), path.Dir(outputPath)); err != nil {
++				return extracted, err
++			}
++			continue
++		}
++
++		file, err := entry.Open()
++		if err != nil {
++			return extracted, err
++		}
++		if entry.UncompressedSize64 > uint64(math.MaxInt64) {
++			file.Close()
++			return extracted, errors.New("Archive entry is too large to extract.")
++		}
++		err = fs.Write(outputPath, file, int64(entry.UncompressedSize64), entry.FileInfo().Mode().Perm())
++		file.Close()
++		if err != nil {
++			return extracted, err
++		}
++		extracted++
++		if extracted > betterFilesArchiveMaxExtract {
++			return extracted, errors.New("Too many files matched this extraction request.")
++		}
++	}
++
++	if extracted == 0 {
++		return 0, errors.New("No matching archive entries were found.")
++	}
++	return extracted, nil
++}
++
++func betterFilesExtractTarEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
++	if _, err := file.Seek(0, io.SeekStart); err != nil {
++		return 0, err
++	}
++	var archiveReader io.Reader = file
++	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") || strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
++		gzipReader, err := gzip.NewReader(file)
++		if err != nil {
++			return 0, errors.New("could not open gzip archive")
++		}
++		defer gzipReader.Close()
++		archiveReader = gzipReader
++	}
++
++	tarReader := tar.NewReader(archiveReader)
++	extracted := 0
++	for {
++		header, err := tarReader.Next()
++		if errors.Is(err, io.EOF) {
++			break
++		}
++		if err != nil {
++			return extracted, errors.New("could not read tar archive")
++		}
++
++		normalized, ok := betterFilesCleanArchiveEntryPath(header.Name)
++		if !ok || !betterFilesArchiveSelectionMatches(normalized, selections) {
++			continue
++		}
++		outputPath := betterFilesExtractOutputPath(destination, normalized)
++		if header.FileInfo().IsDir() || header.Typeflag == tar.TypeDir {
++			if err := fs.CreateDirectory(path.Base(outputPath), path.Dir(outputPath)); err != nil {
++				return extracted, err
++			}
++			continue
++		}
++		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
++			continue
++		}
++		if err := fs.Write(outputPath, tarReader, header.Size, header.FileInfo().Mode().Perm()); err != nil {
++			return extracted, err
++		}
++		extracted++
++		if extracted > betterFilesArchiveMaxExtract {
++			return extracted, errors.New("Too many files matched this extraction request.")
++		}
++	}
++
++	if extracted == 0 {
++		return 0, errors.New("No matching archive entries were found.")
++	}
++	return extracted, nil
++}
+diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7df283e95b
+--- /dev/null
++++ b/router/router_server_betterfiles_collaboration.go
+@@ -0,0 +1,39 @@
++package router
++
++import (
++	"net/http"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/router/websocket"
++)
++
++type betterFilesCollaborationRevokeRequest struct {
++	Mode   string `json:"mode"`
++	Reason string `json:"reason"`
++}
++
++func postServerBetterFilesCollaborationRevoke(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	var request betterFilesCollaborationRevokeRequest
++	_ = c.ShouldBindJSON(&request)
++
++	mode := strings.TrimSpace(request.Mode)
++	if mode != "edit" && mode != "view" {
++		mode = ""
++	}
++
++	reason := strings.TrimSpace(request.Reason)
++	if reason == "" {
++		reason = "Live collaboration was revoked by an administrator."
++	}
++	if len(reason) > 160 {
++		reason = reason[:160]
++	}
++
++	closed := websocket.CloseBetterFilesCollaborationSessions(s.ID(), mode, reason)
++	c.JSON(http.StatusOK, gin.H{"closed": closed})
++}
+diff --git a/router/router_server_files.go b/router/router_server_files.go
+index 88acfdb77307fd12253099871c30b8f1f1189166..cfefe508f7bf45015bdcc15c99a2f7673d108264 100644
+--- a/router/router_server_files.go
++++ b/router/router_server_files.go
+@@ -138,6 +138,7 @@ func putServerRenameFiles(c *gin.Context) {
+ 					}
+ 					return err
+ 				}
++				s.RenameFileHistory(pf, pt)
+ 				return nil
+ 			}
+ 		})
+@@ -214,7 +215,11 @@ func postServerDeleteFiles(c *gin.Context) {
+ 			case <-ctx.Done():
+ 				return ctx.Err()
+ 			default:
+-				return s.Filesystem().Delete(pi)
++				if err := s.Filesystem().Delete(pi); err != nil {
++					return err
++				}
++				s.ForgetFileHistory(pi)
++				return nil
+ 			}
+ 		})
+ 	}
+@@ -247,6 +252,12 @@ func postServerWriteFile(c *gin.Context) {
+ 		return
+ 	}
+ 
++	var before []byte
++	trackRevision := server.ShouldRecordFileHistory(f, uint64(c.Request.ContentLength))
++	if trackRevision {
++		before, _ = captureFileRevisionContent(s, f)
++	}
++
+ 	if err := s.Filesystem().Write(f, c.Request.Body, c.Request.ContentLength, 0o644); err != nil {
+ 		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
+ 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+@@ -259,6 +270,18 @@ func postServerWriteFile(c *gin.Context) {
+ 		return
+ 	}
+ 
++	if trackRevision {
++		after, ok := captureFileRevisionContent(s, f)
++		if ok {
++			revisionID, err := s.RecordFileRevision(f, before, after, strings.TrimSpace(c.Query("user")))
++			if err != nil {
++				s.Log().WithError(err).WithField("path", f).Warn("failed to record file revision")
++			} else if revisionID > 0 {
++				c.Header("X-File-Revision-Id", strconv.FormatInt(revisionID, 10))
++			}
++		}
++	}
++
+ 	c.Status(http.StatusNoContent)
+ }
+ 
+diff --git a/router/router_server_files_revisions.go b/router/router_server_files_revisions.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d3be75f7b
+--- /dev/null
++++ b/router/router_server_files_revisions.go
+@@ -0,0 +1,146 @@
++package router
++
++import (
++	"bytes"
++	"database/sql"
++	"io"
++	"net/http"
++	"strconv"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/server"
++	"github.com/pterodactyl/wings/server/filesystem"
++)
++
++func getServerFileRevisions(c *gin.Context) {
++	s := ExtractServer(c)
++	filePath := normalizeFileRevisionPath(c.Query("file"))
++	if filePath == "/" {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid file path."})
++		return
++	}
++	if err := s.Filesystem().IsIgnored(filePath); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	revisions, err := s.ListFileRevisions(filePath)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	c.JSON(http.StatusOK, gin.H{"revisions": revisions})
++}
++
++func getServerFileRevision(c *gin.Context) {
++	s := ExtractServer(c)
++	revisionID, ok := parseFileRevisionID(c)
++	if !ok {
++		return
++	}
++	content, filePath, err := s.FileRevisionContent(revisionID)
++	if err != nil {
++		abortFileRevisionError(c, err)
++		return
++	}
++	if err := s.Filesystem().IsIgnored(filePath); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	c.Header("Content-Length", strconv.Itoa(len(content)))
++	c.Header("X-File-Path", filePath)
++	c.Data(http.StatusOK, "application/octet-stream", content)
++}
++
++func postServerFileRevisionRestore(c *gin.Context) {
++	s := ExtractServer(c)
++	revisionID, ok := parseFileRevisionID(c)
++	if !ok {
++		return
++	}
++	content, filePath, err := s.FileRevisionContent(revisionID)
++	if err != nil {
++		abortFileRevisionError(c, err)
++		return
++	}
++	if err := s.Filesystem().IsIgnored(filePath); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	before, _ := captureFileRevisionContent(s, filePath)
++	if err := s.Filesystem().Write(filePath, bytes.NewReader(content), int64(len(content)), 0o644); err != nil {
++		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
++			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++				"error": "Cannot restore revision, name conflicts with an existing directory by the same name.",
++			})
++			return
++		}
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	restored, ok := captureFileRevisionContent(s, filePath)
++	if ok {
++		user := strings.TrimSpace(c.Query("user"))
++		if _, err := s.RecordFileRevision(filePath, before, restored, user); err != nil {
++			s.Log().WithError(err).WithField("path", filePath).Warn("failed to record restored file revision")
++		}
++	}
++
++	c.JSON(http.StatusOK, gin.H{
++		"file":        filePath,
++		"revision_id": revisionID,
++		"restored":    true,
++	})
++}
++
++func parseFileRevisionID(c *gin.Context) (int64, bool) {
++	id, err := strconv.ParseInt(c.Param("revision"), 10, 64)
++	if err != nil || id <= 0 {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid file revision."})
++		return 0, false
++	}
++	return id, true
++}
++
++func abortFileRevisionError(c *gin.Context, err error) {
++	if err == sql.ErrNoRows {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "File revision was not found."})
++		return
++	}
++	middleware.CaptureAndAbort(c, err)
++}
++
++func normalizeFileRevisionPath(value string) string {
++	value = "/" + strings.TrimLeft(value, "/")
++	if value == "/." {
++		return "/"
++	}
++	return value
++}
++
++func captureFileRevisionContent(s *server.Server, filePath string) ([]byte, bool) {
++	limit := int64(config.Get().System.FileHistory.FileSizeCap)
++	if limit <= 0 {
++		return nil, false
++	}
++
++	f, stat, err := s.Filesystem().File(filePath)
++	if err != nil {
++		return nil, false
++	}
++	defer f.Close()
++	if stat.IsDir() || stat.Size() < 0 || stat.Size() > limit || !server.ShouldRecordFileHistory(filePath, uint64(stat.Size())) {
++		return nil, false
++	}
++	content, err := io.ReadAll(io.LimitReader(f, limit+1))
++	if err != nil || int64(len(content)) > limit {
++		return nil, false
++	}
++	return content, true
++}
+diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d31286d521da9
+--- /dev/null
++++ b/router/router_server_files_search.go
+@@ -0,0 +1,611 @@
++package router
++
++import (
++	"bytes"
++	"context"
++	"io"
++	"net/http"
++	"path"
++	"runtime"
++	"strconv"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"time"
++	"unicode/utf8"
++
++	"github.com/gin-gonic/gin"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++type FileSearchResult struct {
++	Name       string `json:"name"`
++	Path       string `json:"path"`
++	Directory  string `json:"directory"`
++	IsFile     bool   `json:"is_file"`
++	Size       int64  `json:"size"`
++	ModifiedAt string `json:"modified_at"`
++}
++
++type FileSearchMeta struct {
++	SearchTimeMs int64  `json:"search_time_ms"`
++	Truncated    bool   `json:"truncated"`
++	Query        string `json:"query"`
++	MaxResults   int    `json:"max_results"`
++	MaxDepth     int    `json:"max_depth"`
++	TotalScanned int64  `json:"total_scanned"`
++}
++
++type FileSearchResponse struct {
++	Data []FileSearchResult `json:"data"`
++	Meta FileSearchMeta     `json:"meta"`
++}
++
++var (
++	sensitiveExtensions = map[string]struct{}{
++		".pem": {},
++		".key": {},
++	}
++
++	contentAllowedExtensions = map[string]struct{}{
++		".txt":        {},
++		".log":        {},
++		".json":       {},
++		".jsonc":      {},
++		".yaml":       {},
++		".yml":        {},
++		".toml":       {},
++		".ini":        {},
++		".conf":       {},
++		".cfg":        {},
++		".properties": {},
++		".env":        {},
++		".md":         {},
++		".xml":        {},
++		".html":       {},
++		".htm":        {},
++		".css":        {},
++		".scss":       {},
++		".sass":       {},
++		".less":       {},
++		".js":         {},
++		".jsx":        {},
++		".ts":         {},
++		".tsx":        {},
++		".php":        {},
++		".go":         {},
++		".java":       {},
++		".cs":         {},
++		".py":         {},
++		".rb":         {},
++		".sh":         {},
++	}
++
++	sensitivePrefixes = []string{
++		".env",
++		".htaccess",
++		".htpasswd",
++		"id_rsa",
++		"id_dsa",
++		"id_ecdsa",
++		"id_ed25519",
++	}
++
++	resultPool = sync.Pool{
++		New: func() any {
++			batch := make([]FileSearchResult, 0, batchSize)
++			return &batch
++		},
++	}
++
++	builderPool = sync.Pool{
++		New: func() any {
++			return &strings.Builder{}
++		},
++	}
++)
++
++const (
++	maxQueryLength  = 256
++	minQueryLength  = 1
++	maxPathLength   = 4096
++	maxFilenameLen  = 255
++	jobChannelSize  = 2048
++	resultChanSize  = 64
++	batchSize       = 16
++	maxContentBytes = 1024 * 1024
++)
++
++type walkJob struct {
++	path  string
++	depth int
++}
++
++type searchContext struct {
++	fs            *serverfs.Filesystem
++	queryLower    string
++	maxResults    int
++	maxDepth      int
++	contentSearch bool
++	results       []FileSearchResult
++	resultCount   atomic.Int64
++	truncated     atomic.Bool
++	totalScanned  atomic.Int64
++	done          chan struct{}
++	jobChan       chan walkJob
++	resultChan    chan []FileSearchResult
++	pendingJobs   atomic.Int64
++	stopOnce      sync.Once
++	closeOnce     sync.Once
++}
++
++func getWorkerCount() int {
++	n := runtime.NumCPU()
++	if n > 8 {
++		return 8
++	}
++	if n < 2 {
++		return 2
++	}
++	return n
++}
++
++func sanitizeQuery(query string) (string, bool) {
++	query = strings.TrimSpace(query)
++
++	if len(query) < minQueryLength || len(query) > maxQueryLength {
++		return "", false
++	}
++
++	if !utf8.ValidString(query) {
++		return "", false
++	}
++
++	if strings.Contains(query, "..") || strings.ContainsAny(query, "\x00\n\r") {
++		return "", false
++	}
++
++	return query, true
++}
++
++func isSensitiveFile(name string) bool {
++	nameLower := strings.ToLower(name)
++
++	for _, prefix := range sensitivePrefixes {
++		if strings.HasPrefix(nameLower, prefix) {
++			return true
++		}
++	}
++
++	if idx := strings.LastIndexByte(name, '.'); idx != -1 {
++		ext := strings.ToLower(name[idx:])
++		if _, ok := sensitiveExtensions[ext]; ok {
++			return true
++		}
++	}
++
++	return false
++}
++
++func allowsContentSearch(name string) bool {
++	nameLower := strings.ToLower(name)
++
++	if strings.HasPrefix(nameLower, ".") {
++		return false
++	}
++
++	if idx := strings.LastIndexByte(nameLower, '.'); idx != -1 {
++		if _, ok := contentAllowedExtensions[nameLower[idx:]]; ok {
++			return true
++		}
++	}
++
++	return false
++}
++
++func contentMatches(fs *serverfs.Filesystem, displayPath string, queryLower string, size int64) bool {
++	if size <= 0 || size > maxContentBytes {
++		return false
++	}
++
++	file, stat, err := fs.File(displayPath)
++	if err != nil {
++		return false
++	}
++	defer file.Close()
++	if stat.IsDir() || !stat.Mode().IsRegular() || stat.Size() <= 0 || stat.Size() > maxContentBytes {
++		return false
++	}
++
++	limited := io.LimitReader(file, maxContentBytes)
++	data, err := io.ReadAll(limited)
++	if err != nil {
++		return false
++	}
++
++	if bytes.IndexByte(data, 0) != -1 {
++		return false
++	}
++
++	if !utf8.Valid(data) {
++		return false
++	}
++
++	contentLower := strings.ToLower(string(data))
++	return strings.Contains(contentLower, queryLower)
++}
++
++func (sc *searchContext) checkDone() bool {
++	select {
++	case <-sc.done:
++		return true
++	default:
++		return false
++	}
++}
++
++func (sc *searchContext) stop() {
++	sc.stopOnce.Do(func() {
++		close(sc.done)
++	})
++}
++
++func (sc *searchContext) hasEnoughResults() bool {
++	if sc.maxResults <= 0 {
++		return false
++	}
++	return int(sc.resultCount.Load()) >= sc.maxResults
++}
++
++func getSearchResultBatch() []FileSearchResult {
++	batch := resultPool.Get().(*[]FileSearchResult)
++	return (*batch)[:0]
++}
++
++func putSearchResultBatch(batch []FileSearchResult) {
++	if batch == nil {
++		return
++	}
++	if cap(batch) > batchSize*4 {
++		return
++	}
++	batch = batch[:0]
++	resultPool.Put(&batch)
++}
++
++func buildSearchPath(dir string, name string) string {
++	builder := builderPool.Get().(*strings.Builder)
++	builder.Reset()
++	defer builderPool.Put(builder)
++
++	if dir == "" || dir == "/" {
++		builder.Grow(len(name) + 1)
++		builder.WriteByte('/')
++		builder.WriteString(name)
++		return builder.String()
++	}
++
++	builder.Grow(len(dir) + len(name) + 1)
++	builder.WriteString(dir)
++	builder.WriteByte('/')
++	builder.WriteString(name)
++	return builder.String()
++}
++
++func (sc *searchContext) submitResults(batch []FileSearchResult) bool {
++	if len(batch) == 0 {
++		return false
++	}
++	sc.resultCount.Add(int64(len(batch)))
++
++	select {
++	case sc.resultChan <- batch:
++		return sc.hasEnoughResults()
++	case <-sc.done:
++		putSearchResultBatch(batch)
++		return true
++	}
++}
++
++func (sc *searchContext) collectResults() {
++	for batch := range sc.resultChan {
++		if sc.maxResults <= 0 {
++			sc.results = append(sc.results, batch...)
++			putSearchResultBatch(batch)
++			continue
++		}
++
++		remaining := sc.maxResults - len(sc.results)
++		if remaining <= 0 {
++			sc.truncated.Store(true)
++			putSearchResultBatch(batch)
++			continue
++		}
++
++		if len(batch) > remaining {
++			sc.results = append(sc.results, batch[:remaining]...)
++			sc.truncated.Store(true)
++		} else {
++			sc.results = append(sc.results, batch...)
++		}
++		putSearchResultBatch(batch)
++	}
++}
++
++func (sc *searchContext) enqueueJob(job walkJob) {
++	if sc.checkDone() || sc.hasEnoughResults() {
++		return
++	}
++
++	sc.pendingJobs.Add(1)
++
++	defer func() {
++		if r := recover(); r != nil {
++			sc.pendingJobs.Add(-1)
++		}
++	}()
++
++	select {
++	case sc.jobChan <- job:
++	case <-sc.done:
++		sc.pendingJobs.Add(-1)
++	}
++}
++
++func (sc *searchContext) finishJob() {
++	if sc.pendingJobs.Add(-1) == 0 {
++		sc.closeOnce.Do(func() {
++			close(sc.jobChan)
++		})
++	}
++}
++
++func getDirectory(path string) string {
++	lastSlash := strings.LastIndexByte(path, '/')
++	if lastSlash <= 0 {
++		return "/"
++	}
++	return path[:lastSlash]
++}
++
++func (sc *searchContext) worker(wg *sync.WaitGroup) {
++	defer wg.Done()
++
++	localBatch := getSearchResultBatch()
++	defer func() {
++		if localBatch != nil && len(localBatch) == 0 {
++			putSearchResultBatch(localBatch)
++		}
++	}()
++
++	for {
++		select {
++		case <-sc.done:
++			if len(localBatch) > 0 {
++				sc.submitResults(localBatch)
++				localBatch = nil
++			}
++			return
++		case job, ok := <-sc.jobChan:
++			if !ok {
++				if len(localBatch) > 0 {
++					sc.submitResults(localBatch)
++					localBatch = nil
++				}
++				return
++			}
++
++			if sc.checkDone() || sc.hasEnoughResults() {
++				sc.finishJob()
++				continue
++			}
++
++			entries, err := sc.fs.ReadDirStat(job.path)
++			if err != nil {
++				sc.finishJob()
++				continue
++			}
++
++			var subDirs []walkJob
++
++			for _, entry := range entries {
++				if sc.checkDone() {
++					sc.truncated.Store(true)
++					break
++				}
++
++				name := entry.Name()
++				nameLen := len(name)
++
++				if nameLen == 0 || nameLen > maxFilenameLen {
++					continue
++				}
++
++				isDir := entry.IsDir()
++
++				sc.totalScanned.Add(1)
++
++				nameLower := strings.ToLower(name)
++				nameMatches := strings.Contains(nameLower, sc.queryLower)
++
++				if nameMatches || (sc.contentSearch && !isDir && allowsContentSearch(name)) {
++					if !isDir && isSensitiveFile(name) {
++						continue
++					}
++
++					fullPath := buildSearchPath(job.path, name)
++
++					if len(fullPath) > maxPathLength {
++						continue
++					}
++
++					if !nameMatches {
++						if !sc.contentSearch || isDir || !entry.Mode().IsRegular() || !contentMatches(sc.fs, fullPath, sc.queryLower, entry.Size()) {
++							goto scanSubdirs
++						}
++					}
++
++					result := FileSearchResult{
++						Name:       name,
++						Path:       fullPath,
++						Directory:  getDirectory(fullPath),
++						IsFile:     !isDir,
++						Size:       entry.Size(),
++						ModifiedAt: entry.ModTime().UTC().Format(time.RFC3339),
++					}
++
++					localBatch = append(localBatch, result)
++
++					if len(localBatch) >= batchSize {
++						if sc.submitResults(localBatch) {
++							localBatch = getSearchResultBatch()
++							sc.stop()
++							break
++						}
++						localBatch = getSearchResultBatch()
++					}
++				}
++
++			scanSubdirs:
++
++				if isDir && (sc.maxDepth <= 0 || job.depth < sc.maxDepth) {
++					subDirs = append(subDirs, walkJob{
++						path:  path.Join(job.path, name),
++						depth: job.depth + 1,
++					})
++				}
++			}
++
++			for _, subDir := range subDirs {
++				if sc.checkDone() || sc.hasEnoughResults() {
++					break
++				}
++				sc.enqueueJob(subDir)
++			}
++
++			if len(localBatch) > 0 {
++				if sc.submitResults(localBatch) {
++					sc.stop()
++				}
++				localBatch = getSearchResultBatch()
++			}
++
++			sc.finishJob()
++		}
++	}
++}
++
++func getServerFilesSearch(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	rawQuery := c.Query("query")
++	query, valid := sanitizeQuery(rawQuery)
++	if !valid {
++		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or missing query parameter"})
++		return
++	}
++
++	maxResults := 50
++	if v := c.Query("max_results"); v != "" {
++		if parsed, err := strconv.Atoi(v); err == nil {
++			if parsed == 0 {
++				maxResults = 0
++			} else if parsed > 0 && parsed <= 200 {
++				maxResults = parsed
++			}
++		}
++	} else {
++		maxResults = 0
++	}
++
++	maxDepth := 0
++	if v := c.Query("max_depth"); v != "" {
++		if parsed, err := strconv.Atoi(v); err == nil && parsed >= 0 {
++			maxDepth = parsed
++		}
++	}
++
++	timeout := 8
++	if v := c.Query("timeout"); v != "" {
++		if parsed, err := strconv.Atoi(v); err == nil && parsed > 0 && parsed <= 30 {
++			timeout = parsed
++		}
++	}
++
++	contentSearch := false
++	if v := strings.TrimSpace(c.Query("content")); v != "" {
++		if v == "1" || strings.EqualFold(v, "true") {
++			contentSearch = true
++		}
++	}
++
++	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(timeout)*time.Second)
++	defer cancel()
++
++	resultsCap := maxResults
++	if resultsCap <= 0 {
++		resultsCap = 64
++	}
++
++	sc := &searchContext{
++		fs:            s.Filesystem(),
++		queryLower:    strings.ToLower(query),
++		maxResults:    maxResults,
++		maxDepth:      maxDepth,
++		contentSearch: contentSearch,
++		results:       make([]FileSearchResult, 0, resultsCap),
++		done:          make(chan struct{}),
++		jobChan:       make(chan walkJob, jobChannelSize),
++		resultChan:    make(chan []FileSearchResult, resultChanSize),
++	}
++
++	go func() {
++		<-ctx.Done()
++		sc.stop()
++	}()
++
++	startTime := time.Now()
++
++	workerCount := getWorkerCount()
++	var wg sync.WaitGroup
++	var collector sync.WaitGroup
++
++	collector.Add(1)
++	go func() {
++		defer collector.Done()
++		sc.collectResults()
++	}()
++
++	for i := 0; i < workerCount; i++ {
++		wg.Add(1)
++		go sc.worker(&wg)
++	}
++
++	sc.pendingJobs.Store(1)
++	select {
++	case sc.jobChan <- walkJob{path: "/", depth: 0}:
++	case <-sc.done:
++		sc.finishJob()
++	}
++
++	wg.Wait()
++	close(sc.resultChan)
++	collector.Wait()
++
++	searchTimeMs := time.Since(startTime).Milliseconds()
++
++	response := FileSearchResponse{
++		Data: sc.results,
++		Meta: FileSearchMeta{
++			SearchTimeMs: searchTimeMs,
++			Truncated:    sc.truncated.Load(),
++			Query:        query,
++			MaxResults:   maxResults,
++			MaxDepth:     maxDepth,
++			TotalScanned: sc.totalScanned.Load(),
++		},
++	}
++
++	c.JSON(http.StatusOK, response)
++}
+diff --git a/router/router_server_git.go b/router/router_server_git.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b421acfdbe
+--- /dev/null
++++ b/router/router_server_git.go
+@@ -0,0 +1,1015 @@
++package router
++
++import (
++	"bytes"
++	"context"
++	"fmt"
++	"io"
++	"net"
++	"net/http"
++	"net/url"
++	"os"
++	"path"
++	"regexp"
++	"strconv"
++	"strings"
++	"sync"
++	"time"
++
++	"github.com/apex/log"
++	"github.com/docker/docker/api/types/container"
++	"github.com/docker/docker/pkg/stdcopy"
++	"github.com/gin-gonic/gin"
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/environment/docker"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const gitContainerRoot = "/home/container"
++const gitBetterFilesTrashDir = ".trash-bin"
++
++type gitCloneTargetMode int
++
++const (
++	gitCloneTargetEmpty gitCloneTargetMode = iota
++	gitCloneTargetInternalOnly
++)
++
++var (
++	gitPathCache sync.Map
++	gitLocks     sync.Map
++
++	gitTrustedBinaries = []string{
++		"/usr/bin/git",
++		"/usr/local/bin/git",
++		"/bin/git",
++	}
++
++	gitSafeEnv = []string{
++		"GIT_TERMINAL_PROMPT=0",
++		"GIT_ASKPASS=/bin/false",
++		"SSH_ASKPASS=/bin/false",
++		"GIT_CONFIG_NOSYSTEM=1",
++		"GIT_CONFIG_GLOBAL=/dev/null",
++		"GIT_CONFIG_SYSTEM=/dev/null",
++		"GIT_ALLOW_PROTOCOL=https",
++		"HOME=/tmp",
++	}
++
++	gitBlockedNetworks = []*net.IPNet{
++		mustParseGitCIDR("0.0.0.0/8"),
++		mustParseGitCIDR("10.0.0.0/8"),
++		mustParseGitCIDR("100.64.0.0/10"),
++		mustParseGitCIDR("127.0.0.0/8"),
++		mustParseGitCIDR("169.254.0.0/16"),
++		mustParseGitCIDR("172.16.0.0/12"),
++		mustParseGitCIDR("192.0.0.0/24"),
++		mustParseGitCIDR("192.0.2.0/24"),
++		mustParseGitCIDR("192.168.0.0/16"),
++		mustParseGitCIDR("198.18.0.0/15"),
++		mustParseGitCIDR("198.51.100.0/24"),
++		mustParseGitCIDR("203.0.113.0/24"),
++		mustParseGitCIDR("224.0.0.0/4"),
++		mustParseGitCIDR("240.0.0.0/4"),
++		mustParseGitCIDR("255.255.255.255/32"),
++		mustParseGitCIDR("::/128"),
++		mustParseGitCIDR("::1/128"),
++		mustParseGitCIDR("2001:db8::/32"),
++		mustParseGitCIDR("fc00::/7"),
++		mustParseGitCIDR("fe80::/10"),
++		mustParseGitCIDR("fec0::/10"),
++		mustParseGitCIDR("ff00::/8"),
++	}
++
++	gitTargetDirectoryPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
++	gitRemoteNamePattern      = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
++	gitCredentialPattern      = regexp.MustCompile(`(?i)(https://)([^/@\s]+)@`)
++)
++
++type gitCloneRequest struct {
++	RepositoryURL   string `json:"repository_url" binding:"required"`
++	TargetDirectory string `json:"target_directory"`
++	WorkDir         string `json:"work_dir"`
++}
++
++type gitPullRequest struct {
++	WorkDir string `json:"work_dir"`
++}
++
++type gitDiffRequest struct {
++	WorkDir string `json:"work_dir"`
++	File    string `json:"file"`
++}
++
++type gitResponse struct {
++	Stdout   string `json:"stdout"`
++	Stderr   string `json:"stderr"`
++	ExitCode int    `json:"exit_code"`
++}
++
++type validatedGitRepositoryURL struct {
++	URL            string
++	CurlOptResolve string
++}
++
++func findGitBinary(ctx context.Context, env *docker.Environment) string {
++	if cached, ok := gitPathCache.Load(env.Id); ok {
++		return cached.(string)
++	}
++
++	for _, p := range gitTrustedBinaries {
++		res, err := execInContainer(ctx, env, []string{p, "--version"}, gitContainerRoot)
++		if err == nil && res.ExitCode == 0 {
++			gitPathCache.Store(env.Id, p)
++			return p
++		}
++	}
++
++	return ""
++}
++
++func getServerGitStatus(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	env, ok := s.Environment.(*docker.Environment)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git operations are only supported in Docker environments.",
++		})
++		return
++	}
++
++	workDir, err := normalizeGitWorkDir(c.Query("work_dir"))
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
++	defer cancel()
++
++	gitBin := findGitBinary(ctx, env)
++	if gitBin == "" {
++		c.JSON(http.StatusOK, gin.H{
++			"available": false,
++			"is_repo":   false,
++		})
++		return
++	}
++
++	checkResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	if checkResult.ExitCode != 0 {
++		c.JSON(http.StatusOK, gin.H{
++			"available": true,
++			"is_repo":   false,
++			"error":     strings.TrimSpace(maskGitOutput(checkResult.Stderr + checkResult.Stdout)),
++		})
++		return
++	}
++
++	statusResult, _ := execGit(ctx, env, gitBin, []string{"status", "--porcelain", "-b"}, workDir)
++	branchResult, _ := execGit(ctx, env, gitBin, []string{"rev-parse", "--abbrev-ref", "HEAD"}, workDir)
++	remoteResult, _ := execGit(ctx, env, gitBin, []string{"remote", "-v"}, workDir)
++	logResult, _ := execGit(ctx, env, gitBin, []string{"log", "--oneline", "-20"}, workDir)
++
++	c.JSON(http.StatusOK, gin.H{
++		"available": true,
++		"is_repo":   true,
++		"branch":    strings.TrimSpace(branchResult.Stdout),
++		"status":    statusResult.Stdout,
++		"remotes":   maskGitOutput(remoteResult.Stdout),
++		"log":       logResult.Stdout,
++	})
++}
++
++func postServerGitClone(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	var req gitCloneRequest
++	if err := c.BindJSON(&req); err != nil {
++		return
++	}
++
++	env, ok := s.Environment.(*docker.Environment)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git operations are only supported in Docker environments.",
++		})
++		return
++	}
++
++	workDir, err := normalizeGitWorkDir(req.WorkDir)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute)
++	defer cancel()
++
++	repositoryURL, err := validateGitRepositoryURL(ctx, req.RepositoryURL)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	targetDirectory := strings.TrimSpace(req.TargetDirectory)
++	targetPath := workDir
++	if targetDirectory != "" {
++		if err := validateGitTargetDirectory(targetDirectory); err != nil {
++			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
++			return
++		}
++		targetPath = path.Join(workDir, targetDirectory)
++	}
++
++	if !isInsideGitRoot(targetPath) {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Target directory must stay inside the server files."})
++		return
++	}
++
++	targetServerPath := containerPathToServerPath(targetPath)
++
++	gitBin := findGitBinary(ctx, env)
++	if gitBin == "" {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git is not installed in this container image.",
++		})
++		return
++	}
++
++	lock := gitLockFor(env.Id)
++	if !lock.TryLock() {
++		middleware.ExtractLogger(c).WithFields(log.Fields{
++			"operation":      "clone",
++			"container_id":   env.Id,
++			"repository_url": maskGitOutput(repositoryURL.URL),
++			"repo_host":      gitRepositoryHost(repositoryURL.URL),
++			"work_dir":       workDir,
++			"target":         targetPath,
++		}).Warn("git operation rejected because another git operation is already running")
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
++		return
++	}
++	defer lock.Unlock()
++
++	started := time.Now()
++	logger := middleware.ExtractLogger(c).WithFields(log.Fields{
++		"operation":      "clone",
++		"container_id":   env.Id,
++		"repository_url": maskGitOutput(repositoryURL.URL),
++		"repo_host":      gitRepositoryHost(repositoryURL.URL),
++		"work_dir":       workDir,
++		"target":         targetPath,
++	})
++	logger.Info("starting git operation")
++
++	targetMode, err := inspectGitCloneTarget(s.Filesystem(), targetServerPath)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
++		return
++	}
++
++	cloneTargetPath := targetPath
++	var tempServerPath string
++	if targetMode == gitCloneTargetInternalOnly {
++		var err error
++		cloneTargetPath, tempServerPath, err = makeGitCloneTempTarget(s.Filesystem(), targetPath)
++		if err != nil {
++			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
++			return
++		}
++		defer func() {
++			_ = s.Filesystem().Delete(tempServerPath)
++		}()
++	}
++
++	result, err := execGit(ctx, env, gitBin, []string{
++		"clone",
++		"--depth=1",
++		"--single-branch",
++		"--no-tags",
++		"--no-recurse-submodules",
++		repositoryURL.URL,
++		cloneTargetPath,
++	}, workDir, repositoryURL)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	if result.ExitCode == 0 {
++		if targetMode == gitCloneTargetInternalOnly {
++			if err := promoteGitCloneTempTarget(s.Filesystem(), tempServerPath, targetServerPath); err != nil {
++				c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
++				return
++			}
++		}
++		_ = addGitInternalExcludes(s.Filesystem(), targetServerPath)
++	}
++	if cloneTargetPath != targetPath {
++		result.Stdout = strings.ReplaceAll(result.Stdout, cloneTargetPath, targetPath)
++		result.Stderr = strings.ReplaceAll(result.Stderr, cloneTargetPath, targetPath)
++	}
++
++	logger.WithFields(log.Fields{
++		"duration":  time.Since(started),
++		"exit_code": result.ExitCode,
++	}).Info("completed git operation")
++
++	c.JSON(http.StatusOK, maskGitResponse(result))
++}
++
++func postServerGitPull(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	var req gitPullRequest
++	if err := c.BindJSON(&req); err != nil {
++		return
++	}
++
++	env, ok := s.Environment.(*docker.Environment)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git operations are only supported in Docker environments.",
++		})
++		return
++	}
++
++	workDir, err := normalizeGitWorkDir(req.WorkDir)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Minute)
++	defer cancel()
++
++	gitBin := findGitBinary(ctx, env)
++	if gitBin == "" {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git is not installed in this container image.",
++		})
++		return
++	}
++
++	checkResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	if checkResult.ExitCode != 0 {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "This directory is not a Git repository."})
++		return
++	}
++
++	if err := ensureNoDangerousLocalGitConfig(ctx, env, gitBin, workDir); err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	branchResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--abbrev-ref", "HEAD"}, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	branch := strings.TrimSpace(branchResult.Stdout)
++	if branch == "" || branch == "HEAD" || !isSafeGitRef(branch) {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Cannot pull while the repository is detached or has an invalid branch."})
++		return
++	}
++
++	remoteNameResult, err := execGit(ctx, env, gitBin, []string{"config", "--get", "branch." + branch + ".remote"}, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	remoteName := strings.TrimSpace(remoteNameResult.Stdout)
++	if remoteName == "" {
++		remoteName = "origin"
++	}
++	if !gitRemoteNamePattern.MatchString(remoteName) {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Repository remote name is not allowed."})
++		return
++	}
++
++	mergeRefResult, _ := execGit(ctx, env, gitBin, []string{"config", "--get", "branch." + branch + ".merge"}, workDir)
++	remoteBranch := strings.TrimSpace(mergeRefResult.Stdout)
++	remoteBranch = strings.TrimPrefix(remoteBranch, "refs/heads/")
++	if remoteBranch == "" {
++		remoteBranch = branch
++	}
++	if !isSafeGitRef(remoteBranch) {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Repository upstream branch is not allowed."})
++		return
++	}
++
++	remoteURLResult, err := execGit(ctx, env, gitBin, []string{"remote", "get-url", remoteName}, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	remoteURL, err := validateGitRepositoryURL(ctx, remoteURLResult.Stdout)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Repository remote is not allowed: " + err.Error()})
++		return
++	}
++
++	lock := gitLockFor(env.Id)
++	if !lock.TryLock() {
++		middleware.ExtractLogger(c).WithFields(log.Fields{
++			"operation":      "pull",
++			"container_id":   env.Id,
++			"repository_url": maskGitOutput(remoteURL.URL),
++			"repo_host":      gitRepositoryHost(remoteURL.URL),
++			"work_dir":       workDir,
++			"branch":         remoteBranch,
++		}).Warn("git operation rejected because another git operation is already running")
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
++		return
++	}
++	defer lock.Unlock()
++
++	started := time.Now()
++	logger := middleware.ExtractLogger(c).WithFields(log.Fields{
++		"operation":      "pull",
++		"container_id":   env.Id,
++		"repository_url": maskGitOutput(remoteURL.URL),
++		"repo_host":      gitRepositoryHost(remoteURL.URL),
++		"work_dir":       workDir,
++		"branch":         remoteBranch,
++	})
++	logger.Info("starting git operation")
++
++	result, err := execGit(ctx, env, gitBin, []string{
++		"pull",
++		"--ff-only",
++		"--no-recurse-submodules",
++		remoteURL.URL,
++		remoteBranch,
++	}, workDir, remoteURL)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	logger.WithFields(log.Fields{
++		"duration":  time.Since(started),
++		"exit_code": result.ExitCode,
++	}).Info("completed git operation")
++
++	c.JSON(http.StatusOK, maskGitResponse(result))
++}
++
++func postServerGitDiff(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	var req gitDiffRequest
++	if err := c.BindJSON(&req); err != nil {
++		return
++	}
++
++	env, ok := s.Environment.(*docker.Environment)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git operations are only supported in Docker environments.",
++		})
++		return
++	}
++
++	workDir, err := normalizeGitWorkDir(req.WorkDir)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	diffPath, err := normalizeGitDiffPath(req.File)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
++		return
++	}
++
++	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
++	defer cancel()
++
++	gitBin := findGitBinary(ctx, env)
++	if gitBin == "" {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git is not installed in this container image.",
++		})
++		return
++	}
++
++	checkResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	if checkResult.ExitCode != 0 {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "This directory is not a Git repository."})
++		return
++	}
++
++	if err := ensureNoDangerousLocalGitConfig(ctx, env, gitBin, workDir); err != nil {
++		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
++		return
++	}
++
++	cachedArgs := gitDiffArgs(true, diffPath)
++	unstagedArgs := gitDiffArgs(false, diffPath)
++
++	cachedResult, err := execGit(ctx, env, gitBin, cachedArgs, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	unstagedResult, err := execGit(ctx, env, gitBin, unstagedArgs, workDir)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	result := &gitResponse{
++		Stdout:   combineGitDiffOutput(cachedResult.Stdout, unstagedResult.Stdout),
++		Stderr:   strings.TrimSpace(cachedResult.Stderr + "\n" + unstagedResult.Stderr),
++		ExitCode: 0,
++	}
++	if cachedResult.ExitCode != 0 {
++		result.ExitCode = cachedResult.ExitCode
++	} else if unstagedResult.ExitCode != 0 {
++		result.ExitCode = unstagedResult.ExitCode
++	}
++	if result.Stdout == "" && result.Stderr == "" {
++		result.Stdout = "(no tracked diff)"
++	}
++
++	c.JSON(http.StatusOK, maskGitResponse(result))
++}
++
++func execGit(ctx context.Context, env *docker.Environment, gitBin string, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
++	cmd := gitBaseCommand(gitBin)
++	for _, remote := range remotes {
++		if remote.CurlOptResolve == "" {
++			continue
++		}
++		cmd = append(cmd, "-c", "http.curloptResolve="+remote.CurlOptResolve)
++	}
++	cmd = append(cmd, args...)
++	return execInContainer(ctx, env, cmd, workDir)
++}
++
++func gitBaseCommand(gitBin string) []string {
++	return []string{
++		gitBin,
++		"-c", "core.hooksPath=/dev/null",
++		"-c", "protocol.file.allow=never",
++		"-c", "protocol.ext.allow=never",
++		"-c", "protocol.git.allow=never",
++		"-c", "protocol.ssh.allow=never",
++		"-c", "credential.helper=",
++		"-c", "core.askPass=",
++		"-c", "core.fsmonitor=false",
++		"-c", "core.untrackedCache=false",
++		"-c", "submodule.recurse=false",
++		"-c", "diff.external=",
++		"-c", "advice.detachedHead=false",
++	}
++}
++
++func ensureNoDangerousLocalGitConfig(ctx context.Context, env *docker.Environment, gitBin string, workDir string) error {
++	result, err := execGit(ctx, env, gitBin, []string{
++		"config",
++		"--local",
++		"--get-regexp",
++		`^(filter\..*\.(process|smudge|clean)|merge\..*\.driver|diff\..*\.(command|textconv)|core\.sshCommand|core\.fsmonitor|credential\.helper|url\..*\.(insteadOf|pushInsteadOf)|include.*)$`,
++	}, workDir)
++	if err != nil {
++		return err
++	}
++
++	if result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "" {
++		return fmt.Errorf("Repository local Git config contains unsafe helper settings.")
++	}
++
++	return nil
++}
++
++func normalizeGitWorkDir(raw string) (string, error) {
++	cleaned := strings.TrimSpace(raw)
++	if cleaned == "" || cleaned == "/" {
++		return gitContainerRoot, nil
++	}
++	if strings.ContainsAny(cleaned, "\x00\n\r\\") {
++		return "", fmt.Errorf("Invalid work directory.")
++	}
++
++	var normalized string
++	if strings.HasPrefix(cleaned, gitContainerRoot) {
++		normalized = path.Clean(cleaned)
++	} else {
++		normalized = path.Join(gitContainerRoot, strings.TrimPrefix(cleaned, "/"))
++	}
++
++	if !isInsideGitRoot(normalized) {
++		return "", fmt.Errorf("Work directory must stay inside the server files.")
++	}
++
++	return normalized, nil
++}
++
++func normalizeGitDiffPath(raw string) (string, error) {
++	cleaned := strings.TrimSpace(raw)
++	if cleaned == "" {
++		return "", nil
++	}
++	if len(cleaned) > 4096 || strings.ContainsAny(cleaned, "\x00\n\r\\") {
++		return "", fmt.Errorf("Diff path is invalid.")
++	}
++	if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "-") || strings.HasPrefix(cleaned, ":") {
++		return "", fmt.Errorf("Diff path is not allowed.")
++	}
++
++	normalized := path.Clean(cleaned)
++	if normalized == "." || normalized == ".." || strings.HasPrefix(normalized, "../") || strings.Contains(normalized, "/../") {
++		return "", fmt.Errorf("Diff path must stay inside the repository.")
++	}
++
++	return normalized, nil
++}
++
++func isInsideGitRoot(p string) bool {
++	cleaned := path.Clean(p)
++	return cleaned == gitContainerRoot || strings.HasPrefix(cleaned, gitContainerRoot+"/")
++}
++
++func validateGitRepositoryURL(ctx context.Context, raw string) (validatedGitRepositoryURL, error) {
++	cleaned := strings.TrimSpace(raw)
++	cleaned = strings.Trim(cleaned, "\x00\r\n\t ")
++	if strings.ContainsAny(cleaned, "\x00\n\r\t") {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is invalid.")
++	}
++	if cleaned == "" || len(cleaned) > 2048 {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is invalid.")
++	}
++
++	parsed, err := url.Parse(cleaned)
++	if err != nil {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is invalid.")
++	}
++	if parsed.Scheme != "https" {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Only HTTPS Git remotes are allowed.")
++	}
++	if parsed.User != nil {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Credentials in Git remote URLs are not allowed.")
++	}
++	if parsed.RawQuery != "" || parsed.Fragment != "" {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL must not include query strings or fragments.")
++	}
++	if parsed.Path == "" || parsed.Path == "/" {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository URL is missing a repository path.")
++	}
++
++	host := strings.ToLower(parsed.Hostname())
++	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host is not allowed.")
++	}
++
++	if ip := net.ParseIP(host); ip != nil {
++		if isBlockedGitIP(ip) {
++			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
++		}
++		return validatedGitRepositoryURL{URL: parsed.String()}, nil
++	}
++
++	lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
++	defer cancel()
++	addrs, err := net.DefaultResolver.LookupIPAddr(lookupCtx, host)
++	if err != nil || len(addrs) == 0 {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
++	}
++	var resolved net.IP
++	for _, addr := range addrs {
++		if isBlockedGitIP(addr.IP) {
++			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
++		}
++		if resolved == nil {
++			resolved = addr.IP
++		}
++	}
++	if resolved == nil {
++		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
++	}
++
++	return validatedGitRepositoryURL{
++		URL:            parsed.String(),
++		CurlOptResolve: gitCurlOptResolve(host, parsed.Port(), resolved),
++	}, nil
++}
++
++func gitCurlOptResolve(host string, port string, ip net.IP) string {
++	if port == "" {
++		port = "443"
++	}
++	address := ip.String()
++	if strings.Contains(address, ":") {
++		address = "[" + address + "]"
++	}
++	return host + ":" + port + ":" + address
++}
++
++func validateGitTargetDirectory(name string) error {
++	if name == "." || name == ".." || strings.Contains(name, "..") || strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") {
++		return fmt.Errorf("Target directory name is not allowed.")
++	}
++	if !gitTargetDirectoryPattern.MatchString(name) {
++		return fmt.Errorf("Target directory can only contain letters, numbers, dots, underscores, and dashes.")
++	}
++	return nil
++}
++
++func inspectGitCloneTarget(fs *serverfs.Filesystem, targetPath string) (gitCloneTargetMode, error) {
++	info, err := fs.Stat(targetPath)
++	if os.IsNotExist(err) {
++		return gitCloneTargetEmpty, nil
++	}
++	if err != nil {
++		return gitCloneTargetEmpty, fmt.Errorf("Could not inspect the clone target.")
++	}
++	if info.Mode()&os.ModeSymlink != 0 {
++		return gitCloneTargetEmpty, fmt.Errorf("Clone target must not be a symlink.")
++	}
++	if !info.IsDir() {
++		return gitCloneTargetEmpty, fmt.Errorf("Clone target already exists and is not a directory.")
++	}
++
++	entries, err := fs.ReadDirStat(targetPath)
++	if err != nil {
++		return gitCloneTargetEmpty, fmt.Errorf("Could not inspect the clone target.")
++	}
++	if len(entries) == 0 {
++		return gitCloneTargetEmpty, nil
++	}
++
++	for _, entry := range entries {
++		if !isAllowedGitCloneInternalEntry(entry) {
++			return gitCloneTargetEmpty, fmt.Errorf("Clone target must be empty except for Better Files internal folders.")
++		}
++	}
++
++	return gitCloneTargetInternalOnly, nil
++}
++
++func isAllowedGitCloneInternalEntry(entry os.FileInfo) bool {
++	return entry.Name() == gitBetterFilesTrashDir && entry.IsDir()
++}
++
++func makeGitCloneTempTarget(fs *serverfs.Filesystem, containerTargetPath string) (string, string, error) {
++	for i := 0; i < 10; i++ {
++		name := fmt.Sprintf(".betterfiles-git-clone-%d-%d", time.Now().UnixNano(), i)
++		containerPath := path.Join(containerTargetPath, name)
++		serverPath := containerPathToServerPath(containerPath)
++
++		if _, err := fs.Stat(serverPath); os.IsNotExist(err) {
++			return containerPath, serverPath, nil
++		}
++	}
++
++	return "", "", fmt.Errorf("Could not allocate a temporary clone directory.")
++}
++
++func promoteGitCloneTempTarget(fs *serverfs.Filesystem, tempPath string, targetPath string) error {
++	entries, err := fs.ReadDirStat(tempPath)
++	if err != nil {
++		return fmt.Errorf("Could not inspect the cloned repository.")
++	}
++
++	for _, entry := range entries {
++		if _, err := fs.Stat(path.Join(targetPath, entry.Name())); err == nil {
++			return fmt.Errorf("Clone output would overwrite %s.", entry.Name())
++		} else if !os.IsNotExist(err) {
++			return fmt.Errorf("Could not inspect the clone output.")
++		}
++	}
++
++	for _, entry := range entries {
++		if err := fs.Rename(path.Join(tempPath, entry.Name()), path.Join(targetPath, entry.Name())); err != nil {
++			return fmt.Errorf("Could not move cloned files into the target directory.")
++		}
++	}
++
++	return nil
++}
++
++func addGitInternalExcludes(fs *serverfs.Filesystem, targetPath string) error {
++	gitPath := path.Join(targetPath, ".git")
++	infoPath := path.Join(gitPath, "info")
++	excludePath := path.Join(infoPath, "exclude")
++
++	stat, err := fs.Stat(gitPath)
++	if err != nil {
++		return err
++	}
++	if !stat.IsDir() {
++		return fmt.Errorf("Git metadata path is not a directory.")
++	}
++	if err := fs.CreateDirectory("info", gitPath); err != nil {
++		return err
++	}
++
++	content := ""
++	if file, _, err := fs.File(excludePath); err == nil {
++		raw, readErr := io.ReadAll(io.LimitReader(file, 64*1024))
++		_ = file.Close()
++		if readErr != nil {
++			return readErr
++		}
++		content = string(raw)
++	}
++
++	var additions []string
++	for _, line := range []string{gitBetterFilesTrashDir + "/", ".betterfiles-git-clone-*"} {
++		if !strings.Contains(content, line) {
++			additions = append(additions, line)
++		}
++	}
++	if len(additions) == 0 {
++		return nil
++	}
++
++	if content != "" && !strings.HasSuffix(content, "\n") {
++		content += "\n"
++	}
++	content += strings.Join(additions, "\n") + "\n"
++
++	return fs.Write(excludePath, strings.NewReader(content), int64(len(content)), 0640)
++}
++
++func gitDiffArgs(cached bool, diffPath string) []string {
++	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--no-color", "--minimal"}
++	if cached {
++		args = append(args, "--cached")
++	}
++
++	args = append(args, "--")
++	if diffPath != "" {
++		args = append(args, diffPath)
++	}
++
++	return args
++}
++
++func combineGitDiffOutput(cached string, unstaged string) string {
++	var sections []string
++	if strings.TrimSpace(cached) != "" {
++		sections = append(sections, "Staged changes:\n"+cached)
++	}
++	if strings.TrimSpace(unstaged) != "" {
++		sections = append(sections, "Unstaged changes:\n"+unstaged)
++	}
++
++	output := strings.Join(sections, "\n")
++	if len(output) > 512*1024 {
++		output = output[:512*1024] + "\n...(truncated)"
++	}
++
++	return output
++}
++
++func isSafeGitRef(ref string) bool {
++	if ref == "" || len(ref) > 255 || strings.HasPrefix(ref, "-") {
++		return false
++	}
++	if strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "\\") {
++		return false
++	}
++	return !strings.ContainsAny(ref, "\x00\n\r ~^:?*[")
++}
++
++func containerPathToServerPath(containerPath string) string {
++	relative := strings.TrimPrefix(path.Clean(containerPath), gitContainerRoot)
++	relative = strings.TrimPrefix(relative, "/")
++	if relative == "" {
++		return "/"
++	}
++	return "/" + relative
++}
++
++func gitLockFor(id string) *sync.Mutex {
++	actual, _ := gitLocks.LoadOrStore(id, &sync.Mutex{})
++	return actual.(*sync.Mutex)
++}
++
++func maskGitResponse(result *gitResponse) *gitResponse {
++	return &gitResponse{
++		Stdout:   maskGitOutput(result.Stdout),
++		Stderr:   maskGitOutput(result.Stderr),
++		ExitCode: result.ExitCode,
++	}
++}
++
++func maskGitOutput(output string) string {
++	return gitCredentialPattern.ReplaceAllString(output, "${1}****@")
++}
++
++func gitRepositoryHost(raw string) string {
++	parsed, err := url.Parse(strings.TrimSpace(raw))
++	if err != nil {
++		return ""
++	}
++	return parsed.Hostname()
++}
++
++func isBlockedGitIP(ip net.IP) bool {
++	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
++		return true
++	}
++	for _, block := range gitBlockedNetworks {
++		if block.Contains(ip) {
++			return true
++		}
++	}
++	return false
++}
++
++func mustParseGitCIDR(ip string) *net.IPNet {
++	_, block, err := net.ParseCIDR(ip)
++	if err != nil {
++		panic(fmt.Errorf("failed to parse Git CIDR: %s", ip))
++	}
++	return block
++}
++
++func getContainerUser() string {
++	cfg := config.Get()
++	if cfg.System.User.Rootless.Enabled {
++		return fmt.Sprintf("%d:%d", cfg.System.User.Rootless.ContainerUID, cfg.System.User.Rootless.ContainerGID)
++	}
++	return strconv.Itoa(cfg.System.User.Uid) + ":" + strconv.Itoa(cfg.System.User.Gid)
++}
++
++func execInContainer(ctx context.Context, env *docker.Environment, cmd []string, workDir string) (*gitResponse, error) {
++	cli := env.Client()
++
++	execConfig := container.ExecOptions{
++		Cmd:          cmd,
++		WorkingDir:   workDir,
++		AttachStdout: true,
++		AttachStderr: true,
++		Env:          gitSafeEnv,
++		User:         getContainerUser(),
++	}
++
++	exec, err := cli.ContainerExecCreate(ctx, env.Id, execConfig)
++	if err != nil {
++		return nil, err
++	}
++
++	resp, err := cli.ContainerExecAttach(ctx, exec.ID, container.ExecStartOptions{})
++	if err != nil {
++		return nil, err
++	}
++	defer resp.Close()
++
++	var stdout, stderr bytes.Buffer
++	done := make(chan error, 1)
++	go func() {
++		_, err := stdcopy.StdCopy(&stdout, &stderr, resp.Reader)
++		done <- err
++	}()
++
++	select {
++	case <-ctx.Done():
++		return &gitResponse{Stderr: "command timed out", ExitCode: 124}, nil
++	case err := <-done:
++		if err != nil {
++			return nil, err
++		}
++	}
++
++	inspect, err := cli.ContainerExecInspect(ctx, exec.ID)
++	if err != nil {
++		return nil, err
++	}
++
++	output := stdout.String()
++	errOutput := stderr.String()
++
++	if len(output) > 512*1024 {
++		output = output[:512*1024] + "\n...(truncated)"
++	}
++	if len(errOutput) > 64*1024 {
++		errOutput = errOutput[:64*1024] + "\n...(truncated)"
++	}
++
++	return &gitResponse{
++		Stdout:   output,
++		Stderr:   errOutput,
++		ExitCode: inspect.ExitCode,
++	}, nil
++}
+diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad84d6a7cc
+--- /dev/null
++++ b/router/websocket/betterfiles_collaboration.go
+@@ -0,0 +1,1123 @@
++package websocket
++
++import (
++	"context"
++	"encoding/json"
++	pathpkg "path"
++	"strings"
++	"sync"
++	"time"
++	"unicode/utf8"
++
++	"github.com/gbrlsnchs/jwt/v3"
++	"github.com/pterodactyl/wings/router/tokens"
++)
++
++const (
++	BetterFilesCollabJoinEvent         = Event("betterfiles:collab:join")
++	BetterFilesCollabLeaveEvent        = Event("betterfiles:collab:leave")
++	BetterFilesCollabCloseEvent        = Event("betterfiles:collab:close")
++	BetterFilesCollabFileOpenEvent     = Event("betterfiles:collab:file:open")
++	BetterFilesCollabFileCloseEvent    = Event("betterfiles:collab:file:close")
++	BetterFilesCollabPresenceEvent     = Event("betterfiles:collab:presence")
++	BetterFilesCollabPatchEvent        = Event("betterfiles:collab:patch")
++	BetterFilesCollabSnapshotEvent     = Event("betterfiles:collab:snapshot")
++	BetterFilesCollabFileSavedEvent    = Event("betterfiles:collab:file:saved")
++	BetterFilesCollabFileCheckEvent    = Event("betterfiles:collab:file:check")
++	BetterFilesCollabExternalEditEvent = Event("betterfiles:collab:file:external-modified")
++
++	betterFilesCollabJoinedEvent          = Event("betterfiles:collab:joined")
++	betterFilesCollabClosedEvent          = Event("betterfiles:collab:closed")
++	betterFilesCollabLeftEvent            = Event("betterfiles:collab:left")
++	betterFilesCollabMembersEvent         = Event("betterfiles:collab:members")
++	betterFilesCollabFileUsersEvent       = Event("betterfiles:collab:file:users")
++	betterFilesCollabPresenceOut          = Event("betterfiles:collab:presence")
++	betterFilesCollabPatchOut             = Event("betterfiles:collab:patch")
++	betterFilesCollabSnapshotOut          = Event("betterfiles:collab:snapshot")
++	betterFilesCollabFileSavedOut         = Event("betterfiles:collab:file:saved")
++	betterFilesCollabFileCheckResultEvent = Event("betterfiles:collab:file:check:result")
++	betterFilesCollabExternalEditOut      = Event("betterfiles:collab:file:external-modified")
++	betterFilesCollabErrorEvent           = Event("betterfiles:collab:error")
++
++	betterFilesCollabReadPermission  = "file.read-content"
++	betterFilesCollabWritePermission = "file.update"
++	betterFilesCollabMaxPayloadBytes = 10 * 1024 * 1024
++	betterFilesCollabMaxMessageBytes = betterFilesCollabMaxPayloadBytes*2 + 8192
++	betterFilesCollabMaxUsers        = 20
++	betterFilesCollabMaxPatchChanges = 64
++	betterFilesCollabMaxPathBytes    = 4096
++	betterFilesCollabMaxCursorValue  = 1000000
++)
++
++type betterFilesCollabUser struct {
++	UUID         string `json:"uuid"`
++	Username     string `json:"username"`
++	Image        string `json:"image"`
++	ConnectionID string `json:"connection_id,omitempty"`
++}
++
++type betterFilesCollabSessionInfo struct {
++	Code         string `json:"code"`
++	ServerUUID   string `json:"server_uuid"`
++	OwnerUUID    string `json:"owner_uuid"`
++	Mode         string `json:"mode"`
++	MaxUsers     int    `json:"max_users"`
++	MaxFileBytes int    `json:"max_file_bytes"`
++	Token        string `json:"socket_token"`
++	ExpiresAt    int64  `json:"-"`
++}
++
++type betterFilesCollabToken struct {
++	jwt.Payload
++	ServerUUID   string `json:"server_uuid"`
++	UserUUID     string `json:"user_uuid"`
++	Enabled      bool   `json:"better_files_collaboration"`
++	Code         string `json:"collaboration_code"`
++	OwnerUUID    string `json:"collaboration_owner_uuid"`
++	Mode         string `json:"collaboration_mode"`
++	MaxUsers     int    `json:"collaboration_max_users"`
++	MaxFileBytes int    `json:"collaboration_max_file_bytes"`
++	UserCanEdit  bool   `json:"collaboration_user_can_edit"`
++	ExpiresAt    int64  `json:"collaboration_expires_at"`
++}
++
++func (p *betterFilesCollabToken) GetPayload() *jwt.Payload {
++	return &p.Payload
++}
++
++type betterFilesCollabJoinPayload struct {
++	Session betterFilesCollabSessionInfo `json:"session"`
++	User    betterFilesCollabUser        `json:"user"`
++}
++
++type betterFilesCollabFilePayload struct {
++	Code string `json:"code"`
++	Path string `json:"path"`
++}
++
++type betterFilesCollabCodePayload struct {
++	Code string `json:"code"`
++}
++
++type betterFilesCollabPresencePayload struct {
++	Code      string `json:"code"`
++	Path      string `json:"path"`
++	Line      int    `json:"line"`
++	Column    int    `json:"column"`
++	Selection string `json:"selection,omitempty"`
++}
++
++type betterFilesCollabSnapshotPayload struct {
++	Code    string `json:"code"`
++	Path    string `json:"path"`
++	Content string `json:"content"`
++	Version int64  `json:"version"`
++	Line    int    `json:"line,omitempty"`
++	Column  int    `json:"column,omitempty"`
++}
++
++type betterFilesCollabTextEdit struct {
++	RangeOffset int    `json:"rangeOffset"`
++	RangeLength int    `json:"rangeLength"`
++	Text        string `json:"text"`
++	BaseHash    string `json:"baseHash,omitempty"`
++	BaseLength  int    `json:"baseLength,omitempty"`
++}
++
++type betterFilesCollabPatchPayload struct {
++	Code    string                      `json:"code"`
++	Path    string                      `json:"path"`
++	Changes []betterFilesCollabTextEdit `json:"changes"`
++	Version int64                       `json:"version"`
++	Line    int                         `json:"line,omitempty"`
++	Column  int                         `json:"column,omitempty"`
++}
++
++type betterFilesCollabSavedPayload struct {
++	Code    string `json:"code"`
++	Path    string `json:"path"`
++	Content string `json:"content"`
++	Version int64  `json:"version"`
++}
++
++type betterFilesCollabFileCheckPayload struct {
++	Path      string `json:"path"`
++	RequestID string `json:"request_id,omitempty"`
++}
++
++type betterFilesCollabExternalEditPayload struct {
++	Path string                `json:"path"`
++	User betterFilesCollabUser `json:"user"`
++}
++
++type betterFilesCollabFileConflict struct {
++	Code  string                  `json:"code"`
++	Mode  string                  `json:"mode"`
++	Users []betterFilesCollabUser `json:"users"`
++}
++
++type betterFilesCollabMember struct {
++	HandlerID   string                `json:"handler_id"`
++	User        betterFilesCollabUser `json:"user"`
++	FilePath    string                `json:"file_path,omitempty"`
++	JoinedAt    time.Time             `json:"joined_at"`
++	LastVersion int64                 `json:"-"`
++	handler     *Handler
++}
++
++type betterFilesCollabSession struct {
++	sync.RWMutex
++	Code         string
++	ServerUUID   string
++	OwnerUUID    string
++	Mode         string
++	MaxUsers     int
++	MaxFileBytes int
++	ExpiresAt    time.Time
++	Members      map[string]*betterFilesCollabMember
++}
++
++var (
++	betterFilesCollabMu       sync.Mutex
++	betterFilesCollabSessions = map[string]*betterFilesCollabSession{}
++)
++
++// HandleBetterFilesCollaboration handles Better Files live collaboration socket messages.
++// Add this near the top of Handler.HandleInbound after TokenValid succeeds:
++//
++//	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
++//	    return err
++//	}
++func (h *Handler) HandleBetterFilesCollaboration(ctx context.Context, m Message) (bool, error) {
++	switch m.Event {
++	case BetterFilesCollabJoinEvent:
++		return true, h.betterFilesCollabJoin(ctx, m)
++	case BetterFilesCollabLeaveEvent:
++		h.betterFilesCollabLeaveAll()
++		return true, nil
++	case BetterFilesCollabCloseEvent:
++		return true, h.betterFilesCollabClose(m)
++	case BetterFilesCollabFileOpenEvent:
++		return true, h.betterFilesCollabSetFile(m, true)
++	case BetterFilesCollabFileCloseEvent:
++		return true, h.betterFilesCollabSetFile(m, false)
++	case BetterFilesCollabPresenceEvent:
++		return true, h.betterFilesCollabPresence(m)
++	case BetterFilesCollabPatchEvent:
++		return true, h.betterFilesCollabPatch(m)
++	case BetterFilesCollabSnapshotEvent:
++		return true, h.betterFilesCollabSnapshot(m)
++	case BetterFilesCollabFileSavedEvent:
++		return true, h.betterFilesCollabFileSaved(m)
++	case BetterFilesCollabFileCheckEvent:
++		return true, h.betterFilesCollabFileCheck(m)
++	case BetterFilesCollabExternalEditEvent:
++		return true, h.betterFilesCollabExternalEdit(m)
++	default:
++		return false, nil
++	}
++}
++
++func (h *Handler) betterFilesCollabJoin(ctx context.Context, m Message) error {
++	if !h.betterFilesCollabCanRead() {
++		return h.betterFilesCollabError("missing file read permission")
++	}
++
++	var payload betterFilesCollabJoinPayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration join payload")
++	}
++
++	jwt := h.GetJwt()
++	verifiedSession, tokenUserUUID, ok := betterFilesCollabVerifiedSession(payload.Session)
++	if !ok {
++		return h.betterFilesCollabError("invalid or expired collaboration session token")
++	}
++
++	if jwt == nil || verifiedSession.ServerUUID != jwt.GetServerUuid() || tokenUserUUID != jwt.UserUUID {
++		return h.betterFilesCollabError("collaboration session does not match this server")
++	}
++	if verifiedSession.Mode == "edit" && !h.betterFilesCollabCanWrite() {
++		return h.betterFilesCollabError("missing file write permission")
++	}
++
++	code := betterFilesCollabCode(verifiedSession.Code)
++	if code == "" {
++		return h.betterFilesCollabError("invalid collaboration session code")
++	}
++
++	user := payload.User
++	user.UUID = jwt.UserUUID
++	user.Username = betterFilesCollabSafeText(user.Username, 48)
++	user.Image = betterFilesCollabSafeImage(user.Image)
++	user.ConnectionID = betterFilesCollabSafeText(user.ConnectionID, 80)
++	if user.Username == "" {
++		user.Username = "User"
++	}
++	if user.ConnectionID == "" {
++		user.ConnectionID = h.Uuid().String()
++	}
++
++	h.betterFilesCollabLeaveAll()
++
++	session := betterFilesCollabGetOrCreateSession(verifiedSession)
++	if session.ServerUUID != verifiedSession.ServerUUID || session.Mode != verifiedSession.Mode {
++		return h.betterFilesCollabError("collaboration session metadata changed")
++	}
++
++	session.Lock()
++	if len(session.Members) >= session.MaxUsers {
++		session.Unlock()
++		return h.betterFilesCollabError("collaboration session is full")
++	}
++	session.Members[h.Uuid().String()] = &betterFilesCollabMember{
++		HandlerID: h.Uuid().String(),
++		User:      user,
++		JoinedAt:  time.Now(),
++		handler:   h,
++	}
++	session.Unlock()
++
++	go func(handlerID string, sessionCode string) {
++		<-ctx.Done()
++		betterFilesCollabRemoveMember(sessionCode, handlerID)
++	}(h.Uuid().String(), code)
++
++	h.betterFilesCollabSend(betterFilesCollabJoinedEvent, map[string]any{
++		"code": code,
++		"user": user,
++		"mode": session.Mode,
++	})
++	betterFilesCollabBroadcastMembers(session)
++	betterFilesCollabBroadcastFileUsers(session)
++
++	return nil
++}
++
++func (h *Handler) betterFilesCollabSetFile(m Message, open bool) error {
++	var payload betterFilesCollabFilePayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration file payload")
++	}
++
++	session, member := betterFilesCollabMemberFor(h, payload.Code)
++	if session == nil || member == nil {
++		return h.betterFilesCollabError("not joined to this collaboration session")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	session.Lock()
++	if open {
++		member.FilePath = path
++	} else if member.FilePath == path {
++		member.FilePath = ""
++	}
++	session.Unlock()
++
++	betterFilesCollabBroadcastFileUsers(session)
++	return nil
++}
++
++func (h *Handler) betterFilesCollabClose(m Message) error {
++	var payload betterFilesCollabCodePayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration close payload")
++	}
++
++	session, member := betterFilesCollabMemberFor(h, payload.Code)
++	if session == nil || member == nil {
++		return h.betterFilesCollabError("not joined to this collaboration session")
++	}
++	if session.OwnerUUID != "" && member.User.UUID != session.OwnerUUID {
++		return h.betterFilesCollabError("only the live session owner can close it")
++	}
++
++	code := session.Code
++	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabClosedEvent, map[string]any{
++		"code": code,
++	})
++
++	betterFilesCollabMu.Lock()
++	delete(betterFilesCollabSessions, code)
++	betterFilesCollabMu.Unlock()
++
++	return nil
++}
++
++func (h *Handler) betterFilesCollabPresence(m Message) error {
++	var payload betterFilesCollabPresencePayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration presence payload")
++	}
++
++	session, member := betterFilesCollabMemberFor(h, payload.Code)
++	if session == nil || member == nil {
++		return h.betterFilesCollabError("not joined to this collaboration session")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	payload.Path = path
++	payload.Line = betterFilesCollabClampCursor(payload.Line)
++	payload.Column = betterFilesCollabClampCursor(payload.Column)
++	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
++		betterFilesCollabBroadcastFileUsers(session)
++	}
++
++	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPresenceOut, map[string]any{
++		"code":      payload.Code,
++		"path":      payload.Path,
++		"line":      payload.Line,
++		"column":    payload.Column,
++		"selection": betterFilesCollabSafeText(payload.Selection, 120),
++		"user":      member.User,
++	})
++	return nil
++}
++
++func (h *Handler) betterFilesCollabPatch(m Message) error {
++	if !h.betterFilesCollabCanWrite() {
++		return h.betterFilesCollabError("missing file write permission")
++	}
++
++	var payload betterFilesCollabPatchPayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration patch payload")
++	}
++	session, member := betterFilesCollabMemberFor(h, payload.Code)
++	if session == nil || member == nil {
++		return h.betterFilesCollabError("not joined to this collaboration session")
++	}
++	if session.Mode != "edit" {
++		return h.betterFilesCollabError("collaboration session is view-only")
++	}
++	if len(payload.Changes) == 0 || len(payload.Changes) > betterFilesCollabMaxPatchChanges {
++		return h.betterFilesCollabError("invalid collaboration patch size")
++	}
++
++	totalTextBytes := 0
++	for _, change := range payload.Changes {
++		if change.RangeOffset < 0 || change.RangeLength < 0 || change.BaseLength < 0 || !utf8.ValidString(change.Text) {
++			return h.betterFilesCollabError("invalid collaboration patch change")
++		}
++		if change.RangeOffset > betterFilesCollabMaxPayloadBytes || change.RangeLength > betterFilesCollabMaxPayloadBytes || change.BaseLength > betterFilesCollabMaxPayloadBytes {
++			return h.betterFilesCollabError("invalid collaboration patch change")
++		}
++		totalTextBytes += len(change.Text)
++	}
++
++	maxPayloadBytes := session.MaxFileBytes
++	if maxPayloadBytes <= 0 || maxPayloadBytes > betterFilesCollabMaxPayloadBytes {
++		maxPayloadBytes = betterFilesCollabMaxPayloadBytes
++	}
++	if totalTextBytes > maxPayloadBytes {
++		return h.betterFilesCollabError("collaboration patch is too large")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	payload.Path = path
++	payload.Line = betterFilesCollabClampCursor(payload.Line)
++	payload.Column = betterFilesCollabClampCursor(payload.Column)
++	if !betterFilesCollabAcceptVersion(session, member, payload.Version) {
++		return nil
++	}
++	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
++		betterFilesCollabBroadcastFileUsers(session)
++	}
++
++	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPatchOut, map[string]any{
++		"code":    payload.Code,
++		"path":    payload.Path,
++		"changes": payload.Changes,
++		"version": payload.Version,
++		"line":    payload.Line,
++		"column":  payload.Column,
++		"user":    member.User,
++	})
++	return nil
++}
++
++func (h *Handler) betterFilesCollabSnapshot(m Message) error {
++	if !h.betterFilesCollabCanWrite() {
++		return h.betterFilesCollabError("missing file write permission")
++	}
++
++	var payload betterFilesCollabSnapshotPayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration snapshot payload")
++	}
++	session, member := betterFilesCollabMemberFor(h, payload.Code)
++	if session == nil || member == nil {
++		return h.betterFilesCollabError("not joined to this collaboration session")
++	}
++	if session.Mode != "edit" {
++		return h.betterFilesCollabError("collaboration session is view-only")
++	}
++	maxPayloadBytes := session.MaxFileBytes
++	if maxPayloadBytes <= 0 || maxPayloadBytes > betterFilesCollabMaxPayloadBytes {
++		maxPayloadBytes = betterFilesCollabMaxPayloadBytes
++	}
++	if len(payload.Content) > maxPayloadBytes || !utf8.ValidString(payload.Content) {
++		return h.betterFilesCollabError("collaboration snapshot is too large or invalid")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	payload.Path = path
++	payload.Line = betterFilesCollabClampCursor(payload.Line)
++	payload.Column = betterFilesCollabClampCursor(payload.Column)
++	if !betterFilesCollabAcceptVersion(session, member, payload.Version) {
++		return nil
++	}
++	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
++		betterFilesCollabBroadcastFileUsers(session)
++	}
++
++	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabSnapshotOut, map[string]any{
++		"code":    payload.Code,
++		"path":    payload.Path,
++		"content": payload.Content,
++		"version": payload.Version,
++		"line":    payload.Line,
++		"column":  payload.Column,
++		"user":    member.User,
++	})
++	return nil
++}
++
++func (h *Handler) betterFilesCollabFileSaved(m Message) error {
++	if !h.betterFilesCollabCanWrite() {
++		return h.betterFilesCollabError("missing file write permission")
++	}
++
++	var payload betterFilesCollabSavedPayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration save payload")
++	}
++
++	session, member := betterFilesCollabMemberFor(h, payload.Code)
++	if session == nil || member == nil {
++		return h.betterFilesCollabError("not joined to this collaboration session")
++	}
++	if session.Mode != "edit" {
++		return h.betterFilesCollabError("collaboration session is view-only")
++	}
++
++	maxPayloadBytes := session.MaxFileBytes
++	if maxPayloadBytes <= 0 || maxPayloadBytes > betterFilesCollabMaxPayloadBytes {
++		maxPayloadBytes = betterFilesCollabMaxPayloadBytes
++	}
++	if len(payload.Content) > maxPayloadBytes || !utf8.ValidString(payload.Content) {
++		return h.betterFilesCollabError("collaboration save payload is too large or invalid")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	payload.Path = path
++	if !betterFilesCollabAcceptVersion(session, member, payload.Version) {
++		return nil
++	}
++	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
++		betterFilesCollabBroadcastFileUsers(session)
++	}
++
++	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabFileSavedOut, map[string]any{
++		"code":    payload.Code,
++		"path":    payload.Path,
++		"content": payload.Content,
++		"version": payload.Version,
++		"user":    member.User,
++	})
++	return nil
++}
++
++func (h *Handler) betterFilesCollabFileCheck(m Message) error {
++	if !h.betterFilesCollabCanRead() {
++		return h.betterFilesCollabError("missing file read permission")
++	}
++
++	var payload betterFilesCollabFileCheckPayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid collaboration file check payload")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	conflicts := betterFilesCollabConflictsForPath(h, path)
++	users := make([]betterFilesCollabUser, 0)
++	for _, conflict := range conflicts {
++		users = append(users, conflict.Users...)
++	}
++
++	return h.betterFilesCollabSend(betterFilesCollabFileCheckResultEvent, map[string]any{
++		"path":       path,
++		"request_id": betterFilesCollabSafeText(payload.RequestID, 80),
++		"conflicts":  conflicts,
++		"users":      users,
++	})
++}
++
++func (h *Handler) betterFilesCollabExternalEdit(m Message) error {
++	if !h.betterFilesCollabCanWrite() {
++		return h.betterFilesCollabError("missing file write permission")
++	}
++
++	var payload betterFilesCollabExternalEditPayload
++	if !betterFilesCollabDecode(m, &payload) {
++		return h.betterFilesCollabError("invalid external edit payload")
++	}
++
++	jwt := h.GetJwt()
++	if jwt == nil {
++		return h.betterFilesCollabError("missing websocket identity")
++	}
++
++	path, ok := betterFilesCollabPath(payload.Path)
++	if !ok {
++		return h.betterFilesCollabError("file is not allowed in live collaboration")
++	}
++	user := payload.User
++	user.UUID = jwt.UserUUID
++	user.Username = betterFilesCollabSafeText(user.Username, 48)
++	user.Image = betterFilesCollabSafeImage(user.Image)
++	user.ConnectionID = betterFilesCollabSafeText(user.ConnectionID, 80)
++	if user.Username == "" {
++		user.Username = "User"
++	}
++	if user.ConnectionID == "" {
++		user.ConnectionID = h.Uuid().String()
++	}
++
++	for _, session := range betterFilesCollabSessionsForServer(jwt.GetServerUuid()) {
++		if session.Mode != "edit" {
++			continue
++		}
++
++		users := betterFilesCollabUsersForPath(session, path, h.Uuid().String())
++		if len(users) == 0 {
++			continue
++		}
++
++		betterFilesCollabBroadcast(session, "", betterFilesCollabExternalEditOut, map[string]any{
++			"code":          session.Code,
++			"path":          path,
++			"user":          user,
++			"editing_users": users,
++		})
++	}
++
++	return nil
++}
++
++func (h *Handler) betterFilesCollabCanRead() bool {
++	jwt := h.GetJwt()
++	return jwt != nil && jwt.HasPermission(betterFilesCollabReadPermission)
++}
++
++func (h *Handler) betterFilesCollabCanWrite() bool {
++	jwt := h.GetJwt()
++	return jwt != nil && jwt.HasPermission(betterFilesCollabWritePermission)
++}
++
++func (h *Handler) betterFilesCollabLeaveAll() {
++	betterFilesCollabMu.Lock()
++	sessions := make([]*betterFilesCollabSession, 0, len(betterFilesCollabSessions))
++	for _, session := range betterFilesCollabSessions {
++		sessions = append(sessions, session)
++	}
++	betterFilesCollabMu.Unlock()
++
++	for _, session := range sessions {
++		betterFilesCollabRemoveMember(session.Code, h.Uuid().String())
++	}
++}
++
++func (h *Handler) betterFilesCollabError(message string) error {
++	return h.betterFilesCollabSend(betterFilesCollabErrorEvent, map[string]string{"error": message})
++}
++
++func (h *Handler) betterFilesCollabSend(event Event, payload any) error {
++	data, err := json.Marshal(payload)
++	if err != nil {
++		return err
++	}
++	return h.SendJson(Message{Event: event, Args: []string{string(data)}})
++}
++
++func betterFilesCollabDecode(m Message, dst any) bool {
++	if len(m.Args) == 0 || len(m.Args[0]) > betterFilesCollabMaxMessageBytes {
++		return false
++	}
++	return json.Unmarshal([]byte(m.Args[0]), dst) == nil
++}
++
++func betterFilesCollabVerifiedSession(info betterFilesCollabSessionInfo) (betterFilesCollabSessionInfo, string, bool) {
++	if strings.TrimSpace(info.Token) == "" {
++		return betterFilesCollabSessionInfo{}, "", false
++	}
++
++	var token betterFilesCollabToken
++	if err := tokens.ParseToken([]byte(info.Token), &token); err != nil {
++		return betterFilesCollabSessionInfo{}, "", false
++	}
++	if !token.Enabled {
++		return betterFilesCollabSessionInfo{}, "", false
++	}
++
++	code := betterFilesCollabCode(token.Code)
++	if code == "" || code != betterFilesCollabCode(info.Code) {
++		return betterFilesCollabSessionInfo{}, "", false
++	}
++
++	mode := token.Mode
++	if mode != "edit" {
++		mode = "view"
++	}
++	maxUsers := token.MaxUsers
++	if maxUsers < 2 || maxUsers > betterFilesCollabMaxUsers {
++		maxUsers = 10
++	}
++
++	maxFileBytes := token.MaxFileBytes
++	if maxFileBytes < 1 || maxFileBytes > betterFilesCollabMaxPayloadBytes {
++		maxFileBytes = betterFilesCollabMaxPayloadBytes
++	}
++	expiresAt := token.ExpiresAt
++	if expiresAt <= 0 {
++		expiresAt = time.Now().Add(15 * time.Minute).Unix()
++	}
++	if expiresAt <= time.Now().Unix() {
++		return betterFilesCollabSessionInfo{}, "", false
++	}
++
++	return betterFilesCollabSessionInfo{
++		Code:         code,
++		ServerUUID:   token.ServerUUID,
++		OwnerUUID:    token.OwnerUUID,
++		Mode:         mode,
++		MaxUsers:     maxUsers,
++		MaxFileBytes: maxFileBytes,
++		Token:        info.Token,
++		ExpiresAt:    expiresAt,
++	}, token.UserUUID, true
++}
++
++func betterFilesCollabGetOrCreateSession(info betterFilesCollabSessionInfo) *betterFilesCollabSession {
++	code := betterFilesCollabCode(info.Code)
++	betterFilesCollabMu.Lock()
++	defer betterFilesCollabMu.Unlock()
++
++	if session, ok := betterFilesCollabSessions[code]; ok {
++		if betterFilesCollabSessionExpired(session) {
++			delete(betterFilesCollabSessions, code)
++		} else {
++			session.Lock()
++			if info.ExpiresAt > 0 && session.ExpiresAt.Before(time.Unix(info.ExpiresAt, 0)) {
++				session.ExpiresAt = time.Unix(info.ExpiresAt, 0)
++			}
++			session.Unlock()
++			return session
++		}
++	}
++
++	mode := info.Mode
++	if mode != "edit" {
++		mode = "view"
++	}
++	maxUsers := info.MaxUsers
++	if maxUsers < 2 || maxUsers > betterFilesCollabMaxUsers {
++		maxUsers = 10
++	}
++	maxFileBytes := info.MaxFileBytes
++	if maxFileBytes < 1 || maxFileBytes > betterFilesCollabMaxPayloadBytes {
++		maxFileBytes = betterFilesCollabMaxPayloadBytes
++	}
++
++	session := &betterFilesCollabSession{
++		Code:         code,
++		ServerUUID:   info.ServerUUID,
++		OwnerUUID:    info.OwnerUUID,
++		Mode:         mode,
++		MaxUsers:     maxUsers,
++		MaxFileBytes: maxFileBytes,
++		ExpiresAt:    time.Unix(info.ExpiresAt, 0),
++		Members:      map[string]*betterFilesCollabMember{},
++	}
++	betterFilesCollabSessions[code] = session
++
++	return session
++}
++
++func betterFilesCollabMemberFor(h *Handler, code string) (*betterFilesCollabSession, *betterFilesCollabMember) {
++	code = betterFilesCollabCode(code)
++	betterFilesCollabMu.Lock()
++	session := betterFilesCollabSessions[code]
++	betterFilesCollabMu.Unlock()
++	if session == nil {
++		return nil, nil
++	}
++	if betterFilesCollabSessionExpired(session) {
++		betterFilesCollabMu.Lock()
++		if betterFilesCollabSessions[code] == session {
++			delete(betterFilesCollabSessions, code)
++		}
++		betterFilesCollabMu.Unlock()
++		return nil, nil
++	}
++
++	session.RLock()
++	member := session.Members[h.Uuid().String()]
++	session.RUnlock()
++	return session, member
++}
++
++func betterFilesCollabRemoveMember(code string, handlerID string) {
++	code = betterFilesCollabCode(code)
++	betterFilesCollabMu.Lock()
++	session := betterFilesCollabSessions[code]
++	betterFilesCollabMu.Unlock()
++	if session == nil {
++		return
++	}
++
++	session.Lock()
++	if _, ok := session.Members[handlerID]; !ok {
++		session.Unlock()
++		return
++	}
++	delete(session.Members, handlerID)
++	empty := len(session.Members) == 0
++	session.Unlock()
++
++	if empty {
++		betterFilesCollabMu.Lock()
++		delete(betterFilesCollabSessions, code)
++		betterFilesCollabMu.Unlock()
++		return
++	}
++
++	betterFilesCollabBroadcastMembers(session)
++	betterFilesCollabBroadcastFileUsers(session)
++}
++
++func betterFilesCollabAcceptVersion(session *betterFilesCollabSession, member *betterFilesCollabMember, version int64) bool {
++	if version < 1 {
++		return false
++	}
++
++	session.Lock()
++	defer session.Unlock()
++
++	if version <= member.LastVersion {
++		return false
++	}
++
++	member.LastVersion = version
++	return true
++}
++
++func betterFilesCollabSetMemberPath(session *betterFilesCollabSession, member *betterFilesCollabMember, path string) bool {
++	session.Lock()
++	defer session.Unlock()
++
++	if member.FilePath == path {
++		return false
++	}
++
++	member.FilePath = path
++	return true
++}
++
++func betterFilesCollabSessionsForServer(serverUUID string) []*betterFilesCollabSession {
++	betterFilesCollabMu.Lock()
++	sessions := make([]*betterFilesCollabSession, 0, len(betterFilesCollabSessions))
++	for _, session := range betterFilesCollabSessions {
++		if betterFilesCollabSessionExpired(session) {
++			delete(betterFilesCollabSessions, session.Code)
++			continue
++		}
++		if session.ServerUUID == serverUUID {
++			sessions = append(sessions, session)
++		}
++	}
++	betterFilesCollabMu.Unlock()
++
++	return sessions
++}
++
++// CloseBetterFilesCollaborationSessions closes active in-memory Better Files
++// collaboration sessions for a server. It is called by the protected Wings API
++// when panel settings revoke collaboration access.
++func CloseBetterFilesCollaborationSessions(serverUUID string, mode string, reason string) int {
++	mode = strings.TrimSpace(mode)
++	if mode != "edit" && mode != "view" {
++		mode = ""
++	}
++	reason = betterFilesCollabSafeText(reason, 160)
++	if reason == "" {
++		reason = "Live collaboration was revoked by an administrator."
++	}
++
++	betterFilesCollabMu.Lock()
++	sessions := make([]*betterFilesCollabSession, 0, len(betterFilesCollabSessions))
++	for code, session := range betterFilesCollabSessions {
++		if betterFilesCollabSessionExpired(session) {
++			delete(betterFilesCollabSessions, code)
++			continue
++		}
++		if session.ServerUUID != serverUUID {
++			continue
++		}
++		if mode != "" && session.Mode != mode {
++			continue
++		}
++
++		delete(betterFilesCollabSessions, code)
++		sessions = append(sessions, session)
++	}
++	betterFilesCollabMu.Unlock()
++
++	for _, session := range sessions {
++		betterFilesCollabBroadcast(session, "", betterFilesCollabClosedEvent, map[string]any{
++			"code":   session.Code,
++			"reason": reason,
++		})
++
++		session.Lock()
++		session.Members = map[string]*betterFilesCollabMember{}
++		session.Unlock()
++	}
++
++	return len(sessions)
++}
++
++func betterFilesCollabUsersForPath(session *betterFilesCollabSession, path string, exceptHandlerID string) []betterFilesCollabUser {
++	users := make([]betterFilesCollabUser, 0)
++
++	session.RLock()
++	for _, member := range session.Members {
++		if exceptHandlerID != "" && member.HandlerID == exceptHandlerID {
++			continue
++		}
++		if member.FilePath == path {
++			users = append(users, member.User)
++		}
++	}
++	session.RUnlock()
++
++	return users
++}
++
++func betterFilesCollabConflictsForPath(h *Handler, path string) []betterFilesCollabFileConflict {
++	jwt := h.GetJwt()
++	if jwt == nil {
++		return nil
++	}
++
++	conflicts := make([]betterFilesCollabFileConflict, 0)
++	for _, session := range betterFilesCollabSessionsForServer(jwt.GetServerUuid()) {
++		if session.Mode != "edit" {
++			continue
++		}
++
++		users := betterFilesCollabUsersForPath(session, path, h.Uuid().String())
++		if len(users) == 0 {
++			continue
++		}
++
++		conflicts = append(conflicts, betterFilesCollabFileConflict{
++			Code:  session.Code,
++			Mode:  session.Mode,
++			Users: users,
++		})
++	}
++
++	return conflicts
++}
++
++func betterFilesCollabBroadcastMembers(session *betterFilesCollabSession) {
++	members := betterFilesCollabMembers(session)
++	betterFilesCollabBroadcast(session, "", betterFilesCollabMembersEvent, map[string]any{
++		"code":    session.Code,
++		"members": members,
++		"mode":    session.Mode,
++	})
++}
++
++func betterFilesCollabBroadcastFileUsers(session *betterFilesCollabSession) {
++	fileUsers := map[string][]betterFilesCollabUser{}
++
++	session.RLock()
++	for _, member := range session.Members {
++		if member.FilePath == "" {
++			continue
++		}
++		fileUsers[member.FilePath] = append(fileUsers[member.FilePath], member.User)
++	}
++	session.RUnlock()
++
++	betterFilesCollabBroadcast(session, "", betterFilesCollabFileUsersEvent, map[string]any{
++		"code":  session.Code,
++		"files": fileUsers,
++	})
++}
++
++func betterFilesCollabMembers(session *betterFilesCollabSession) []betterFilesCollabUser {
++	session.RLock()
++	defer session.RUnlock()
++
++	members := make([]betterFilesCollabUser, 0, len(session.Members))
++	for _, member := range session.Members {
++		members = append(members, member.User)
++	}
++	return members
++}
++
++func betterFilesCollabBroadcast(session *betterFilesCollabSession, exceptHandlerID string, event Event, payload any) {
++	data, err := json.Marshal(payload)
++	if err != nil {
++		return
++	}
++	msg := Message{Event: event, Args: []string{string(data)}}
++
++	session.RLock()
++	members := make([]*betterFilesCollabMember, 0, len(session.Members))
++	for _, member := range session.Members {
++		if exceptHandlerID != "" && member.HandlerID == exceptHandlerID {
++			continue
++		}
++		members = append(members, member)
++	}
++	session.RUnlock()
++
++	for _, member := range members {
++		_ = member.handler.SendJson(msg)
++	}
++}
++
++func betterFilesCollabCode(code string) string {
++	code = strings.ToUpper(strings.TrimSpace(code))
++	code = strings.ReplaceAll(code, " ", "")
++	if len(code) == 8 {
++		code = code[:4] + "-" + code[4:]
++	}
++	if len(code) != 9 || code[4] != '-' {
++		return ""
++	}
++	for i, r := range code {
++		if i == 4 {
++			continue
++		}
++		if (r < 'A' || r > 'Z') && (r < '0' || r > '9') {
++			return ""
++		}
++	}
++	return code
++}
++
++func betterFilesCollabSessionExpired(session *betterFilesCollabSession) bool {
++	session.RLock()
++	expiresAt := session.ExpiresAt
++	session.RUnlock()
++
++	return expiresAt.IsZero() || !expiresAt.After(time.Now())
++}
++
++func betterFilesCollabPath(path string) (string, bool) {
++	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
++	if path == "" || len(path) > betterFilesCollabMaxPathBytes || strings.Contains(path, "\x00") || !utf8.ValidString(path) {
++		return "", false
++	}
++	for _, r := range path {
++		if r < 0x20 || r == 0x7f {
++			return "", false
++		}
++	}
++	if !strings.HasPrefix(path, "/") {
++		path = "/" + path
++	}
++	for _, segment := range strings.Split(path, "/") {
++		if segment == ".." {
++			return "", false
++		}
++	}
++	path = pathpkg.Clean(path)
++	if !strings.HasPrefix(path, "/") {
++		path = "/" + path
++	}
++	if path == "." || path == "/" || len(path) > betterFilesCollabMaxPathBytes || betterFilesCollabSensitivePath(path) {
++		return "", false
++	}
++	return path, true
++}
++
++func betterFilesCollabSensitivePath(path string) bool {
++	parts := strings.Split(strings.ToLower(strings.Trim(path, "/")), "/")
++	for _, part := range parts {
++		if part == "" {
++			continue
++		}
++		if part == ".env" || strings.HasPrefix(part, ".env.") || part == ".npmrc" || part == "composer.auth.json" {
++			return true
++		}
++		if part == "id_rsa" || part == "id_ed25519" || part == "id_ecdsa" {
++			return true
++		}
++		if strings.HasSuffix(part, ".pem") || strings.HasSuffix(part, ".key") || strings.HasSuffix(part, ".p12") || strings.HasSuffix(part, ".pfx") {
++			return true
++		}
++		if strings.HasPrefix(part, "secret") || strings.HasPrefix(part, "credential") {
++			return true
++		}
++	}
++	return false
++}
++
++func betterFilesCollabClampCursor(value int) int {
++	if value < 1 {
++		return 1
++	}
++	if value > betterFilesCollabMaxCursorValue {
++		return betterFilesCollabMaxCursorValue
++	}
++	return value
++}
++
++func betterFilesCollabSafeImage(value string) string {
++	value = betterFilesCollabSafeText(value, 240)
++	if value == "" {
++		return ""
++	}
++	if strings.HasPrefix(value, "https://") {
++		return value
++	}
++	return ""
++}
++
++func betterFilesCollabSafeText(value string, max int) string {
++	value = strings.TrimSpace(value)
++	if !utf8.ValidString(value) {
++		return ""
++	}
++	if len(value) > max {
++		runes := []rune(value)
++		if len(runes) > max {
++			return string(runes[:max])
++		}
++	}
++	return value
++}
+diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
+index 57315a96f2d7baba708d8f9bf1333aed935182d6..547d4999fc0779b4e08010d198794c18a3d967d9 100644
+--- a/router/websocket/limiter.go
++++ b/router/websocket/limiter.go
+@@ -1,6 +1,7 @@
+ package websocket
+ 
+ import (
++	"strings"
+ 	"sync"
+ 	"time"
+ 
+@@ -68,6 +69,22 @@ func (l *LimiterBucket) For(e Event) *rate.Limiter {
+ 
+ // limitValuesFor returns the underlying limit and burst value for the given event.
+ func limitValuesFor(e Event) (rate.Limit, int) {
++	// Better Files live collaboration snapshots need a small dedicated bucket.
++	// Sharing Wings' default 4/sec bucket makes editors drift a character or two
++	// behind during normal typing.
++	if e == Event("betterfiles:collab:patch") {
++		return rate.Every(time.Millisecond * 50), 40
++	}
++	if e == Event("betterfiles:collab:snapshot") {
++		return rate.Every(time.Millisecond * 250), 12
++	}
++	if e == Event("betterfiles:collab:presence") {
++		return rate.Every(time.Millisecond * 250), 12
++	}
++	if isBetterFilesCollaborationEvent(e) {
++		return rate.Every(time.Millisecond * 200), 10
++	}
++
+ 	// Twice every five seconds.
+ 	if e == AuthenticationEvent || e == SendServerLogsEvent {
+ 		return rate.Every(time.Second * 5), 2
+@@ -83,9 +100,13 @@ func limitValuesFor(e Event) (rate.Limit, int) {
+ }
+ 
+ func limiterName(e Event) Event {
+-	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {
++	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {
+ 		return e
+ 	}
+ 
+ 	return "_default"
+ }
++
++func isBetterFilesCollaborationEvent(e Event) bool {
++	return strings.HasPrefix(string(e), "betterfiles:collab:")
++}
+diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
+index 4482667e67723a87eeb47735708f96206806c5db..71b935864ef6fd4251b0853872ffad31e9394da0 100644
+--- a/router/websocket/websocket.go
++++ b/router/websocket/websocket.go
+@@ -300,6 +300,10 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
+ 		}
+ 	}
+ 
++	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
++		return err
++	}
++
+ 	switch m.Event {
+ 	case AuthenticationEvent:
+ 		{
+diff --git a/server/file_history.go b/server/file_history.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717ca8a08f58
+--- /dev/null
++++ b/server/file_history.go
+@@ -0,0 +1,783 @@
++package server
++
++import (
++	"bytes"
++	"crypto/sha256"
++	"database/sql"
++	"encoding/hex"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"time"
++
++	_ "github.com/glebarez/sqlite"
++	"github.com/klauspost/compress/zstd"
++
++	"github.com/pterodactyl/wings/config"
++)
++
++const fileHistorySchema = `
++CREATE TABLE IF NOT EXISTS files (
++    id   INTEGER PRIMARY KEY,
++    path TEXT UNIQUE NOT NULL
++);
++
++CREATE TABLE IF NOT EXISTS revisions (
++    id           INTEGER PRIMARY KEY,
++    file_id      INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
++    chain_id     INTEGER NOT NULL,
++    size         INTEGER NOT NULL,
++    user_id      TEXT,
++    base_id      INTEGER,
++    payload      BLOB NOT NULL,
++    content_hash TEXT NOT NULL,
++    created      INTEGER NOT NULL
++);
++
++CREATE INDEX IF NOT EXISTS idx_revisions_file_created ON revisions(file_id, created DESC);
++CREATE INDEX IF NOT EXISTS idx_revisions_file_chain   ON revisions(file_id, chain_id);
++CREATE INDEX IF NOT EXISTS idx_revisions_created      ON revisions(created);
++`
++
++const fileHistoryZstdDictID uint32 = 0
++
++var fileHistorySkippedExtensions = map[string]struct{}{
++	".7z":      {},
++	".a":       {},
++	".avi":     {},
++	".bin":     {},
++	".br":      {},
++	".bz2":     {},
++	".class":   {},
++	".dat":     {},
++	".db":      {},
++	".dll":     {},
++	".dylib":   {},
++	".exe":     {},
++	".gif":     {},
++	".gz":      {},
++	".idx":     {},
++	".jar":     {},
++	".jpeg":    {},
++	".jpg":     {},
++	".ldb":     {},
++	".lz4":     {},
++	".m4a":     {},
++	".m4v":     {},
++	".mca":     {},
++	".mcc":     {},
++	".mcr":     {},
++	".mdb":     {},
++	".mkv":     {},
++	".mov":     {},
++	".mp3":     {},
++	".mp4":     {},
++	".o":       {},
++	".ogg":     {},
++	".ogv":     {},
++	".pak":     {},
++	".pack":    {},
++	".png":     {},
++	".rar":     {},
++	".rdb":     {},
++	".so":      {},
++	".sqlite":  {},
++	".sqlite3": {},
++	".sst":     {},
++	".tar":     {},
++	".tgz":     {},
++	".war":     {},
++	".wav":     {},
++	".webm":    {},
++	".webp":    {},
++	".xz":      {},
++	".zip":     {},
++	".zst":     {},
++}
++
++type FileRevision struct {
++	ID         int64     `json:"id"`
++	Size       uint64    `json:"size"`
++	StoredSize uint64    `json:"stored_size"`
++	User       string    `json:"user,omitempty"`
++	IsSnapshot bool      `json:"is_snapshot"`
++	Created    time.Time `json:"created"`
++}
++
++type fileRevisionRow struct {
++	id          int64
++	chainID     int64
++	size        uint64
++	storedSize  uint64
++	user        string
++	baseID      sql.NullInt64
++	contentHash string
++	createdMs   int64
++}
++
++type historyRevisionStep struct {
++	id      int64
++	baseID  sql.NullInt64
++	payload []byte
++	hash    string
++}
++
++type fileHistoryStore struct {
++	mu sync.Mutex
++	db *sql.DB
++}
++
++var fileHistoryStores sync.Map
++
++func (s *Server) RecordFileRevision(path string, before []byte, after []byte, user string) (int64, error) {
++	cfg := config.Get().System.FileHistory
++	if !ShouldRecordFileHistory(path, uint64(len(after))) || isLikelyBinaryHistoryContent(after) {
++		return 0, nil
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		return 0, err
++	}
++	return store.record(path, before, after, user, cfg)
++}
++
++func ShouldRecordFileHistory(path string, size uint64) bool {
++	cfg := config.Get().System.FileHistory
++	return cfg.Enabled && size <= cfg.FileSizeCap && isFileHistoryPathAllowed(path)
++}
++
++func (s *Server) ListFileRevisions(path string) ([]FileRevision, error) {
++	if !config.Get().System.FileHistory.Enabled {
++		return nil, nil
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		return nil, err
++	}
++	return store.list(path)
++}
++
++func (s *Server) FileRevisionContent(id int64) ([]byte, string, error) {
++	if !config.Get().System.FileHistory.Enabled {
++		return nil, "", sql.ErrNoRows
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		return nil, "", err
++	}
++	return store.content(id)
++}
++
++func (s *Server) ForgetFileHistory(path string) {
++	if !config.Get().System.FileHistory.Enabled {
++		return
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		s.Log().WithError(err).Warn("failed to open file history store")
++		return
++	}
++	if err := store.deleteFile(path); err != nil {
++		s.Log().WithError(err).WithField("path", path).Warn("failed to delete file history")
++	}
++}
++
++func (s *Server) RenameFileHistory(oldPath string, newPath string) {
++	if !config.Get().System.FileHistory.Enabled {
++		return
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		s.Log().WithError(err).Warn("failed to open file history store")
++		return
++	}
++	if err := store.renameFile(oldPath, newPath); err != nil {
++		s.Log().WithError(err).WithField("from_path", oldPath).WithField("to_path", newPath).Warn("failed to rename file history")
++	}
++}
++
++func (s *Server) fileHistoryStore() (*fileHistoryStore, error) {
++	actual, ok := fileHistoryStores.Load(s.ID())
++	if ok {
++		return actual.(*fileHistoryStore), nil
++	}
++
++	dir := filepath.Join(config.Get().System.RootDirectory, "diffs")
++	if err := os.MkdirAll(dir, 0o700); err != nil {
++		return nil, err
++	}
++	dbPath := filepath.Join(dir, s.ID()+".db")
++	db, err := sql.Open("sqlite", dbPath)
++	if err != nil {
++		return nil, err
++	}
++	store := &fileHistoryStore{db: db}
++	if err := store.init(); err != nil {
++		_ = db.Close()
++		return nil, err
++	}
++	actual, loaded := fileHistoryStores.LoadOrStore(s.ID(), store)
++	if loaded {
++		_ = db.Close()
++		return actual.(*fileHistoryStore), nil
++	}
++	return store, nil
++}
++
++func (s *fileHistoryStore) init() error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	if _, err := s.db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
++		return err
++	}
++	if _, err := s.db.Exec("PRAGMA synchronous=NORMAL;"); err != nil {
++		return err
++	}
++	if _, err := s.db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
++		return err
++	}
++	_, err := s.db.Exec(fileHistorySchema)
++	return err
++}
++
++func (s *fileHistoryStore) record(path string, before []byte, after []byte, user string, cfg config.FileHistoryConfiguration) (int64, error) {
++	if bytes.Equal(before, after) {
++		return 0, nil
++	}
++
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	tx, err := s.db.Begin()
++	if err != nil {
++		return 0, err
++	}
++	defer tx.Rollback()
++
++	fileID, err := upsertHistoryFile(tx, path)
++	if err != nil {
++		return 0, err
++	}
++
++	nowMs := time.Now().UTC().UnixMilli()
++	latest, err := latestFileRevision(tx, fileID)
++	if err != nil {
++		return 0, err
++	}
++
++	var revisionID int64
++	switch {
++	case latest == nil && len(before) > 0:
++		baseID, err := insertHistorySnapshot(tx, fileID, "", before, nowMs-1, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++		revisionID, err = insertCompactHistoryRevision(tx, fileID, baseID, baseID, before, user, after, nowMs, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++	case latest == nil:
++		revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++	default:
++		if latest.contentHash == contentHash(after) {
++			return latest.id, tx.Commit()
++		}
++		chainLength, err := currentHistoryChainLength(tx, fileID, latest.chainID)
++		if err != nil {
++			return 0, err
++		}
++		if chainLength >= int64(maxUint64(cfg.AnchorInterval, 1)) {
++			revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
++			if err != nil {
++				return 0, err
++			}
++			break
++		}
++		previous, err := reconstructHistoryRevision(tx, latest.id, cfg.ZstdLevel)
++		if err != nil {
++			revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
++			if err != nil {
++				return 0, err
++			}
++			break
++		}
++		revisionID, err = insertCompactHistoryRevision(tx, fileID, latest.id, latest.chainID, previous, user, after, nowMs, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++	}
++
++	protectedChain, err := latestHistoryChainID(tx, fileID)
++	if err != nil {
++		return 0, err
++	}
++	if err := pruneHistory(tx, fileID, protectedChain, cfg); err != nil {
++		return 0, err
++	}
++	if err := pruneServerHistory(tx, fileID, protectedChain, cfg); err != nil {
++		return 0, err
++	}
++	if err := tx.Commit(); err != nil {
++		return 0, err
++	}
++	return revisionID, nil
++}
++
++func (s *fileHistoryStore) list(path string) ([]FileRevision, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	fileID, err := findHistoryFile(s.db, path)
++	if err != nil || fileID == 0 {
++		return nil, err
++	}
++	rows, err := s.db.Query(`
++		SELECT id, chain_id, created, size, COALESCE(user_id, ''), base_id, LENGTH(payload), content_hash
++		FROM revisions WHERE file_id = ?
++		ORDER BY id DESC`, fileID)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++
++	revisions := make([]FileRevision, 0)
++	for rows.Next() {
++		row, err := scanHistoryRevision(rows)
++		if err != nil {
++			return nil, err
++		}
++		revisions = append(revisions, FileRevision{
++			ID:         row.id,
++			Size:       row.size,
++			StoredSize: row.storedSize,
++			User:       row.user,
++			IsSnapshot: !row.baseID.Valid,
++			Created:    time.UnixMilli(row.createdMs).UTC(),
++		})
++	}
++	return revisions, rows.Err()
++}
++
++func (s *fileHistoryStore) content(id int64) ([]byte, string, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	content, err := reconstructHistoryRevision(s.db, id, config.Get().System.FileHistory.ZstdLevel)
++	if err != nil {
++		return nil, "", err
++	}
++	var p string
++	if err := s.db.QueryRow(`
++		SELECT files.path
++		FROM revisions
++		JOIN files ON files.id = revisions.file_id
++		WHERE revisions.id = ?`, id).Scan(&p); err != nil {
++		return nil, "", err
++	}
++	return content, p, nil
++}
++
++func (s *fileHistoryStore) deleteFile(path string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	_, err := s.db.Exec("DELETE FROM files WHERE path = ?", path)
++	return err
++}
++
++func (s *fileHistoryStore) renameFile(oldPath string, newPath string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	_, err := s.db.Exec("UPDATE files SET path = ? WHERE path = ?", newPath, oldPath)
++	return err
++}
++
++type historyQuerier interface {
++	QueryRow(query string, args ...any) *sql.Row
++	Query(query string, args ...any) (*sql.Rows, error)
++}
++
++func upsertHistoryFile(tx *sql.Tx, path string) (int64, error) {
++	var id int64
++	err := tx.QueryRow("SELECT id FROM files WHERE path = ?", path).Scan(&id)
++	if err == nil {
++		return id, nil
++	}
++	if err != sql.ErrNoRows {
++		return 0, err
++	}
++	res, err := tx.Exec("INSERT INTO files(path) VALUES (?)", path)
++	if err != nil {
++		return 0, err
++	}
++	return res.LastInsertId()
++}
++
++func findHistoryFile(db *sql.DB, path string) (int64, error) {
++	var id int64
++	err := db.QueryRow("SELECT id FROM files WHERE path = ?", path).Scan(&id)
++	if err == sql.ErrNoRows {
++		return 0, nil
++	}
++	return id, err
++}
++
++func latestFileRevision(q historyQuerier, fileID int64) (*fileRevisionRow, error) {
++	row := q.QueryRow(`
++		SELECT id, chain_id, created, size, COALESCE(user_id, ''), base_id, LENGTH(payload), content_hash
++		FROM revisions WHERE file_id = ?
++		ORDER BY id DESC LIMIT 1`, fileID)
++	revision, err := scanHistoryRevision(row)
++	if err == sql.ErrNoRows {
++		return nil, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	return &revision, nil
++}
++
++func latestHistoryChainID(q historyQuerier, fileID int64) (sql.NullInt64, error) {
++	var chainID sql.NullInt64
++	err := q.QueryRow("SELECT chain_id FROM revisions WHERE file_id = ? ORDER BY id DESC LIMIT 1", fileID).Scan(&chainID)
++	if err == sql.ErrNoRows {
++		return sql.NullInt64{}, nil
++	}
++	return chainID, err
++}
++
++func currentHistoryChainLength(q historyQuerier, fileID int64, chainID int64) (int64, error) {
++	var count int64
++	err := q.QueryRow("SELECT COUNT(*) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID).Scan(&count)
++	return count, err
++}
++
++func insertHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte, createdMs int64, level int) (int64, error) {
++	payload, err := encodeHistorySnapshot(content, level)
++	if err != nil {
++		return 0, err
++	}
++	return insertEncodedHistorySnapshot(tx, fileID, user, content, payload, createdMs)
++}
++
++func insertEncodedHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte, payload []byte, createdMs int64) (int64, error) {
++	res, err := tx.Exec(`
++		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
++		VALUES (?, 0, ?, ?, NULLIF(?, ''), NULL, ?, ?)`,
++		fileID, createdMs, len(content), user, payload, contentHash(content))
++	if err != nil {
++		return 0, err
++	}
++	id, err := res.LastInsertId()
++	if err != nil {
++		return 0, err
++	}
++	if _, err := tx.Exec("UPDATE revisions SET chain_id = ? WHERE id = ?", id, id); err != nil {
++		return 0, err
++	}
++	return id, nil
++}
++
++func insertCompactHistoryRevision(tx *sql.Tx, fileID int64, baseID int64, chainID int64, base []byte, user string, content []byte, createdMs int64, level int) (int64, error) {
++	snapshotPayload, err := encodeHistorySnapshot(content, level)
++	if err != nil {
++		return 0, err
++	}
++	deltaPayload, deltaErr := encodeHistoryDelta(base, content, level)
++	if deltaErr != nil || len(deltaPayload)*10 >= len(snapshotPayload)*9 {
++		return insertEncodedHistorySnapshot(tx, fileID, user, content, snapshotPayload, createdMs)
++	}
++	return insertEncodedHistoryDelta(tx, fileID, baseID, chainID, user, content, deltaPayload, createdMs)
++}
++
++func insertEncodedHistoryDelta(tx *sql.Tx, fileID int64, baseID int64, chainID int64, user string, content []byte, payload []byte, createdMs int64) (int64, error) {
++	res, err := tx.Exec(`
++		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
++		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
++		fileID, chainID, createdMs, len(content), user, baseID, payload, contentHash(content))
++	if err != nil {
++		return 0, err
++	}
++	return res.LastInsertId()
++}
++
++func pruneHistory(tx *sql.Tx, fileID int64, protectedChain sql.NullInt64, cfg config.FileHistoryConfiguration) error {
++	if err := pruneOldHistoryChains(tx, fileID, maxUint64(cfg.KeepChains, 1)); err != nil {
++		return err
++	}
++	for {
++		size, err := historyFilePayloadBytes(tx, fileID)
++		if err != nil || size <= cfg.PerFileDiskBudget {
++			return err
++		}
++		freed, err := dropOldestHistoryChain(tx, fileID, protectedChain, maxUint64(cfg.KeepChains, 1))
++		if err != nil || freed == 0 {
++			return err
++		}
++	}
++}
++
++func pruneServerHistory(tx *sql.Tx, protectedFileID int64, protectedChain sql.NullInt64, cfg config.FileHistoryConfiguration) error {
++	if cfg.PerServerDiskBudget == 0 {
++		return nil
++	}
++	for {
++		size, err := historyTotalPayloadBytes(tx)
++		if err != nil || size <= cfg.PerServerDiskBudget {
++			return err
++		}
++		freed, err := dropGloballyOldestHistoryChain(tx, protectedFileID, protectedChain)
++		if err != nil || freed == 0 {
++			return err
++		}
++	}
++}
++
++func pruneOldHistoryChains(tx *sql.Tx, fileID int64, keepChains uint64) error {
++	rows, err := tx.Query(`
++		SELECT DISTINCT chain_id FROM revisions
++		WHERE file_id = ?
++		ORDER BY chain_id DESC LIMIT ?`, fileID, keepChains)
++	if err != nil {
++		return err
++	}
++	defer rows.Close()
++
++	chains := make([]int64, 0, keepChains)
++	for rows.Next() {
++		var id int64
++		if err := rows.Scan(&id); err != nil {
++			return err
++		}
++		chains = append(chains, id)
++	}
++	if err := rows.Err(); err != nil {
++		return err
++	}
++	if uint64(len(chains)) < keepChains || len(chains) == 0 {
++		return nil
++	}
++	_, err = tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id < ?", fileID, chains[len(chains)-1])
++	return err
++}
++
++func dropOldestHistoryChain(tx *sql.Tx, fileID int64, protected sql.NullInt64, minChains uint64) (uint64, error) {
++	var count int64
++	if err := tx.QueryRow("SELECT COUNT(DISTINCT chain_id) FROM revisions WHERE file_id = ?", fileID).Scan(&count); err != nil {
++		return 0, err
++	}
++	if uint64(count) <= maxUint64(minChains, 1) {
++		return 0, nil
++	}
++
++	query := "SELECT MIN(chain_id) FROM revisions WHERE file_id = ?"
++	args := []any{fileID}
++	if protected.Valid {
++		query += " AND chain_id <> ?"
++		args = append(args, protected.Int64)
++	}
++	var chainID sql.NullInt64
++	if err := tx.QueryRow(query, args...).Scan(&chainID); err != nil || !chainID.Valid {
++		return 0, err
++	}
++	var freed uint64
++	if err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID.Int64).Scan(&freed); err != nil {
++		return 0, err
++	}
++	_, err := tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID.Int64)
++	return freed, err
++}
++
++func dropGloballyOldestHistoryChain(tx *sql.Tx, protectedFileID int64, protectedChain sql.NullInt64) (uint64, error) {
++	query := `
++		SELECT r.file_id, r.chain_id
++		FROM revisions r
++		WHERE (SELECT COUNT(DISTINCT chain_id) FROM revisions WHERE file_id = r.file_id) > 1`
++	args := []any{}
++	if protectedChain.Valid {
++		query += " AND NOT (r.file_id = ? AND r.chain_id = ?)"
++		args = append(args, protectedFileID, protectedChain.Int64)
++	}
++	query += `
++		GROUP BY r.file_id, r.chain_id
++		ORDER BY MIN(r.created) ASC, r.chain_id ASC
++		LIMIT 1`
++
++	var fileID int64
++	var chainID int64
++	if err := tx.QueryRow(query, args...).Scan(&fileID, &chainID); err != nil {
++		if err == sql.ErrNoRows {
++			return 0, nil
++		}
++		return 0, err
++	}
++
++	var freed uint64
++	if err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID).Scan(&freed); err != nil {
++		return 0, err
++	}
++	_, err := tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID)
++	return freed, err
++}
++
++func historyFilePayloadBytes(tx *sql.Tx, fileID int64) (uint64, error) {
++	var size uint64
++	err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ?", fileID).Scan(&size)
++	return size, err
++}
++
++func historyTotalPayloadBytes(tx *sql.Tx) (uint64, error) {
++	var size uint64
++	err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions").Scan(&size)
++	return size, err
++}
++
++func reconstructHistoryRevision(q historyQuerier, id int64, level int) ([]byte, error) {
++	chain := make([]historyRevisionStep, 0, 8)
++	current := sql.NullInt64{Int64: id, Valid: true}
++	for current.Valid && len(chain) < 1000 {
++		var row historyRevisionStep
++		if err := q.QueryRow("SELECT id, base_id, payload, content_hash FROM revisions WHERE id = ?", current.Int64).
++			Scan(&row.id, &row.baseID, &row.payload, &row.hash); err != nil {
++			return nil, err
++		}
++		chain = append(chain, row)
++		current = row.baseID
++		if !row.baseID.Valid {
++			break
++		}
++	}
++	if len(chain) == 0 || chain[len(chain)-1].baseID.Valid {
++		return nil, fmt.Errorf("revision %d has no snapshot anchor", id)
++	}
++
++	reverseHistoryChain(chain)
++	content, err := decodeHistorySnapshot(chain[0].payload)
++	if err != nil {
++		return nil, err
++	}
++	if contentHash(content) != chain[0].hash {
++		return nil, fmt.Errorf("content hash mismatch at revision %d", chain[0].id)
++	}
++	for _, next := range chain[1:] {
++		content, err = decodeHistoryDelta(next.payload, content, level)
++		if err != nil {
++			return nil, err
++		}
++		if contentHash(content) != next.hash {
++			return nil, fmt.Errorf("content hash mismatch at revision %d", next.id)
++		}
++	}
++	return content, nil
++}
++
++func reverseHistoryChain(chain []historyRevisionStep) {
++	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
++		chain[i], chain[j] = chain[j], chain[i]
++	}
++}
++
++type revisionScanner interface {
++	Scan(dest ...any) error
++}
++
++func scanHistoryRevision(scanner revisionScanner) (fileRevisionRow, error) {
++	var row fileRevisionRow
++	err := scanner.Scan(&row.id, &row.chainID, &row.createdMs, &row.size, &row.user, &row.baseID, &row.storedSize, &row.contentHash)
++	return row, err
++}
++
++func encodeHistorySnapshot(content []byte, level int) ([]byte, error) {
++	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(level)), zstd.WithEncoderConcurrency(1))
++	if err != nil {
++		return nil, err
++	}
++	defer encoder.Close()
++	return encoder.EncodeAll(content, nil), nil
++}
++
++func decodeHistorySnapshot(payload []byte) ([]byte, error) {
++	decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
++	if err != nil {
++		return nil, err
++	}
++	defer decoder.Close()
++	return decoder.DecodeAll(payload, nil)
++}
++
++func encodeHistoryDelta(base []byte, content []byte, level int) ([]byte, error) {
++	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(level)), zstd.WithEncoderConcurrency(1), zstd.WithEncoderDictRaw(fileHistoryZstdDictID, base))
++	if err != nil {
++		return nil, err
++	}
++	defer encoder.Close()
++	payload := encoder.EncodeAll(content, nil)
++	decoded, err := decodeHistoryDelta(payload, base, level)
++	if err != nil {
++		return nil, err
++	}
++	if !bytes.Equal(decoded, content) {
++		return nil, fmt.Errorf("zstd delta round-trip mismatch")
++	}
++	return payload, nil
++}
++
++func decodeHistoryDelta(payload []byte, base []byte, level int) ([]byte, error) {
++	decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderDictRaw(fileHistoryZstdDictID, base))
++	if err != nil {
++		return nil, err
++	}
++	defer decoder.Close()
++	return decoder.DecodeAll(payload, nil)
++}
++
++func contentHash(content []byte) string {
++	sum := sha256.Sum256(content)
++	return hex.EncodeToString(sum[:])
++}
++
++func maxUint64(value uint64, fallback uint64) uint64 {
++	if value == 0 {
++		return fallback
++	}
++	return value
++}
++
++func isFileHistoryPathAllowed(path string) bool {
++	ext := strings.ToLower(filepath.Ext(path))
++	if ext == "" {
++		return true
++	}
++	_, skipped := fileHistorySkippedExtensions[ext]
++	return !skipped
++}
++
++func isLikelyBinaryHistoryContent(content []byte) bool {
++	if len(content) == 0 {
++		return false
++	}
++	sample := content
++	if len(sample) > 8192 {
++		sample = sample[:8192]
++	}
++
++	controlBytes := 0
++	for _, b := range sample {
++		switch b {
++		case 0:
++			return true
++		case '\n', '\r', '\t', '\f':
++			continue
++		default:
++			if b < 0x20 {
++				controlBytes++
++			}
++		}
++	}
++	return controlBytes*100 > len(sample)*5
++}
+diff --git a/server/file_history_test.go b/server/file_history_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af92b9280e
+--- /dev/null
++++ b/server/file_history_test.go
+@@ -0,0 +1,140 @@
++package server
++
++import (
++	"bytes"
++	"database/sql"
++	"testing"
++	"time"
++
++	_ "github.com/glebarez/sqlite"
++
++	"github.com/pterodactyl/wings/config"
++)
++
++func TestFileHistoryDeltaRoundTrip(t *testing.T) {
++	base := bytes.Repeat([]byte("server-start-line=old\n"), 128)
++	content := bytes.ReplaceAll(base, []byte("old"), []byte("new"))
++
++	payload, err := encodeHistoryDelta(base, content, 3)
++	if err != nil {
++		t.Fatalf("encodeHistoryDelta returned error: %v", err)
++	}
++
++	decoded, err := decodeHistoryDelta(payload, base, 3)
++	if err != nil {
++		t.Fatalf("decodeHistoryDelta returned error: %v", err)
++	}
++	if !bytes.Equal(decoded, content) {
++		t.Fatal("decoded delta does not match original content")
++	}
++}
++
++func TestFileHistorySnapshotRoundTrip(t *testing.T) {
++	content := []byte("echo starting server\njava -jar server.jar\n")
++
++	payload, err := encodeHistorySnapshot(content, 3)
++	if err != nil {
++		t.Fatalf("encodeHistorySnapshot returned error: %v", err)
++	}
++
++	decoded, err := decodeHistorySnapshot(payload)
++	if err != nil {
++		t.Fatalf("decodeHistorySnapshot returned error: %v", err)
++	}
++	if !bytes.Equal(decoded, content) {
++		t.Fatal("decoded snapshot does not match original content")
++	}
++}
++
++func TestFileHistoryPathFilter(t *testing.T) {
++	allowed := []string{
++		"/ServerStart.bat",
++		"/server.properties",
++		"/config/custom.dat.txt",
++		"/no-extension",
++	}
++	for _, path := range allowed {
++		if !isFileHistoryPathAllowed(path) {
++			t.Fatalf("expected %s to be tracked", path)
++		}
++	}
++
++	skipped := []string{
++		"/server.jar",
++		"/world/region/r.0.0.mca",
++		"/backup.tar.gz",
++		"/database.sqlite",
++		"/image.PNG",
++	}
++	for _, path := range skipped {
++		if isFileHistoryPathAllowed(path) {
++			t.Fatalf("expected %s to be skipped", path)
++		}
++	}
++}
++
++func TestFileHistoryBinaryContentFilter(t *testing.T) {
++	if isLikelyBinaryHistoryContent([]byte("line one\nline two\n")) {
++		t.Fatal("expected text content to be tracked")
++	}
++	if !isLikelyBinaryHistoryContent([]byte{0x50, 0x4b, 0x03, 0x04, 0x00}) {
++		t.Fatal("expected nul-containing content to be skipped")
++	}
++	if !isLikelyBinaryHistoryContent([]byte{0x01, 0x02, 0x03, 0x04, 't', 'e', 'x', 't'}) {
++		t.Fatal("expected control-heavy content to be skipped")
++	}
++}
++
++func TestFileHistoryRecordStartsSnapshotAfterCorruptLatestRevision(t *testing.T) {
++	db, err := sql.Open("sqlite", ":memory:")
++	if err != nil {
++		t.Fatalf("failed to open sqlite: %v", err)
++	}
++	defer db.Close()
++
++	store := &fileHistoryStore{db: db}
++	if err := store.init(); err != nil {
++		t.Fatalf("failed to init store: %v", err)
++	}
++
++	cfg := config.FileHistoryConfiguration{
++		Enabled:             true,
++		ZstdLevel:           3,
++		AnchorInterval:      4,
++		KeepChains:          2,
++		FileSizeCap:         1024 * 1024,
++		PerFileDiskBudget:   1024 * 1024,
++		PerServerDiskBudget: 1024 * 1024,
++	}
++
++	first := []byte("motd=first\n")
++	firstID, err := store.record("/server.properties", nil, first, "user-a", cfg)
++	if err != nil {
++		t.Fatalf("failed to record initial revision: %v", err)
++	}
++
++	fileID, err := findHistoryFile(db, "/server.properties")
++	if err != nil {
++		t.Fatalf("failed to find file: %v", err)
++	}
++	if _, err := db.Exec(`
++		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
++		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
++		fileID, firstID, time.Now().UTC().UnixMilli(), len(first), "user-a", firstID, []byte("not a zstd delta"), contentHash(first)); err != nil {
++		t.Fatalf("failed to insert corrupt revision: %v", err)
++	}
++
++	after := []byte("motd=recovered\n")
++	recoveredID, err := store.record("/server.properties", first, after, "user-b", cfg)
++	if err != nil {
++		t.Fatalf("failed to record after corrupt latest revision: %v", err)
++	}
++
++	content, err := reconstructHistoryRevision(db, recoveredID, cfg.ZstdLevel)
++	if err != nil {
++		t.Fatalf("failed to reconstruct recovered revision: %v", err)
++	}
++	if !bytes.Equal(content, after) {
++		t.Fatal("recovered revision content does not match")
++	}
++}

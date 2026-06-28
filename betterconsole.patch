@@ -1,0 +1,1357 @@
+diff --git a/config/config.go b/config/config.go
+index a83936d882d9b13e7c8b063941856759d78acb40..df47b7b2ffccce267725aa0e3eb78ff0fce22c1d 100644
+--- a/config/config.go
++++ b/config/config.go
+@@ -69,6 +69,13 @@ type SftpConfiguration struct {
+ 	Port int `default:"2022" json:"bind_port" yaml:"bind_port"`
+ 	// If set to true, no write actions will be allowed on the SFTP server.
+ 	ReadOnly bool `default:"false" yaml:"read_only"`
++	// Shell controls the optional interactive SSH shell exposed through the SFTP listener.
++	Shell SftpShellConfiguration `yaml:"shell"`
++}
++
++type SftpShellConfiguration struct {
++	// Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
++	Enabled bool `default:"false" yaml:"enabled"`
+ }
+ 
+ // ApiConfiguration defines the configuration for the internal API that is
+diff --git a/environment/docker/betterconsole_pull_progress.go b/environment/docker/betterconsole_pull_progress.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..8ed965d15891c1a00f5a4a045e5f2bb3180c6fcd
+--- /dev/null
++++ b/environment/docker/betterconsole_pull_progress.go
+@@ -0,0 +1,171 @@
++package docker
++
++import (
++	"encoding/json"
++	"fmt"
++	"math"
++	"strings"
++
++	"github.com/buger/jsonparser"
++)
++
++func betterConsoleDockerPullProgress(img string, b []byte) string {
++	id, _ := jsonparser.GetString(b, "id")
++	status, _ := jsonparser.GetString(b, "status")
++	progress, _ := jsonparser.GetString(b, "progress")
++	current, currentErr := jsonparser.GetInt(b, "progressDetail", "current")
++	total, totalErr := jsonparser.GetInt(b, "progressDetail", "total")
++	status = strings.TrimSpace(status)
++	if status == "" && id == "" {
++		return ""
++	}
++
++	displayStatus, phase := betterConsoleDockerPullStatus(status)
++	hasProgressDetail := currentErr == nil && totalErr == nil
++	percent := betterConsoleDockerPullPercent(current, total, phase == "complete")
++	line := betterConsoleDockerPullLine(displayStatus, current, total, hasProgressDetail)
++	image := betterConsoleDockerPullSafeImageRef(img)
++
++	payload, err := json.Marshal(map[string]interface{}{
++		"id":       betterConsoleDockerPullSafeText(id),
++		"image":    image,
++		"label":    betterConsoleDockerPullImageLabel(image),
++		"phase":    phase,
++		"status":   displayStatus,
++		"progress": betterConsoleDockerPullSafeText(progress),
++		"current":  current,
++		"total":    total,
++		"percent":  percent,
++		"line":     line,
++	})
++	if err != nil {
++		return line
++	}
++
++	return string(payload)
++}
++
++func betterConsoleDockerPullStatus(status string) (string, string) {
++	normalized := strings.ToLower(strings.TrimSpace(status))
++	switch normalized {
++	case "downloading":
++		return "Downloading", "pulling"
++	case "extracting":
++		return "Extracting", "extracting"
++	case "download complete":
++		return "Download complete", "complete"
++	case "pull complete":
++		return "Pull complete", "complete"
++	case "already exists":
++		return "Already exists", "complete"
++	default:
++		if status == "" {
++			return "Pulling", "pulling"
++		}
++		return betterConsoleDockerPullSafeText(status), "status"
++	}
++}
++
++func betterConsoleDockerPullPercent(current int64, total int64, complete bool) float64 {
++	if complete {
++		return 100
++	}
++	if total <= 0 || current <= 0 {
++		return 0
++	}
++
++	percent := (float64(current) / float64(total)) * 100
++	if percent > 100 {
++		return 100
++	}
++	if percent < 0 {
++		return 0
++	}
++
++	return percent
++}
++
++func betterConsoleDockerPullLine(status string, current int64, total int64, complete bool) string {
++	if !complete {
++		return strings.TrimSpace(status)
++	}
++
++	percent := betterConsoleDockerPullPercent(current, total, false)
++	width := 50 - len(status)
++	if width < 8 {
++		width = 8
++	}
++
++	return fmt.Sprintf(
++		"%s %s %.2f%% of %s",
++		status,
++		betterConsoleDockerPullBar(width, percent),
++		percent,
++		betterConsoleDockerPullBytes(total),
++	)
++}
++
++func betterConsoleDockerPullBar(width int, percent float64) string {
++	completed := int(math.Round((percent / 100) * float64(width)))
++	if completed >= width {
++		return "[" + strings.Repeat("=", width) + "]"
++	}
++	if completed < 0 {
++		completed = 0
++	}
++
++	return "[" + strings.Repeat("=", completed) + ">" + strings.Repeat(" ", width-completed-1) + "]"
++}
++
++func betterConsoleDockerPullBytes(value int64) string {
++	if value <= 0 {
++		return "0 B"
++	}
++
++	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
++	size := float64(value)
++	unit := 0
++	for size >= 1024 && unit < len(units)-1 {
++		size /= 1024
++		unit++
++	}
++
++	if unit == 0 {
++		return fmt.Sprintf("%d B", value)
++	}
++
++	return fmt.Sprintf("%.1f %s", size, units[unit])
++}
++
++func betterConsoleDockerPullImageLabel(img string) string {
++	parts := strings.Split(strings.TrimSpace(img), "/")
++	if len(parts) == 0 || parts[len(parts)-1] == "" {
++		return "Docker image"
++	}
++
++	return parts[len(parts)-1]
++}
++
++func betterConsoleDockerPullSafeImageRef(img string) string {
++	img = strings.TrimSpace(img)
++	slash := strings.IndexByte(img, '/')
++	if slash <= 0 {
++		return img
++	}
++
++	registry := img[:slash]
++	if at := strings.LastIndex(registry, "@"); at >= 0 {
++		registry = registry[at+1:]
++	}
++
++	return registry + "/" + img[slash+1:]
++}
++
++func betterConsoleDockerPullSafeText(value string) string {
++	return strings.Map(func(r rune) rune {
++		if r == '\t' || r >= 32 {
++			return r
++		}
++		return -1
++	}, strings.TrimSpace(value))
++}
+diff --git a/environment/docker/betterconsole_pull_progress_test.go b/environment/docker/betterconsole_pull_progress_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66603eaa2f
+--- /dev/null
++++ b/environment/docker/betterconsole_pull_progress_test.go
+@@ -0,0 +1,58 @@
++package docker
++
++import (
++	"encoding/json"
++	"strings"
++	"testing"
++)
++
++func TestBetterConsoleDockerPullProgressWithProgressDetail(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte(`{"id":"layer","status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	var parsed struct {
++		Line    string  `json:"line"`
++		Percent float64 `json:"percent"`
++	}
++	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
++		t.Fatal(err)
++	}
++	if parsed.Percent != 50 {
++		t.Fatalf("expected 50 percent, got %f", parsed.Percent)
++	}
++	if !strings.HasPrefix(parsed.Line, "Downloading [") {
++		t.Fatalf("expected progress bar line, got %q", parsed.Line)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressWithoutProgressDetail(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte(`{"status":"Status: Image is up to date for ghcr.io/ptero-eggs/yolks:nodejs_22"}`))
++
++	var parsed struct {
++		Line string `json:"line"`
++	}
++	if err := json.Unmarshal([]byte(payload), &parsed); err != nil {
++		t.Fatal(err)
++	}
++	if strings.Contains(parsed.Line, "0 B") || strings.Contains(parsed.Line, "[") {
++		t.Fatalf("expected plain status without fake bar, got %q", parsed.Line)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressSanitizesImageCredentials(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("user:secret@registry.example.com/private/image:latest", []byte(`{"id":"layer","status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	if strings.Contains(payload, "secret") || strings.Contains(payload, "user:") {
++		t.Fatalf("expected sanitized image payload, got %q", payload)
++	}
++	if !strings.Contains(payload, "registry.example.com/private/image:latest") {
++		t.Fatalf("expected sanitized image reference in payload, got %q", payload)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressStripsControlCharacters(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte("{\"id\":\"lay\u001ber\",\"status\":\"Pull\u001b complete\",\"progress\":\"10\u001b%\"}"))
++
++	if strings.Contains(payload, "\u001b") {
++		t.Fatalf("expected control characters to be stripped, got %q", payload)
++	}
++}
+diff --git a/environment/docker/container.go b/environment/docker/container.go
+index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98ea0cb46e4 100644
+--- a/environment/docker/container.go
++++ b/environment/docker/container.go
+@@ -11,7 +11,6 @@ import (
+ 
+ 	"emperror.dev/errors"
+ 	"github.com/apex/log"
+-	"github.com/buger/jsonparser"
+ 	"github.com/docker/docker/api/types/container"
+ 	"github.com/docker/docker/api/types/image"
+ 	"github.com/docker/docker/api/types/mount"
+@@ -346,9 +345,6 @@ func (e *Environment) Readlog(lines int) ([]string, error) {
+ // of that. I'd imagine in a lot of cases an outage shouldn't affect users too
+ // badly. It'll at least keep existing servers working correctly if anything.
+ func (e *Environment) ensureImageExists(img string) error {
+-	e.Events().Publish(environment.DockerImagePullStarted, "")
+-	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
+-
+ 	// Images prefixed with a ~ are local images that we do not need to try and pull.
+ 	if strings.HasPrefix(img, "~") {
+ 		return nil
+@@ -385,6 +381,7 @@ func (e *Environment) ensureImageExists(img string) error {
+ 	}
+ 
+ 	out, err := e.client.ImagePull(ctx, img, imagePullOptions)
++	safeImage := betterConsoleDockerPullSafeImageRef(img)
+ 	if err != nil {
+ 		images, ierr := e.client.ImageList(ctx, image.ListOptions{})
+ 		if ierr != nil {
+@@ -400,7 +397,7 @@ func (e *Environment) ensureImageExists(img string) error {
+ 				}
+ 
+ 				log.WithFields(log.Fields{
+-					"image":        img,
++					"image":        safeImage,
+ 					"container_id": e.Id,
+ 					"err":          err.Error(),
+ 				}).Warn("unable to pull requested image from remote source, however the image exists locally")
+@@ -411,29 +408,30 @@ func (e *Environment) ensureImageExists(img string) error {
+ 			}
+ 		}
+ 
+-		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", img)
++		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", safeImage)
+ 	}
+ 	defer out.Close()
+ 
+-	log.WithField("image", img).Debug("pulling docker image... this could take a bit of time")
++	e.Events().Publish(environment.DockerImagePullStarted, "")
++	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
++
++	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
+ 
+ 	// I'm not sure what the best approach here is, but this will block execution until the image
+ 	// is done being pulled, which is what we need.
+ 	scanner := bufio.NewScanner(out)
+ 
+ 	for scanner.Scan() {
+-		b := scanner.Bytes()
+-		status, _ := jsonparser.GetString(b, "status")
+-		progress, _ := jsonparser.GetString(b, "progress")
+-
+-		e.Events().Publish(environment.DockerImagePullStatus, status+" "+progress)
++		if payload := betterConsoleDockerPullProgress(img, scanner.Bytes()); payload != "" {
++			e.Events().Publish(environment.DockerImagePullStatus, payload)
++		}
+ 	}
+ 
+ 	if err := scanner.Err(); err != nil {
+ 		return err
+ 	}
+ 
+-	log.WithField("image", img).Debug("completed docker image pull")
++	log.WithField("image", safeImage).Debug("completed docker image pull")
+ 
+ 	return nil
+ }
+diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
+index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9d08d9e4a 100644
+--- a/router/websocket/listeners.go
++++ b/router/websocket/listeners.go
+@@ -3,6 +3,7 @@ package websocket
+ import (
+ 	"context"
+ 	"encoding/json"
++	"strings"
+ 	"sync"
+ 	"time"
+ 
+@@ -73,6 +74,9 @@ var e = []string{
+ 	server.InstallOutputEvent,
+ 	server.InstallStartedEvent,
+ 	server.InstallCompletedEvent,
++	server.ImagePullStartedEvent,
++	server.ImagePullProgressEvent,
++	server.ImagePullCompletedEvent,
+ 	server.DaemonMessageEvent,
+ 	server.BackupCompletedEvent,
+ 	server.BackupRestoreCompletedEvent,
+@@ -80,6 +84,14 @@ var e = []string{
+ 	server.TransferStatusEvent,
+ }
+ 
++var allowedServerEvents = func() map[string]struct{} {
++	events := make(map[string]struct{}, len(e))
++	for _, event := range e {
++		events[event] = struct{}{}
++	}
++	return events
++}()
++
+ // ListenForServerEvents will listen for different events happening on a server
+ // and send them along to the connected websocket client. This function will
+ // block until the context provided to it is canceled.
+@@ -93,10 +105,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 	eventChan := make(chan []byte)
+ 	logOutput := make(chan []byte, 8)
+ 	installOutput := make(chan []byte, 4)
++	canReceiveInstall := false
++	if jwt := h.GetJwt(); jwt != nil {
++		canReceiveInstall = jwt.HasPermission(PermissionReceiveInstall)
++	}
+ 
+ 	h.server.Events().On(eventChan) // TODO: make a sinky
+ 	h.server.Sink(system.LogSink).On(logOutput)
+-	h.server.Sink(system.InstallSink).On(installOutput)
++	if canReceiveInstall {
++		h.server.Sink(system.InstallSink).On(installOutput)
++	}
+ 
+ 	onError := func(evt string, err2 error) {
+ 		h.Logger().WithField("event", evt).WithField("error", err2).Error("failed to send event over server websocket")
+@@ -130,6 +148,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 			if err := events.DecodeTo(b, &e); err != nil {
+ 				continue
+ 			}
++			if _, ok := allowedServerEvents[e.Topic]; !ok && !strings.HasPrefix(e.Topic, server.BackupCompletedEvent+":") {
++				continue
++			}
+ 			var sendErr error
+ 			message := Message{Event: Event(e.Topic)}
+ 			if str, ok := e.Data.(string); ok {
+@@ -157,7 +178,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 	// These functions will automatically close the channel if it hasn't been already.
+ 	h.server.Events().Off(eventChan)
+ 	h.server.Sink(system.LogSink).Off(logOutput)
+-	h.server.Sink(system.InstallSink).Off(installOutput)
++	if canReceiveInstall {
++		h.server.Sink(system.InstallSink).Off(installOutput)
++	}
+ 
+ 	// If the internal context is stopped it is either because the parent context
+ 	// got canceled or because we ran into an error. If the "err" variable is nil
+diff --git a/router/websocket/listeners_test.go b/router/websocket/listeners_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc47188709f25f3b9c208840239e671e0f8ee733
+--- /dev/null
++++ b/router/websocket/listeners_test.go
+@@ -0,0 +1,16 @@
++package websocket
++
++import (
++	"testing"
++
++	"github.com/pterodactyl/wings/server"
++)
++
++func TestAllowedServerEvents(t *testing.T) {
++	if _, ok := allowedServerEvents[server.ImagePullProgressEvent]; !ok {
++		t.Fatalf("expected image pull progress event to be allowed")
++	}
++	if _, ok := allowedServerEvents["unexpected internal event"]; ok {
++		t.Fatalf("expected unknown internal event to be blocked")
++	}
++}
+diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
+index 4482667e67723a87eeb47735708f96206806c5db..44992343b75ebbe6291b69cf9e3a94149c902d2b 100644
+--- a/router/websocket/websocket.go
++++ b/router/websocket/websocket.go
+@@ -147,7 +147,10 @@ func (h *Handler) SendJson(v Message) error {
+ 	if j := h.GetJwt(); j != nil {
+ 		// If we're sending installation output but the user does not have the required
+ 		// permissions to see the output, don't send it down the line.
+-		if v.Event == server.InstallOutputEvent {
++		if v.Event == server.InstallOutputEvent ||
++			v.Event == server.ImagePullStartedEvent ||
++			v.Event == server.ImagePullProgressEvent ||
++			v.Event == server.ImagePullCompletedEvent {
+ 			if !j.HasPermission(PermissionReceiveInstall) {
+ 				return nil
+ 			}
+diff --git a/server/betterconsole_pull_progress.go b/server/betterconsole_pull_progress.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..7766b99c8ba7cfe578aee7e87ca6e3a7ab5cb96c
+--- /dev/null
++++ b/server/betterconsole_pull_progress.go
+@@ -0,0 +1,195 @@
++package server
++
++import (
++	"encoding/json"
++	"fmt"
++	"math"
++	"strings"
++
++	"github.com/buger/jsonparser"
++)
++
++func betterConsoleDockerPullProgress(img string, b []byte) string {
++	id, _ := jsonparser.GetString(b, "id")
++	status, _ := jsonparser.GetString(b, "status")
++	progress, _ := jsonparser.GetString(b, "progress")
++	current, currentErr := jsonparser.GetInt(b, "progressDetail", "current")
++	total, totalErr := jsonparser.GetInt(b, "progressDetail", "total")
++	status = strings.TrimSpace(status)
++	if status == "" && id == "" {
++		return ""
++	}
++
++	displayStatus, phase := betterConsoleDockerPullStatus(status)
++	hasProgressDetail := currentErr == nil && totalErr == nil
++	percent := betterConsoleDockerPullPercent(current, total, phase == "complete")
++	line := betterConsoleDockerPullLine(displayStatus, current, total, hasProgressDetail)
++	image := betterConsoleDockerPullSafeImageRef(img)
++
++	payload, err := json.Marshal(map[string]interface{}{
++		"id":       betterConsoleDockerPullSafeText(id),
++		"image":    image,
++		"label":    betterConsoleDockerPullImageLabel(image),
++		"phase":    phase,
++		"status":   displayStatus,
++		"progress": betterConsoleDockerPullSafeText(progress),
++		"current":  current,
++		"total":    total,
++		"percent":  percent,
++		"line":     line,
++	})
++	if err != nil {
++		return line
++	}
++
++	return string(payload)
++}
++
++func betterConsoleDockerPullInstallLine(b []byte) string {
++	line, _ := jsonparser.GetString(b, "line")
++	if strings.TrimSpace(line) != "" {
++		return strings.TrimSpace(line)
++	}
++
++	status, _ := jsonparser.GetString(b, "status")
++	current, currentErr := jsonparser.GetInt(b, "progressDetail", "current")
++	total, totalErr := jsonparser.GetInt(b, "progressDetail", "total")
++
++	status = strings.TrimSpace(status)
++	if status == "" {
++		return ""
++	}
++
++	displayStatus, phase := betterConsoleDockerPullStatus(status)
++	line = betterConsoleDockerPullLine(displayStatus, current, total, currentErr == nil && totalErr == nil)
++	if phase == "complete" && line == "" {
++		return displayStatus
++	}
++
++	return line
++}
++
++func betterConsoleDockerPullStatus(status string) (string, string) {
++	normalized := strings.ToLower(strings.TrimSpace(status))
++	switch normalized {
++	case "downloading":
++		return "Downloading", "pulling"
++	case "extracting":
++		return "Extracting", "extracting"
++	case "download complete":
++		return "Download complete", "complete"
++	case "pull complete":
++		return "Pull complete", "complete"
++	case "already exists":
++		return "Already exists", "complete"
++	default:
++		if status == "" {
++			return "Pulling", "pulling"
++		}
++		return betterConsoleDockerPullSafeText(status), "status"
++	}
++}
++
++func betterConsoleDockerPullPercent(current int64, total int64, complete bool) float64 {
++	if complete {
++		return 100
++	}
++	if total <= 0 || current <= 0 {
++		return 0
++	}
++
++	percent := (float64(current) / float64(total)) * 100
++	if percent > 100 {
++		return 100
++	}
++	if percent < 0 {
++		return 0
++	}
++
++	return percent
++}
++
++func betterConsoleDockerPullLine(status string, current int64, total int64, complete bool) string {
++	if !complete {
++		return strings.TrimSpace(status)
++	}
++
++	percent := betterConsoleDockerPullPercent(current, total, false)
++	width := 50 - len(status)
++	if width < 8 {
++		width = 8
++	}
++
++	return fmt.Sprintf(
++		"%s %s %.2f%% of %s",
++		status,
++		betterConsoleDockerPullBar(width, percent),
++		percent,
++		betterConsoleDockerPullBytes(total),
++	)
++}
++
++func betterConsoleDockerPullBar(width int, percent float64) string {
++	completed := int(math.Round((percent / 100) * float64(width)))
++	if completed >= width {
++		return "[" + strings.Repeat("=", width) + "]"
++	}
++	if completed < 0 {
++		completed = 0
++	}
++
++	return "[" + strings.Repeat("=", completed) + ">" + strings.Repeat(" ", width-completed-1) + "]"
++}
++
++func betterConsoleDockerPullBytes(value int64) string {
++	if value <= 0 {
++		return "0 B"
++	}
++
++	units := []string{"B", "KiB", "MiB", "GiB", "TiB"}
++	size := float64(value)
++	unit := 0
++	for size >= 1024 && unit < len(units)-1 {
++		size /= 1024
++		unit++
++	}
++
++	if unit == 0 {
++		return fmt.Sprintf("%d B", value)
++	}
++
++	return fmt.Sprintf("%.1f %s", size, units[unit])
++}
++
++func betterConsoleDockerPullImageLabel(img string) string {
++	parts := strings.Split(strings.TrimSpace(img), "/")
++	if len(parts) == 0 || parts[len(parts)-1] == "" {
++		return "Docker image"
++	}
++
++	return parts[len(parts)-1]
++}
++
++func betterConsoleDockerPullSafeImageRef(img string) string {
++	img = strings.TrimSpace(img)
++	slash := strings.IndexByte(img, '/')
++	if slash <= 0 {
++		return img
++	}
++
++	registry := img[:slash]
++	if at := strings.LastIndex(registry, "@"); at >= 0 {
++		registry = registry[at+1:]
++	}
++
++	return registry + "/" + img[slash+1:]
++}
++
++func betterConsoleDockerPullSafeText(value string) string {
++	return strings.Map(func(r rune) rune {
++		if r == '\t' || r >= 32 {
++			return r
++		}
++		return -1
++	}, strings.TrimSpace(value))
++}
+diff --git a/server/betterconsole_pull_progress_test.go b/server/betterconsole_pull_progress_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..6831ade0198e498d201ae84141b3ad1058058ad9
+--- /dev/null
++++ b/server/betterconsole_pull_progress_test.go
+@@ -0,0 +1,44 @@
++package server
++
++import (
++	"strings"
++	"testing"
++)
++
++func TestBetterConsoleDockerPullInstallLineWithProgressDetail(t *testing.T) {
++	line := betterConsoleDockerPullInstallLine([]byte(`{"status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	if !strings.HasPrefix(line, "Downloading [") {
++		t.Fatalf("expected downloading progress bar, got %q", line)
++	}
++	if !strings.Contains(line, "50.00% of 1.0 KiB") {
++		t.Fatalf("expected calculated percentage and total bytes, got %q", line)
++	}
++}
++
++func TestBetterConsoleDockerPullInstallLineWithoutProgressDetail(t *testing.T) {
++	line := betterConsoleDockerPullInstallLine([]byte(`{"status":"Pull complete"}`))
++
++	if line != "Pull complete" {
++		t.Fatalf("expected plain status without fake 0 B bar, got %q", line)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressSanitizesImageCredentials(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("user:secret@registry.example.com/private/image:latest", []byte(`{"id":"layer","status":"Downloading","progressDetail":{"current":512,"total":1024}}`))
++
++	if strings.Contains(payload, "secret") || strings.Contains(payload, "user:") {
++		t.Fatalf("expected sanitized image payload, got %q", payload)
++	}
++	if !strings.Contains(payload, "registry.example.com/private/image:latest") {
++		t.Fatalf("expected sanitized image reference in payload, got %q", payload)
++	}
++}
++
++func TestBetterConsoleDockerPullProgressStripsControlCharacters(t *testing.T) {
++	payload := betterConsoleDockerPullProgress("ghcr.io/ptero-eggs/yolks:nodejs_22", []byte("{\"id\":\"lay\u001ber\",\"status\":\"Pull\u001b complete\",\"progress\":\"10\u001b%\"}"))
++
++	if strings.Contains(payload, "\u001b") {
++		t.Fatalf("expected control characters to be stripped, got %q", payload)
++	}
++}
+diff --git a/server/events.go b/server/events.go
+index d08411cce8e18de88008df04789d40bc24e55ad7..795f9cc70d9a23c5a8f6cb6fa334582d735c0c8a 100644
+--- a/server/events.go
++++ b/server/events.go
+@@ -11,6 +11,9 @@ const (
+ 	InstallOutputEvent          = "install output"
+ 	InstallStartedEvent         = "install started"
+ 	InstallCompletedEvent       = "install completed"
++	ImagePullStartedEvent       = "image pull started"
++	ImagePullProgressEvent      = "image pull progress"
++	ImagePullCompletedEvent     = "image pull completed"
+ 	ConsoleOutputEvent          = "console output"
+ 	StatusEvent                 = "status"
+ 	StatsEvent                  = "stats"
+diff --git a/server/install.go b/server/install.go
+index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84989291c6 100644
+--- a/server/install.go
++++ b/server/install.go
+@@ -259,6 +259,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+ 	}
+ 
+ 	r, err := ip.client.ImagePull(ip.Server.Context(), ip.Script.ContainerImage, imagePullOptions)
++	safeImage := betterConsoleDockerPullSafeImageRef(ip.Script.ContainerImage)
+ 	if err != nil {
+ 		images, ierr := ip.client.ImageList(ip.Server.Context(), image.ListOptions{})
+ 		if ierr != nil {
+@@ -274,7 +275,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+ 				}
+ 
+ 				log.WithFields(log.Fields{
+-					"image": ip.Script.ContainerImage,
++					"image": safeImage,
+ 					"err":   err.Error(),
+ 				}).Warn("unable to pull requested image from remote source, however the image exists locally")
+ 
+@@ -288,12 +289,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+ 	}
+ 	defer r.Close()
+ 
+-	log.WithField("image", ip.Script.ContainerImage).Debug("pulling docker image... this could take a bit of time")
++	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
++	ip.Server.Events().Publish(ImagePullStartedEvent, "")
++	defer ip.Server.Events().Publish(ImagePullCompletedEvent, "")
+ 
+ 	// Block continuation until the image has been pulled successfully.
+ 	scanner := bufio.NewScanner(r)
+ 	for scanner.Scan() {
+-		log.Debug(scanner.Text())
++		log.Debug(betterConsoleDockerPullSafeText(scanner.Text()))
++		payload := betterConsoleDockerPullProgress(ip.Script.ContainerImage, scanner.Bytes())
++		if payload != "" {
++			ip.Server.Events().Publish(ImagePullProgressEvent, payload)
++		}
++		if line := betterConsoleDockerPullInstallLine(scanner.Bytes()); line != "" {
++			ip.Server.Sink(system.InstallSink).Push([]byte(line))
++		}
+ 	}
+ 
+ 	if err := scanner.Err(); err != nil {
+@@ -505,13 +515,32 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
+ 	}
+ 	defer reader.Close()
+ 
+-	err = system.ScanReader(reader, ip.Server.Sink(system.InstallSink).Push)
++	err = ip.streamRawInstallOutput(reader)
+ 	if err != nil && !errors.Is(err, context.Canceled) {
+ 		ip.Server.Log().WithFields(log.Fields{"container_id": id, "error": err}).Warn("error processing install output lines")
+ 	}
+ 	return nil
+ }
+ 
++func (ip *InstallationProcess) streamRawInstallOutput(reader io.Reader) error {
++	buf := make([]byte, 4096)
++	for {
++		n, err := reader.Read(buf)
++		if n > 0 {
++			chunk := make([]byte, n)
++			copy(chunk, buf[:n])
++			ip.Server.Sink(system.InstallSink).Push(chunk)
++		}
++		if err != nil {
++			if errors.Is(err, io.EOF) {
++				return nil
++			}
++
++			return err
++		}
++	}
++}
++
+ // resourceLimits returns resource limits for the installation container. This
+ // looks at the globally defined install container limits and attempts to use
+ // the higher of the two (defined limits & server limits). This allows for servers
+diff --git a/server/listeners.go b/server/listeners.go
+index d39e6649d6d3e908f503447862693e2ba87144b1..5e186ebc5d21cb811deac8545000f352d0d638e1 100644
+--- a/server/listeners.go
++++ b/server/listeners.go
+@@ -9,19 +9,13 @@ import (
+ 
+ 	"github.com/apex/log"
+ 
++	"github.com/pterodactyl/wings/environment"
+ 	"github.com/pterodactyl/wings/events"
+ 	"github.com/pterodactyl/wings/system"
+ 
+-	"github.com/pterodactyl/wings/environment"
+ 	"github.com/pterodactyl/wings/remote"
+ )
+ 
+-var dockerEvents = []string{
+-	environment.DockerImagePullStatus,
+-	environment.DockerImagePullStarted,
+-	environment.DockerImagePullCompleted,
+-}
+-
+ type diskSpaceLimiter struct {
+ 	o      sync.Once
+ 	mu     sync.Mutex
+@@ -127,10 +121,17 @@ func (s *Server) StartEventListeners() {
+ 							s.OnStateChange()
+ 						}
+ 					case environment.DockerImagePullStatus:
+-						s.Events().Publish(InstallOutputEvent, e.Data)
++						s.Events().Publish(ImagePullProgressEvent, e.Data)
++						if str, ok := e.Data.(string); ok {
++							if line := betterConsoleDockerPullInstallLine([]byte(str)); line != "" {
++								s.Sink(system.LogSink).Push([]byte(line))
++							}
++						}
+ 					case environment.DockerImagePullStarted:
++						s.Events().Publish(ImagePullStartedEvent, "")
+ 						s.PublishConsoleOutputFromDaemon("Pulling Docker container image, this could take a few minutes to complete...")
+ 					case environment.DockerImagePullCompleted:
++						s.Events().Publish(ImagePullCompletedEvent, "")
+ 						s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")
+ 					default:
+ 					}
+diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..8530704f05b95c18543ca0797996ec6d9e86bdf0
+--- /dev/null
++++ b/sftp/betterconsole_shell.go
+@@ -0,0 +1,347 @@
++package sftp
++
++import (
++	"bufio"
++	"encoding/json"
++	"fmt"
++	"io"
++	"regexp"
++	"strings"
++	"sync"
++
++	"golang.org/x/crypto/ssh"
++
++	"github.com/pterodactyl/wings/environment"
++	"github.com/pterodactyl/wings/events"
++	"github.com/pterodactyl/wings/internal/models"
++	"github.com/pterodactyl/wings/server"
++	"github.com/pterodactyl/wings/system"
++)
++
++const betterConsoleShellCliName = ".wings"
++const betterConsoleShellMaxLineBytes = 4096
++
++var betterConsoleShellAnsiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
++
++func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Server, handler *Handler, ip string) {
++	logOutput := make(chan []byte, 128)
++	installOutput := make(chan []byte, 32)
++	eventOutput := make(chan []byte, 32)
++	done := make(chan struct{})
++	canReceiveInstall := handler.can("admin.websocket.install")
++	activity := srv.NewRequestActivity(handler.User(), ip)
++
++	srv.Sink(system.LogSink).On(logOutput)
++	if canReceiveInstall {
++		srv.Sink(system.InstallSink).On(installOutput)
++	}
++	srv.Events().On(eventOutput)
++	defer srv.Sink(system.LogSink).Off(logOutput)
++	if canReceiveInstall {
++		defer srv.Sink(system.InstallSink).Off(installOutput)
++	}
++	defer srv.Events().Off(eventOutput)
++
++	term := &betterConsoleSshTerminal{channel: channel}
++	term.writeLine("Better Console live server console")
++	term.writeLine("Connected to Wings. Type a server command and press enter.")
++	term.writeLine("Type \"" + betterConsoleShellCliName + " help\" for daemon commands or \"exit\" to close this SSH console session.")
++	if lines, err := srv.Environment.Readlog(75); err == nil && len(lines) > 0 {
++		for _, line := range lines {
++			term.writeHistory(line)
++		}
++	}
++	term.prompt()
++
++	go func() {
++		for {
++			select {
++			case <-done:
++				return
++			case line, ok := <-logOutput:
++				if !ok {
++					logOutput = nil
++					continue
++				}
++				term.writeConsole(string(line))
++			case line, ok := <-installOutput:
++				if !ok {
++					installOutput = nil
++					continue
++				}
++				term.writeConsole(string(line))
++			case raw, ok := <-eventOutput:
++				if !ok {
++					eventOutput = nil
++					continue
++				}
++				var e events.Event
++				if err := events.DecodeTo(raw, &e); err != nil {
++					continue
++				}
++				if e.Topic == server.InstallOutputEvent && !canReceiveInstall {
++					continue
++				}
++				if e.Topic != server.ConsoleOutputEvent && e.Topic != server.DaemonMessageEvent && e.Topic != server.InstallOutputEvent {
++					continue
++				}
++				term.writeConsole(betterConsoleEventString(e.Data))
++			}
++		}
++	}()
++
++	reader := bufio.NewReader(channel)
++	for {
++		b, err := reader.ReadByte()
++		if err != nil {
++			close(done)
++			if err != io.EOF {
++				term.writeLine("Session closed.")
++			}
++			return
++		}
++
++		switch b {
++		case '\r', '\n':
++			line := strings.TrimSpace(term.commitLine())
++			if line == "" {
++				term.prompt()
++				continue
++			}
++			if line == "exit" || line == "quit" {
++				close(done)
++				term.writeLine("Disconnected from Better Console.")
++				return
++			}
++			if strings.HasPrefix(line, betterConsoleShellCliName) {
++				c.handleBetterConsoleShellCliCommand(term, srv, handler, activity, line)
++			} else if !handler.can("control.console") {
++				term.writeLine("Permission denied: control.console")
++			} else if srv.IsInstalling() {
++				term.writeLine("The server is currently installing.")
++			} else if srv.Environment.State() == environment.ProcessOfflineState {
++				term.writeLine("The server is currently offline.")
++			} else if err := srv.Environment.SendCommand(line); err != nil {
++				term.writeLine("Unable to send command: " + err.Error())
++			} else {
++				srv.SaveActivity(activity, server.ActivityConsoleCommand, models.ActivityMeta{"command": line})
++			}
++			term.prompt()
++		case 0x03:
++			term.cancelLine()
++			term.prompt()
++		case 0x04:
++			close(done)
++			term.writeLine("Disconnected from Better Console.")
++			return
++		case 0x7f, '\b':
++			term.backspace()
++		default:
++			if b < 32 || (b >= 0x80 && b <= 0x9f) {
++				continue
++			}
++			if !term.appendByte(b) {
++				term.writeLine("Command line is too long.")
++				term.clearLine()
++				term.prompt()
++			}
++		}
++	}
++}
++
++func (c *SFTPServer) handleBetterConsoleShellCliCommand(term *betterConsoleSshTerminal, srv *server.Server, handler *Handler, activity server.RequestActivity, line string) {
++	parts := strings.Fields(line)
++	if len(parts) < 2 {
++		term.writeLine("Usage: " + betterConsoleShellCliName + " <help|power|stats>")
++		return
++	}
++
++	switch parts[1] {
++	case "help":
++		term.writeLine("Available commands:")
++		term.writeLine("  " + betterConsoleShellCliName + " help                    Show this help message")
++		term.writeLine("  " + betterConsoleShellCliName + " power start             Start the server")
++		term.writeLine("  " + betterConsoleShellCliName + " power restart           Restart the server")
++		term.writeLine("  " + betterConsoleShellCliName + " power stop              Stop the server")
++		term.writeLine("  " + betterConsoleShellCliName + " power kill              Kill the server")
++		term.writeLine("  " + betterConsoleShellCliName + " stats                   Show server statistics")
++	case "power":
++		c.handleBetterConsoleShellPower(term, srv, handler, activity, parts)
++	case "stats":
++		stats := srv.Proc()
++		term.writeLine("Server Statistics:")
++		term.writeLine(fmt.Sprintf("  Status: %s", srv.Environment.State()))
++		term.writeLine(fmt.Sprintf("  CPU Usage: %.2f%%", stats.CpuAbsolute))
++		term.writeLine(fmt.Sprintf("  Memory Usage: %d bytes", stats.Memory))
++		term.writeLine(fmt.Sprintf("  Disk Usage: %d bytes", stats.Disk))
++		term.writeLine("  Network Usage:")
++		term.writeLine(fmt.Sprintf("    Received: %d bytes", stats.Network.RxBytes))
++		term.writeLine(fmt.Sprintf("    Sent: %d bytes", stats.Network.TxBytes))
++	default:
++		term.writeLine("Unknown daemon command. Type \"" + betterConsoleShellCliName + " help\".")
++	}
++}
++
++func (c *SFTPServer) handleBetterConsoleShellPower(term *betterConsoleSshTerminal, srv *server.Server, handler *Handler, activity server.RequestActivity, parts []string) {
++	if len(parts) < 3 {
++		term.writeLine("Usage: " + betterConsoleShellCliName + " power <start|restart|stop|kill>")
++		return
++	}
++
++	var action server.PowerAction
++	var permission string
++	switch parts[2] {
++	case "start":
++		action = server.PowerActionStart
++		permission = "control.start"
++	case "restart":
++		action = server.PowerActionRestart
++		permission = "control.restart"
++	case "stop":
++		action = server.PowerActionStop
++		permission = "control.stop"
++	case "kill":
++		action = server.PowerActionTerminate
++		permission = "control.stop"
++	default:
++		term.writeLine("Usage: " + betterConsoleShellCliName + " power <start|restart|stop|kill>")
++		return
++	}
++
++	if !handler.can(permission) {
++		term.writeLine("Permission denied: " + permission)
++		return
++	}
++
++	if err := srv.HandlePowerAction(action); err != nil {
++		term.writeLine("Unable to perform power action: " + err.Error())
++		return
++	}
++
++	srv.SaveActivity(activity, models.Event(server.ActivityPowerPrefix+action), nil)
++	term.writeLine("Power action sent: " + string(action))
++}
++
++type betterConsoleSshTerminal struct {
++	channel ssh.Channel
++	mu      sync.Mutex
++	buffer  strings.Builder
++}
++
++func (t *betterConsoleSshTerminal) prompt() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	_, _ = io.WriteString(t.channel, "> ")
++}
++
++func (t *betterConsoleSshTerminal) writeLine(line string) {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	line = betterConsoleSanitizeTerminalLine(line)
++	_, _ = fmt.Fprintf(t.channel, "\r\n%s\r\n", line)
++}
++
++func (t *betterConsoleSshTerminal) writeConsole(line string) {
++	line = strings.TrimRight(line, "\r\n")
++	line = betterConsoleSanitizeTerminalLine(line)
++	if line == "" {
++		return
++	}
++
++	t.mu.Lock()
++	defer t.mu.Unlock()
++
++	current := t.buffer.String()
++	if current != "" {
++		_, _ = io.WriteString(t.channel, "\r\n")
++	}
++	_, _ = fmt.Fprintf(t.channel, "%s\r\n", line)
++	_, _ = io.WriteString(t.channel, "> ")
++	if current != "" {
++		_, _ = io.WriteString(t.channel, current)
++	}
++}
++
++func (t *betterConsoleSshTerminal) writeHistory(line string) {
++	line = strings.TrimRight(line, "\r\n")
++	line = betterConsoleSanitizeTerminalLine(line)
++	if line == "" {
++		return
++	}
++
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	_, _ = fmt.Fprintf(t.channel, "%s\r\n", line)
++}
++
++func (t *betterConsoleSshTerminal) appendByte(b byte) bool {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if t.buffer.Len() >= betterConsoleShellMaxLineBytes {
++		return false
++	}
++	t.buffer.WriteByte(b)
++	_, _ = t.channel.Write([]byte{b})
++	return true
++}
++
++func (t *betterConsoleSshTerminal) backspace() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	if t.buffer.Len() == 0 {
++		return
++	}
++	line := t.buffer.String()
++	t.buffer.Reset()
++	t.buffer.WriteString(line[:len(line)-1])
++	_, _ = io.WriteString(t.channel, "\b \b")
++}
++
++func (t *betterConsoleSshTerminal) commitLine() string {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	line := t.buffer.String()
++	t.buffer.Reset()
++	_, _ = io.WriteString(t.channel, "\r\n")
++	return line
++}
++
++func (t *betterConsoleSshTerminal) cancelLine() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	t.buffer.Reset()
++	_, _ = io.WriteString(t.channel, "^C\r\n")
++}
++
++func (t *betterConsoleSshTerminal) clearLine() {
++	t.mu.Lock()
++	defer t.mu.Unlock()
++	t.buffer.Reset()
++}
++
++func betterConsoleEventString(data interface{}) string {
++	switch v := data.(type) {
++	case string:
++		return v
++	case []byte:
++		return string(v)
++	default:
++		b, err := json.Marshal(v)
++		if err != nil {
++			return fmt.Sprint(v)
++		}
++		return string(b)
++	}
++}
++
++func betterConsoleSanitizeTerminalLine(line string) string {
++	line = betterConsoleShellAnsiRegex.ReplaceAllString(line, "")
++
++	return strings.Map(func(r rune) rune {
++		if r == '\t' || r >= 32 {
++			return r
++		}
++
++		return -1
++	}, line)
++}
+diff --git a/sftp/server.go b/sftp/server.go
+index e2263a4af3009000df4d087743564fee49e671d8..0965725020d1d1d06e79627e69aa3a409eddf88e 100644
+--- a/sftp/server.go
++++ b/sftp/server.go
+@@ -12,6 +12,7 @@ import (
+ 	"regexp"
+ 	"strconv"
+ 	"strings"
++	"time"
+ 
+ 	"emperror.dev/errors"
+ 	"github.com/apex/log"
+@@ -29,6 +30,8 @@ import (
+ // server and sending a flood of usernames.
+ var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
+ 
++const sshHandshakeTimeout = 10 * time.Second
++
+ //goland:noinspection GoNameStartsWithPackageName
+ type SFTPServer struct {
+ 	manager  *server.Manager
+@@ -37,6 +40,14 @@ type SFTPServer struct {
+ 	Listen   string
+ }
+ 
++type sshPtyRequest struct {
++	Term   string
++	Cols   uint32
++	Rows   uint32
++	Width  uint32
++	Height uint32
++}
++
+ func New(m *server.Manager) *SFTPServer {
+ 	cfg := config.Get().System
+ 	return &SFTPServer{
+@@ -118,10 +129,12 @@ func (c *SFTPServer) Run() error {
+ // serve the request or not.
+ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
+ 	// Before beginning a handshake must be performed on the incoming net.Conn
++	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
+ 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
+ 	if err != nil {
+ 		return errors.WithStack(err)
+ 	}
++	_ = conn.SetDeadline(time.Time{})
+ 	defer sconn.Close()
+ 	go ssh.DiscardRequests(reqs)
+ 
+@@ -138,26 +151,64 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
+ 			continue
+ 		}
+ 
+-		go func(in <-chan *ssh.Request) {
+-			for req := range in {
+-				// Channels have a type that is dependent on the protocol. For SFTP
+-				// this is "subsystem" with a payload that (should) be "sftp". Discard
+-				// anything else we receive ("pty", "shell", etc)
+-				ok := req.Type == "subsystem" && len(req.Payload) >= 4 && string(req.Payload[4:]) == "sftp"
+-				_ = req.Reply(ok, nil)
+-			}
+-		}(requests)
+-
+ 		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
+-			if err := c.Handle(sconn, srv, channel); err != nil {
+-				return err
+-			}
++			go c.handleSession(sconn, srv, channel, requests)
++		} else {
++			_ = channel.Close()
+ 		}
+ 	}
+ 
+ 	return nil
+ }
+ 
++func (c *SFTPServer) handleSession(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request) {
++	var requestedPty sshPtyRequest
++
++	for req := range requests {
++		switch req.Type {
++		case "subsystem":
++			ok := len(req.Payload) >= 4 && string(req.Payload[4:]) == "sftp"
++			_ = req.Reply(ok, nil)
++			if ok {
++				if err := c.Handle(conn, srv, channel); err != nil {
++					srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle session")
++				}
++				return
++			}
++		case "pty-req":
++			ok := config.Get().System.Sftp.Shell.Enabled
++			if ok {
++				handler, err := NewHandler(conn, srv)
++				ok = err == nil && handler.can("control.console")
++				if ok {
++					_ = ssh.Unmarshal(req.Payload, &requestedPty)
++				}
++			}
++			_ = req.Reply(ok, nil)
++		case "shell":
++			ok := config.Get().System.Sftp.Shell.Enabled
++			if ok {
++				handler, err := NewHandler(conn, srv)
++				if err != nil || !handler.can("control.console") {
++					_ = req.Reply(false, nil)
++					_ = channel.Close()
++					return
++				}
++				_ = req.Reply(true, nil)
++				if err := c.HandleShell(conn, srv, channel, requests, requestedPty, handler); err != nil {
++					srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle shell session")
++				}
++				return
++			}
++			_ = req.Reply(false, nil)
++		default:
++			_ = req.Reply(false, nil)
++		}
++	}
++
++	_ = channel.Close()
++}
++
+ // Handle spins up a SFTP server instance for the authenticated user's server allowing
+ // them access to the underlying filesystem.
+ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel) error {
+@@ -184,6 +235,28 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
+ 	return nil
+ }
+ 
++// HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
++func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
++	defer channel.Close()
++
++	if !handler.can("control.console") {
++		_, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
++		return nil
++	}
++
++	go func() {
++		for req := range requests {
++			if req.WantReply {
++				_ = req.Reply(false, nil)
++			}
++		}
++	}()
++
++	c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
++
++	return nil
++}
++
+ // Generates a new ED25519 private key that is used for host authentication when
+ // a user connects to the SFTP server.
+ func (c *SFTPServer) generateED25519PrivateKey() error {
+@@ -191,7 +264,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
+ 	if err != nil {
+ 		return errors.Wrap(err, "sftp: failed to generate ED25519 private key")
+ 	}
+-	if err := os.MkdirAll(path.Dir(c.PrivateKeyPath()), 0o755); err != nil {
++	if err := os.MkdirAll(path.Dir(c.PrivateKeyPath()), 0o700); err != nil {
+ 		return errors.Wrap(err, "sftp: could not create internal sftp data directory")
+ 	}
+ 	o, err := os.OpenFile(c.PrivateKeyPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)

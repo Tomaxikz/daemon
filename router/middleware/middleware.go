@@ -102,10 +102,20 @@ func SetAccessControlHeaders() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")
 
+		if isStreamDownloadRequest(c) {
+			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
+			c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
+			c.Header("Vary", "Origin, Access-Control-Request-Headers")
+		}
+
 		// CORS for Private Networks (RFC1918)
 		// @see https://developer.chrome.com/blog/private-network-access-update/?utm_source=devtools
 		if allowPrivateNetwork {
-			c.Header("Access-Control-Request-Private-Network", "true")
+			if isStreamDownloadRequest(c) {
+				c.Header("Access-Control-Allow-Private-Network", "true")
+			} else {
+				c.Header("Access-Control-Request-Private-Network", "true")
+			}
 		}
 
 		// Maximum age allowable under Chromium v76 is 2 hours, so just use that since
@@ -134,6 +144,10 @@ func SetAccessControlHeaders() gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+func isStreamDownloadRequest(c *gin.Context) bool {
+	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
 }
 
 // ServerExists will ensure that the requested server exists in this setup.

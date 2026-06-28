@@ -17,7 +17,6 @@ import (
 
 	"github.com/pterodactyl/wings/internal/ufs"
 	"github.com/pterodactyl/wings/router/middleware"
-	"github.com/pterodactyl/wings/router/tokens"
 	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
@@ -28,33 +27,6 @@ type downloadFile struct {
 
 func (df *downloadFile) Close() error {
 	return df.file.Close()
-}
-
-func getTokenDownloadFile(c *gin.Context) (*downloadFile, bool) {
-	manager := middleware.ExtractManager(c)
-	token := tokens.FilePayload{}
-	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
-		middleware.CaptureAndAbort(c, err)
-		return nil, false
-	}
-
-	s, ok := manager.Get(token.ServerUuid)
-	if !ok || !token.HasScope(tokens.FileDownload) || !token.IsUniqueRequest() {
-		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
-			"error": "The requested resource was not found on this server.",
-		})
-		return nil, false
-	}
-
-	filePath, ok := cleanDownloadFilePath(token.FilePath)
-	if !ok {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid file path.",
-		})
-		return nil, false
-	}
-
-	return openDownloadFile(c, s.Filesystem(), filePath)
 }
 
 func openDownloadFile(c *gin.Context, fs *serverfs.Filesystem, filePath string) (*downloadFile, bool) {
@@ -122,6 +94,9 @@ func serveDownloadFile(c *gin.Context, df *downloadFile, disposition string, inl
 	c.Header("Content-Type", downloadContentType(df, inline))
 	c.Header("ETag", downloadETag(df.info))
 	c.Header("X-Content-Type-Options", "nosniff")
+	if inline {
+		c.Header("Cross-Origin-Resource-Policy", "cross-origin")
+	}
 
 	content := io.ReadSeeker(df.file)
 	if fixedSize {
