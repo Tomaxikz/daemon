@@ -100,6 +100,9 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 		files := server.Group("/files")
 		{
 			files.GET("/contents", getServerFileContents)
+			files.GET("/revisions", getServerFileRevisions)
+			files.GET("/revisions/:revision", getServerFileRevision)
+			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
 			files.GET("/search", getServerFilesSearch)
 			files.GET("/archive/list", getServerArchiveList)
 			files.POST("/archive/extract", postServerArchiveExtract)

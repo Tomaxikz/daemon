@@ -147,6 +147,9 @@ type SystemConfiguration struct {
 	// Directory where local backups will be stored on the machine.
 	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`
 
+	// FileHistory controls bounded per-file revision storage for panel file edits.
+	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
+
 	// TmpDirectory specifies where temporary files for Pterodactyl installation processes
 	// should be created. This supports environments running docker-in-docker.
 	TmpDirectory string `default:"/tmp/pterodactyl" json:"-" yaml:"tmp_directory"`
@@ -262,6 +265,16 @@ type SystemConfiguration struct {
 	Transfers Transfers `yaml:"transfers"`
 
 	OpenatMode string `default:"auto" yaml:"openat_mode"`
+}
+
+type FileHistoryConfiguration struct {
+	Enabled             bool   `default:"true" yaml:"enabled"`
+	ZstdLevel           int    `default:"12" yaml:"zstd_level"`
+	AnchorInterval      uint64 `default:"4" yaml:"anchor_interval"`
+	KeepChains          uint64 `default:"2" yaml:"keep_chains"`
+	FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
+	PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
+	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
 }
 
 type CrashDetection struct {

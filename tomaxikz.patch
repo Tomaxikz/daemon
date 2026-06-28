@@ -100,7 +100,7 @@ index f411c53b72e37c52577bafc7d54f324857f990a8..e02d61ea67a8f6cdfaa3cfd53f7bf97c
  			}
  		}()
 diff --git a/config/config.go b/config/config.go
-index a83936d882d9b13e7c8b063941856759d78acb40..dffdfa90344d084a8a6afde31842cd205edb45a2 100644
+index a83936d882d9b13e7c8b063941856759d78acb40..047521e3c7739ab5105856b744aca07bb83069d4 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -30,6 +30,8 @@ import (
@@ -126,7 +126,34 @@ index a83936d882d9b13e7c8b063941856759d78acb40..dffdfa90344d084a8a6afde31842cd20
  }
  
  // ApiConfiguration defines the configuration for the internal API that is
-@@ -511,6 +520,10 @@ func EnsurePterodactylUser() error {
+@@ -138,6 +147,9 @@ type SystemConfiguration struct {
+ 	// Directory where local backups will be stored on the machine.
+ 	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`
+ 
++	// FileHistory controls bounded per-file revision storage for panel file edits.
++	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
++
+ 	// TmpDirectory specifies where temporary files for Pterodactyl installation processes
+ 	// should be created. This supports environments running docker-in-docker.
+ 	TmpDirectory string `default:"/tmp/pterodactyl" json:"-" yaml:"tmp_directory"`
+@@ -255,6 +267,16 @@ type SystemConfiguration struct {
+ 	OpenatMode string `default:"auto" yaml:"openat_mode"`
+ }
+ 
++type FileHistoryConfiguration struct {
++	Enabled             bool   `default:"true" yaml:"enabled"`
++	ZstdLevel           int    `default:"12" yaml:"zstd_level"`
++	AnchorInterval      uint64 `default:"4" yaml:"anchor_interval"`
++	KeepChains          uint64 `default:"2" yaml:"keep_chains"`
++	FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
++	PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
++	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
++}
++
+ type CrashDetection struct {
+ 	// CrashDetectionEnabled sets if crash detection is enabled globally for all servers on this node.
+ 	CrashDetectionEnabled bool `default:"true" yaml:"enabled"`
+@@ -511,6 +533,10 @@ func EnsurePterodactylUser() error {
  	}
  
  	log.WithField("username", _config.System.Username).Info("checking for pterodactyl system user")
@@ -137,7 +164,7 @@ index a83936d882d9b13e7c8b063941856759d78acb40..dffdfa90344d084a8a6afde31842cd20
  	u, err := user.Lookup(_config.System.Username)
  	// If an error is returned but it isn't the unknown user error just abort
  	// the process entirely. If we did find a user, return it immediately.
-@@ -524,11 +537,13 @@ func EnsurePterodactylUser() error {
+@@ -524,11 +550,13 @@ func EnsurePterodactylUser() error {
  		return nil
  	}
  
@@ -153,7 +180,7 @@ index a83936d882d9b13e7c8b063941856759d78acb40..dffdfa90344d084a8a6afde31842cd20
  		// We have to create the group first on Alpine, so do that here before continuing on
  		// to the user creation process.
  		if _, err := exec.Command("addgroup", "-S", _config.System.Username).Output(); err != nil {
-@@ -536,8 +551,7 @@ func EnsurePterodactylUser() error {
+@@ -536,8 +564,7 @@ func EnsurePterodactylUser() error {
  		}
  	}
  
@@ -871,7 +898,7 @@ index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac76065242c834f37f74a68fdba2211df96125..2a6203426d090d3dd8957fc39730c6f4619b96da 100644
+index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532c9477a97 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -901,17 +928,20 @@ index bdac76065242c834f37f74a68fdba2211df96125..2a6203426d090d3dd8957fc39730c6f4
  		server.POST("/install", postServerInstall)
  		server.POST("/reinstall", postServerReinstall)
  		server.POST("/sync", postServerSync)
-@@ -92,6 +100,9 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -92,6 +100,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  		files := server.Group("/files")
  		{
  			files.GET("/contents", getServerFileContents)
++			files.GET("/revisions", getServerFileRevisions)
++			files.GET("/revisions/:revision", getServerFileRevision)
++			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
 +			files.GET("/search", getServerFilesSearch)
 +			files.GET("/archive/list", getServerArchiveList)
 +			files.POST("/archive/extract", postServerArchiveExtract)
  			files.GET("/list-directory", getServerListDirectory)
  			files.PUT("/rename", putServerRenameFiles)
  			files.POST("/copy", postServerCopyFile)
-@@ -101,6 +112,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -101,6 +115,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  			files.POST("/compress", postServerCompressFiles)
  			files.POST("/decompress", postServerDecompressFiles)
  			files.POST("/chmod", postServerChmodFile)
@@ -1949,7 +1979,7 @@ index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7d
 +	c.JSON(http.StatusOK, gin.H{"closed": closed})
 +}
 diff --git a/router/router_server_files.go b/router/router_server_files.go
-index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee2dbbbf52 100644
+index 88acfdb77307fd12253099871c30b8f1f1189166..769808a3cc12dedaccd7e71bd11a2bc8ec6e5343 100644
 --- a/router/router_server_files.go
 +++ b/router/router_server_files.go
 @@ -9,7 +9,6 @@ import (
@@ -1960,7 +1990,60 @@ index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee
  	"strconv"
  	"strings"
  
-@@ -575,7 +574,7 @@ func postServerUploadFiles(c *gin.Context) {
+@@ -138,6 +137,7 @@ func putServerRenameFiles(c *gin.Context) {
+ 					}
+ 					return err
+ 				}
++				s.RenameFileHistory(pf, pt)
+ 				return nil
+ 			}
+ 		})
+@@ -214,7 +214,11 @@ func postServerDeleteFiles(c *gin.Context) {
+ 			case <-ctx.Done():
+ 				return ctx.Err()
+ 			default:
+-				return s.Filesystem().Delete(pi)
++				if err := s.Filesystem().Delete(pi); err != nil {
++					return err
++				}
++				s.ForgetFileHistory(pi)
++				return nil
+ 			}
+ 		})
+ 	}
+@@ -247,6 +251,12 @@ func postServerWriteFile(c *gin.Context) {
+ 		return
+ 	}
+ 
++	var before []byte
++	trackRevision := server.ShouldRecordFileHistory(f, uint64(c.Request.ContentLength))
++	if trackRevision {
++		before, _ = captureFileRevisionContent(s, f)
++	}
++
+ 	if err := s.Filesystem().Write(f, c.Request.Body, c.Request.ContentLength, 0o644); err != nil {
+ 		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
+ 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+@@ -259,6 +269,18 @@ func postServerWriteFile(c *gin.Context) {
+ 		return
+ 	}
+ 
++	if trackRevision {
++		after, ok := captureFileRevisionContent(s, f)
++		if ok {
++			revisionID, err := s.RecordFileRevision(f, before, after, strings.TrimSpace(c.Query("user")))
++			if err != nil {
++				s.Log().WithError(err).WithField("path", f).Warn("failed to record file revision")
++			} else if revisionID > 0 {
++				c.Header("X-File-Revision-Id", strconv.FormatInt(revisionID, 10))
++			}
++		}
++	}
++
+ 	c.Status(http.StatusNoContent)
+ }
+ 
+@@ -575,7 +597,7 @@ func postServerUploadFiles(c *gin.Context) {
  	}
  
  	s, ok := manager.Get(token.ServerUuid)
@@ -1969,7 +2052,7 @@ index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee
  		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
  			"error": "The requested resource was not found on this server.",
  		})
-@@ -598,36 +597,67 @@ func postServerUploadFiles(c *gin.Context) {
+@@ -598,36 +620,67 @@ func postServerUploadFiles(c *gin.Context) {
  		return
  	}
  
@@ -2042,6 +2125,158 @@ index 88acfdb77307fd12253099871c30b8f1f1189166..b3a7387b23908ad9cccbe1a044203eee
  func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {
  	file, err := header.Open()
  	if err != nil {
+diff --git a/router/router_server_files_revisions.go b/router/router_server_files_revisions.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d3be75f7b
+--- /dev/null
++++ b/router/router_server_files_revisions.go
+@@ -0,0 +1,146 @@
++package router
++
++import (
++	"bytes"
++	"database/sql"
++	"io"
++	"net/http"
++	"strconv"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/server"
++	"github.com/pterodactyl/wings/server/filesystem"
++)
++
++func getServerFileRevisions(c *gin.Context) {
++	s := ExtractServer(c)
++	filePath := normalizeFileRevisionPath(c.Query("file"))
++	if filePath == "/" {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid file path."})
++		return
++	}
++	if err := s.Filesystem().IsIgnored(filePath); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	revisions, err := s.ListFileRevisions(filePath)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	c.JSON(http.StatusOK, gin.H{"revisions": revisions})
++}
++
++func getServerFileRevision(c *gin.Context) {
++	s := ExtractServer(c)
++	revisionID, ok := parseFileRevisionID(c)
++	if !ok {
++		return
++	}
++	content, filePath, err := s.FileRevisionContent(revisionID)
++	if err != nil {
++		abortFileRevisionError(c, err)
++		return
++	}
++	if err := s.Filesystem().IsIgnored(filePath); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	c.Header("Content-Length", strconv.Itoa(len(content)))
++	c.Header("X-File-Path", filePath)
++	c.Data(http.StatusOK, "application/octet-stream", content)
++}
++
++func postServerFileRevisionRestore(c *gin.Context) {
++	s := ExtractServer(c)
++	revisionID, ok := parseFileRevisionID(c)
++	if !ok {
++		return
++	}
++	content, filePath, err := s.FileRevisionContent(revisionID)
++	if err != nil {
++		abortFileRevisionError(c, err)
++		return
++	}
++	if err := s.Filesystem().IsIgnored(filePath); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	before, _ := captureFileRevisionContent(s, filePath)
++	if err := s.Filesystem().Write(filePath, bytes.NewReader(content), int64(len(content)), 0o644); err != nil {
++		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
++			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
++				"error": "Cannot restore revision, name conflicts with an existing directory by the same name.",
++			})
++			return
++		}
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	restored, ok := captureFileRevisionContent(s, filePath)
++	if ok {
++		user := strings.TrimSpace(c.Query("user"))
++		if _, err := s.RecordFileRevision(filePath, before, restored, user); err != nil {
++			s.Log().WithError(err).WithField("path", filePath).Warn("failed to record restored file revision")
++		}
++	}
++
++	c.JSON(http.StatusOK, gin.H{
++		"file":        filePath,
++		"revision_id": revisionID,
++		"restored":    true,
++	})
++}
++
++func parseFileRevisionID(c *gin.Context) (int64, bool) {
++	id, err := strconv.ParseInt(c.Param("revision"), 10, 64)
++	if err != nil || id <= 0 {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid file revision."})
++		return 0, false
++	}
++	return id, true
++}
++
++func abortFileRevisionError(c *gin.Context, err error) {
++	if err == sql.ErrNoRows {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "File revision was not found."})
++		return
++	}
++	middleware.CaptureAndAbort(c, err)
++}
++
++func normalizeFileRevisionPath(value string) string {
++	value = "/" + strings.TrimLeft(value, "/")
++	if value == "/." {
++		return "/"
++	}
++	return value
++}
++
++func captureFileRevisionContent(s *server.Server, filePath string) ([]byte, bool) {
++	limit := int64(config.Get().System.FileHistory.FileSizeCap)
++	if limit <= 0 {
++		return nil, false
++	}
++
++	f, stat, err := s.Filesystem().File(filePath)
++	if err != nil {
++		return nil, false
++	}
++	defer f.Close()
++	if stat.IsDir() || stat.Size() < 0 || stat.Size() > limit || !server.ShouldRecordFileHistory(filePath, uint64(stat.Size())) {
++		return nil, false
++	}
++	content, err := io.ReadAll(io.LimitReader(f, limit+1))
++	if err != nil || int64(len(content)) > limit {
++		return nil, false
++	}
++	return content, true
++}
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
 index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d31286d521da9
@@ -5478,6 +5713,877 @@ index d08411cce8e18de88008df04789d40bc24e55ad7..425417398855c830f0898d3169f0feb3
  )
  
  // Events returns the server's emitter instance.
+diff --git a/server/file_history.go b/server/file_history.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..af676190fa887988897954c6e551e7128a968196
+--- /dev/null
++++ b/server/file_history.go
+@@ -0,0 +1,779 @@
++package server
++
++import (
++	"bytes"
++	"crypto/sha256"
++	"database/sql"
++	"encoding/hex"
++	"fmt"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"time"
++
++	_ "github.com/glebarez/sqlite"
++	"github.com/klauspost/compress/zstd"
++
++	"github.com/pterodactyl/wings/config"
++)
++
++const fileHistorySchema = `
++CREATE TABLE IF NOT EXISTS files (
++    id   INTEGER PRIMARY KEY,
++    path TEXT UNIQUE NOT NULL
++);
++
++CREATE TABLE IF NOT EXISTS revisions (
++    id           INTEGER PRIMARY KEY,
++    file_id      INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
++    chain_id     INTEGER NOT NULL,
++    size         INTEGER NOT NULL,
++    user_id      TEXT,
++    base_id      INTEGER,
++    payload      BLOB NOT NULL,
++    content_hash TEXT NOT NULL,
++    created      INTEGER NOT NULL
++);
++
++CREATE INDEX IF NOT EXISTS idx_revisions_file_created ON revisions(file_id, created DESC);
++CREATE INDEX IF NOT EXISTS idx_revisions_file_chain   ON revisions(file_id, chain_id);
++CREATE INDEX IF NOT EXISTS idx_revisions_created      ON revisions(created);
++`
++
++const fileHistoryZstdDictID uint32 = 0
++
++var fileHistorySkippedExtensions = map[string]struct{}{
++	".7z":      {},
++	".a":       {},
++	".avi":     {},
++	".bin":     {},
++	".br":      {},
++	".bz2":     {},
++	".class":   {},
++	".dat":     {},
++	".db":      {},
++	".dll":     {},
++	".dylib":   {},
++	".exe":     {},
++	".gif":     {},
++	".gz":      {},
++	".idx":     {},
++	".jar":     {},
++	".jpeg":    {},
++	".jpg":     {},
++	".ldb":     {},
++	".lz4":     {},
++	".m4a":     {},
++	".m4v":     {},
++	".mca":     {},
++	".mcc":     {},
++	".mcr":     {},
++	".mdb":     {},
++	".mkv":     {},
++	".mov":     {},
++	".mp3":     {},
++	".mp4":     {},
++	".o":       {},
++	".ogg":     {},
++	".ogv":     {},
++	".pak":     {},
++	".pack":    {},
++	".png":     {},
++	".rar":     {},
++	".rdb":     {},
++	".so":      {},
++	".sqlite":  {},
++	".sqlite3": {},
++	".sst":     {},
++	".tar":     {},
++	".tgz":     {},
++	".war":     {},
++	".wav":     {},
++	".webm":    {},
++	".webp":    {},
++	".xz":      {},
++	".zip":     {},
++	".zst":     {},
++}
++
++type FileRevision struct {
++	ID         int64     `json:"id"`
++	Size       uint64    `json:"size"`
++	StoredSize uint64    `json:"stored_size"`
++	User       string    `json:"user,omitempty"`
++	IsSnapshot bool      `json:"is_snapshot"`
++	Created    time.Time `json:"created"`
++}
++
++type fileRevisionRow struct {
++	id          int64
++	chainID     int64
++	size        uint64
++	storedSize  uint64
++	user        string
++	baseID      sql.NullInt64
++	contentHash string
++	createdMs   int64
++}
++
++type historyRevisionStep struct {
++	id      int64
++	baseID  sql.NullInt64
++	payload []byte
++	hash    string
++}
++
++type fileHistoryStore struct {
++	mu sync.Mutex
++	db *sql.DB
++}
++
++var fileHistoryStores sync.Map
++
++func (s *Server) RecordFileRevision(path string, before []byte, after []byte, user string) (int64, error) {
++	cfg := config.Get().System.FileHistory
++	if !ShouldRecordFileHistory(path, uint64(len(after))) || isLikelyBinaryHistoryContent(after) {
++		return 0, nil
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		return 0, err
++	}
++	return store.record(path, before, after, user, cfg)
++}
++
++func ShouldRecordFileHistory(path string, size uint64) bool {
++	cfg := config.Get().System.FileHistory
++	return cfg.Enabled && size <= cfg.FileSizeCap && isFileHistoryPathAllowed(path)
++}
++
++func (s *Server) ListFileRevisions(path string) ([]FileRevision, error) {
++	if !config.Get().System.FileHistory.Enabled {
++		return nil, nil
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		return nil, err
++	}
++	return store.list(path)
++}
++
++func (s *Server) FileRevisionContent(id int64) ([]byte, string, error) {
++	if !config.Get().System.FileHistory.Enabled {
++		return nil, "", sql.ErrNoRows
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		return nil, "", err
++	}
++	return store.content(id)
++}
++
++func (s *Server) ForgetFileHistory(path string) {
++	if !config.Get().System.FileHistory.Enabled {
++		return
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		s.Log().WithError(err).Warn("failed to open file history store")
++		return
++	}
++	if err := store.deleteFile(path); err != nil {
++		s.Log().WithError(err).WithField("path", path).Warn("failed to delete file history")
++	}
++}
++
++func (s *Server) RenameFileHistory(oldPath string, newPath string) {
++	if !config.Get().System.FileHistory.Enabled {
++		return
++	}
++	store, err := s.fileHistoryStore()
++	if err != nil {
++		s.Log().WithError(err).Warn("failed to open file history store")
++		return
++	}
++	if err := store.renameFile(oldPath, newPath); err != nil {
++		s.Log().WithError(err).WithField("from_path", oldPath).WithField("to_path", newPath).Warn("failed to rename file history")
++	}
++}
++
++func (s *Server) fileHistoryStore() (*fileHistoryStore, error) {
++	actual, ok := fileHistoryStores.Load(s.ID())
++	if ok {
++		return actual.(*fileHistoryStore), nil
++	}
++
++	dir := filepath.Join(config.Get().System.RootDirectory, "diffs")
++	if err := os.MkdirAll(dir, 0o700); err != nil {
++		return nil, err
++	}
++	dbPath := filepath.Join(dir, s.ID()+".db")
++	db, err := sql.Open("sqlite", dbPath)
++	if err != nil {
++		return nil, err
++	}
++	store := &fileHistoryStore{db: db}
++	if err := store.init(); err != nil {
++		_ = db.Close()
++		return nil, err
++	}
++	actual, loaded := fileHistoryStores.LoadOrStore(s.ID(), store)
++	if loaded {
++		_ = db.Close()
++		return actual.(*fileHistoryStore), nil
++	}
++	return store, nil
++}
++
++func (s *fileHistoryStore) init() error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	if _, err := s.db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
++		return err
++	}
++	if _, err := s.db.Exec("PRAGMA synchronous=NORMAL;"); err != nil {
++		return err
++	}
++	if _, err := s.db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
++		return err
++	}
++	_, err := s.db.Exec(fileHistorySchema)
++	return err
++}
++
++func (s *fileHistoryStore) record(path string, before []byte, after []byte, user string, cfg config.FileHistoryConfiguration) (int64, error) {
++	if bytes.Equal(before, after) {
++		return 0, nil
++	}
++
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	tx, err := s.db.Begin()
++	if err != nil {
++		return 0, err
++	}
++	defer tx.Rollback()
++
++	fileID, err := upsertHistoryFile(tx, path)
++	if err != nil {
++		return 0, err
++	}
++
++	nowMs := time.Now().UTC().UnixMilli()
++	latest, err := latestFileRevision(tx, fileID)
++	if err != nil {
++		return 0, err
++	}
++
++	var revisionID int64
++	switch {
++	case latest == nil && len(before) > 0:
++		baseID, err := insertHistorySnapshot(tx, fileID, "", before, nowMs-1, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++		revisionID, err = insertCompactHistoryRevision(tx, fileID, baseID, baseID, before, user, after, nowMs, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++	case latest == nil:
++		revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++	default:
++		if latest.contentHash == contentHash(after) {
++			return latest.id, tx.Commit()
++		}
++		chainLength, err := currentHistoryChainLength(tx, fileID, latest.chainID)
++		if err != nil {
++			return 0, err
++		}
++		if chainLength >= int64(maxUint64(cfg.AnchorInterval, 1)) {
++			revisionID, err = insertHistorySnapshot(tx, fileID, user, after, nowMs, cfg.ZstdLevel)
++			if err != nil {
++				return 0, err
++			}
++			break
++		}
++		previous, err := reconstructHistoryRevision(tx, latest.id, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++		revisionID, err = insertCompactHistoryRevision(tx, fileID, latest.id, latest.chainID, previous, user, after, nowMs, cfg.ZstdLevel)
++		if err != nil {
++			return 0, err
++		}
++	}
++
++	protectedChain, err := latestHistoryChainID(tx, fileID)
++	if err != nil {
++		return 0, err
++	}
++	if err := pruneHistory(tx, fileID, protectedChain, cfg); err != nil {
++		return 0, err
++	}
++	if err := pruneServerHistory(tx, fileID, protectedChain, cfg); err != nil {
++		return 0, err
++	}
++	if err := tx.Commit(); err != nil {
++		return 0, err
++	}
++	return revisionID, nil
++}
++
++func (s *fileHistoryStore) list(path string) ([]FileRevision, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	fileID, err := findHistoryFile(s.db, path)
++	if err != nil || fileID == 0 {
++		return nil, err
++	}
++	rows, err := s.db.Query(`
++		SELECT id, chain_id, created, size, COALESCE(user_id, ''), base_id, LENGTH(payload), content_hash
++		FROM revisions WHERE file_id = ?
++		ORDER BY id DESC`, fileID)
++	if err != nil {
++		return nil, err
++	}
++	defer rows.Close()
++
++	revisions := make([]FileRevision, 0)
++	for rows.Next() {
++		row, err := scanHistoryRevision(rows)
++		if err != nil {
++			return nil, err
++		}
++		revisions = append(revisions, FileRevision{
++			ID:         row.id,
++			Size:       row.size,
++			StoredSize: row.storedSize,
++			User:       row.user,
++			IsSnapshot: !row.baseID.Valid,
++			Created:    time.UnixMilli(row.createdMs).UTC(),
++		})
++	}
++	return revisions, rows.Err()
++}
++
++func (s *fileHistoryStore) content(id int64) ([]byte, string, error) {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++
++	content, err := reconstructHistoryRevision(s.db, id, config.Get().System.FileHistory.ZstdLevel)
++	if err != nil {
++		return nil, "", err
++	}
++	var p string
++	if err := s.db.QueryRow(`
++		SELECT files.path
++		FROM revisions
++		JOIN files ON files.id = revisions.file_id
++		WHERE revisions.id = ?`, id).Scan(&p); err != nil {
++		return nil, "", err
++	}
++	return content, p, nil
++}
++
++func (s *fileHistoryStore) deleteFile(path string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	_, err := s.db.Exec("DELETE FROM files WHERE path = ?", path)
++	return err
++}
++
++func (s *fileHistoryStore) renameFile(oldPath string, newPath string) error {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	_, err := s.db.Exec("UPDATE files SET path = ? WHERE path = ?", newPath, oldPath)
++	return err
++}
++
++type historyQuerier interface {
++	QueryRow(query string, args ...any) *sql.Row
++	Query(query string, args ...any) (*sql.Rows, error)
++}
++
++func upsertHistoryFile(tx *sql.Tx, path string) (int64, error) {
++	var id int64
++	err := tx.QueryRow("SELECT id FROM files WHERE path = ?", path).Scan(&id)
++	if err == nil {
++		return id, nil
++	}
++	if err != sql.ErrNoRows {
++		return 0, err
++	}
++	res, err := tx.Exec("INSERT INTO files(path) VALUES (?)", path)
++	if err != nil {
++		return 0, err
++	}
++	return res.LastInsertId()
++}
++
++func findHistoryFile(db *sql.DB, path string) (int64, error) {
++	var id int64
++	err := db.QueryRow("SELECT id FROM files WHERE path = ?", path).Scan(&id)
++	if err == sql.ErrNoRows {
++		return 0, nil
++	}
++	return id, err
++}
++
++func latestFileRevision(q historyQuerier, fileID int64) (*fileRevisionRow, error) {
++	row := q.QueryRow(`
++		SELECT id, chain_id, created, size, COALESCE(user_id, ''), base_id, LENGTH(payload), content_hash
++		FROM revisions WHERE file_id = ?
++		ORDER BY id DESC LIMIT 1`, fileID)
++	revision, err := scanHistoryRevision(row)
++	if err == sql.ErrNoRows {
++		return nil, nil
++	}
++	if err != nil {
++		return nil, err
++	}
++	return &revision, nil
++}
++
++func latestHistoryChainID(q historyQuerier, fileID int64) (sql.NullInt64, error) {
++	var chainID sql.NullInt64
++	err := q.QueryRow("SELECT chain_id FROM revisions WHERE file_id = ? ORDER BY id DESC LIMIT 1", fileID).Scan(&chainID)
++	if err == sql.ErrNoRows {
++		return sql.NullInt64{}, nil
++	}
++	return chainID, err
++}
++
++func currentHistoryChainLength(q historyQuerier, fileID int64, chainID int64) (int64, error) {
++	var count int64
++	err := q.QueryRow("SELECT COUNT(*) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID).Scan(&count)
++	return count, err
++}
++
++func insertHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte, createdMs int64, level int) (int64, error) {
++	payload, err := encodeHistorySnapshot(content, level)
++	if err != nil {
++		return 0, err
++	}
++	return insertEncodedHistorySnapshot(tx, fileID, user, content, payload, createdMs)
++}
++
++func insertEncodedHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte, payload []byte, createdMs int64) (int64, error) {
++	res, err := tx.Exec(`
++		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
++		VALUES (?, 0, ?, ?, NULLIF(?, ''), NULL, ?, ?)`,
++		fileID, createdMs, len(content), user, payload, contentHash(content))
++	if err != nil {
++		return 0, err
++	}
++	id, err := res.LastInsertId()
++	if err != nil {
++		return 0, err
++	}
++	if _, err := tx.Exec("UPDATE revisions SET chain_id = ? WHERE id = ?", id, id); err != nil {
++		return 0, err
++	}
++	return id, nil
++}
++
++func insertCompactHistoryRevision(tx *sql.Tx, fileID int64, baseID int64, chainID int64, base []byte, user string, content []byte, createdMs int64, level int) (int64, error) {
++	snapshotPayload, err := encodeHistorySnapshot(content, level)
++	if err != nil {
++		return 0, err
++	}
++	deltaPayload, deltaErr := encodeHistoryDelta(base, content, level)
++	if deltaErr != nil || len(deltaPayload)*10 >= len(snapshotPayload)*9 {
++		return insertEncodedHistorySnapshot(tx, fileID, user, content, snapshotPayload, createdMs)
++	}
++	return insertEncodedHistoryDelta(tx, fileID, baseID, chainID, user, content, deltaPayload, createdMs)
++}
++
++func insertEncodedHistoryDelta(tx *sql.Tx, fileID int64, baseID int64, chainID int64, user string, content []byte, payload []byte, createdMs int64) (int64, error) {
++	res, err := tx.Exec(`
++		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
++		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
++		fileID, chainID, createdMs, len(content), user, baseID, payload, contentHash(content))
++	if err != nil {
++		return 0, err
++	}
++	return res.LastInsertId()
++}
++
++func pruneHistory(tx *sql.Tx, fileID int64, protectedChain sql.NullInt64, cfg config.FileHistoryConfiguration) error {
++	if err := pruneOldHistoryChains(tx, fileID, maxUint64(cfg.KeepChains, 1)); err != nil {
++		return err
++	}
++	for {
++		size, err := historyFilePayloadBytes(tx, fileID)
++		if err != nil || size <= cfg.PerFileDiskBudget {
++			return err
++		}
++		freed, err := dropOldestHistoryChain(tx, fileID, protectedChain, maxUint64(cfg.KeepChains, 1))
++		if err != nil || freed == 0 {
++			return err
++		}
++	}
++}
++
++func pruneServerHistory(tx *sql.Tx, protectedFileID int64, protectedChain sql.NullInt64, cfg config.FileHistoryConfiguration) error {
++	if cfg.PerServerDiskBudget == 0 {
++		return nil
++	}
++	for {
++		size, err := historyTotalPayloadBytes(tx)
++		if err != nil || size <= cfg.PerServerDiskBudget {
++			return err
++		}
++		freed, err := dropGloballyOldestHistoryChain(tx, protectedFileID, protectedChain)
++		if err != nil || freed == 0 {
++			return err
++		}
++	}
++}
++
++func pruneOldHistoryChains(tx *sql.Tx, fileID int64, keepChains uint64) error {
++	rows, err := tx.Query(`
++		SELECT DISTINCT chain_id FROM revisions
++		WHERE file_id = ?
++		ORDER BY chain_id DESC LIMIT ?`, fileID, keepChains)
++	if err != nil {
++		return err
++	}
++	defer rows.Close()
++
++	chains := make([]int64, 0, keepChains)
++	for rows.Next() {
++		var id int64
++		if err := rows.Scan(&id); err != nil {
++			return err
++		}
++		chains = append(chains, id)
++	}
++	if err := rows.Err(); err != nil {
++		return err
++	}
++	if uint64(len(chains)) < keepChains || len(chains) == 0 {
++		return nil
++	}
++	_, err = tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id < ?", fileID, chains[len(chains)-1])
++	return err
++}
++
++func dropOldestHistoryChain(tx *sql.Tx, fileID int64, protected sql.NullInt64, minChains uint64) (uint64, error) {
++	var count int64
++	if err := tx.QueryRow("SELECT COUNT(DISTINCT chain_id) FROM revisions WHERE file_id = ?", fileID).Scan(&count); err != nil {
++		return 0, err
++	}
++	if uint64(count) <= maxUint64(minChains, 1) {
++		return 0, nil
++	}
++
++	query := "SELECT MIN(chain_id) FROM revisions WHERE file_id = ?"
++	args := []any{fileID}
++	if protected.Valid {
++		query += " AND chain_id <> ?"
++		args = append(args, protected.Int64)
++	}
++	var chainID sql.NullInt64
++	if err := tx.QueryRow(query, args...).Scan(&chainID); err != nil || !chainID.Valid {
++		return 0, err
++	}
++	var freed uint64
++	if err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID.Int64).Scan(&freed); err != nil {
++		return 0, err
++	}
++	_, err := tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID.Int64)
++	return freed, err
++}
++
++func dropGloballyOldestHistoryChain(tx *sql.Tx, protectedFileID int64, protectedChain sql.NullInt64) (uint64, error) {
++	query := `
++		SELECT r.file_id, r.chain_id
++		FROM revisions r
++		WHERE (SELECT COUNT(DISTINCT chain_id) FROM revisions WHERE file_id = r.file_id) > 1`
++	args := []any{}
++	if protectedChain.Valid {
++		query += " AND NOT (r.file_id = ? AND r.chain_id = ?)"
++		args = append(args, protectedFileID, protectedChain.Int64)
++	}
++	query += `
++		GROUP BY r.file_id, r.chain_id
++		ORDER BY MIN(r.created) ASC, r.chain_id ASC
++		LIMIT 1`
++
++	var fileID int64
++	var chainID int64
++	if err := tx.QueryRow(query, args...).Scan(&fileID, &chainID); err != nil {
++		if err == sql.ErrNoRows {
++			return 0, nil
++		}
++		return 0, err
++	}
++
++	var freed uint64
++	if err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID).Scan(&freed); err != nil {
++		return 0, err
++	}
++	_, err := tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID)
++	return freed, err
++}
++
++func historyFilePayloadBytes(tx *sql.Tx, fileID int64) (uint64, error) {
++	var size uint64
++	err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ?", fileID).Scan(&size)
++	return size, err
++}
++
++func historyTotalPayloadBytes(tx *sql.Tx) (uint64, error) {
++	var size uint64
++	err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions").Scan(&size)
++	return size, err
++}
++
++func reconstructHistoryRevision(q historyQuerier, id int64, level int) ([]byte, error) {
++	chain := make([]historyRevisionStep, 0, 8)
++	current := sql.NullInt64{Int64: id, Valid: true}
++	for current.Valid && len(chain) < 1000 {
++		var row historyRevisionStep
++		if err := q.QueryRow("SELECT id, base_id, payload, content_hash FROM revisions WHERE id = ?", current.Int64).
++			Scan(&row.id, &row.baseID, &row.payload, &row.hash); err != nil {
++			return nil, err
++		}
++		chain = append(chain, row)
++		current = row.baseID
++		if !row.baseID.Valid {
++			break
++		}
++	}
++	if len(chain) == 0 || chain[len(chain)-1].baseID.Valid {
++		return nil, fmt.Errorf("revision %d has no snapshot anchor", id)
++	}
++
++	reverseHistoryChain(chain)
++	content, err := decodeHistorySnapshot(chain[0].payload)
++	if err != nil {
++		return nil, err
++	}
++	if contentHash(content) != chain[0].hash {
++		return nil, fmt.Errorf("content hash mismatch at revision %d", chain[0].id)
++	}
++	for _, next := range chain[1:] {
++		content, err = decodeHistoryDelta(next.payload, content, level)
++		if err != nil {
++			return nil, err
++		}
++		if contentHash(content) != next.hash {
++			return nil, fmt.Errorf("content hash mismatch at revision %d", next.id)
++		}
++	}
++	return content, nil
++}
++
++func reverseHistoryChain(chain []historyRevisionStep) {
++	for i, j := 0, len(chain)-1; i < j; i, j = i+1, j-1 {
++		chain[i], chain[j] = chain[j], chain[i]
++	}
++}
++
++type revisionScanner interface {
++	Scan(dest ...any) error
++}
++
++func scanHistoryRevision(scanner revisionScanner) (fileRevisionRow, error) {
++	var row fileRevisionRow
++	err := scanner.Scan(&row.id, &row.chainID, &row.createdMs, &row.size, &row.user, &row.baseID, &row.storedSize, &row.contentHash)
++	return row, err
++}
++
++func encodeHistorySnapshot(content []byte, level int) ([]byte, error) {
++	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(level)), zstd.WithEncoderConcurrency(1))
++	if err != nil {
++		return nil, err
++	}
++	defer encoder.Close()
++	return encoder.EncodeAll(content, nil), nil
++}
++
++func decodeHistorySnapshot(payload []byte) ([]byte, error) {
++	decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1))
++	if err != nil {
++		return nil, err
++	}
++	defer decoder.Close()
++	return decoder.DecodeAll(payload, nil)
++}
++
++func encodeHistoryDelta(base []byte, content []byte, level int) ([]byte, error) {
++	encoder, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(level)), zstd.WithEncoderConcurrency(1), zstd.WithEncoderDictRaw(fileHistoryZstdDictID, base))
++	if err != nil {
++		return nil, err
++	}
++	defer encoder.Close()
++	payload := encoder.EncodeAll(content, nil)
++	decoded, err := decodeHistoryDelta(payload, base, level)
++	if err != nil {
++		return nil, err
++	}
++	if !bytes.Equal(decoded, content) {
++		return nil, fmt.Errorf("zstd delta round-trip mismatch")
++	}
++	return payload, nil
++}
++
++func decodeHistoryDelta(payload []byte, base []byte, level int) ([]byte, error) {
++	decoder, err := zstd.NewReader(nil, zstd.WithDecoderConcurrency(1), zstd.WithDecoderDictRaw(fileHistoryZstdDictID, base))
++	if err != nil {
++		return nil, err
++	}
++	defer decoder.Close()
++	return decoder.DecodeAll(payload, nil)
++}
++
++func contentHash(content []byte) string {
++	sum := sha256.Sum256(content)
++	return hex.EncodeToString(sum[:])
++}
++
++func maxUint64(value uint64, fallback uint64) uint64 {
++	if value == 0 {
++		return fallback
++	}
++	return value
++}
++
++func isFileHistoryPathAllowed(path string) bool {
++	ext := strings.ToLower(filepath.Ext(path))
++	if ext == "" {
++		return true
++	}
++	_, skipped := fileHistorySkippedExtensions[ext]
++	return !skipped
++}
++
++func isLikelyBinaryHistoryContent(content []byte) bool {
++	if len(content) == 0 {
++		return false
++	}
++	sample := content
++	if len(sample) > 8192 {
++		sample = sample[:8192]
++	}
++
++	controlBytes := 0
++	for _, b := range sample {
++		switch b {
++		case 0:
++			return true
++		case '\n', '\r', '\t', '\f':
++			continue
++		default:
++			if b < 0x20 {
++				controlBytes++
++			}
++		}
++	}
++	return controlBytes*100 > len(sample)*5
++}
+diff --git a/server/file_history_test.go b/server/file_history_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..570f70e168d3c00dd2ebc5e846047da3098ce04f
+--- /dev/null
++++ b/server/file_history_test.go
+@@ -0,0 +1,80 @@
++package server
++
++import (
++	"bytes"
++	"testing"
++)
++
++func TestFileHistoryDeltaRoundTrip(t *testing.T) {
++	base := bytes.Repeat([]byte("server-start-line=old\n"), 128)
++	content := bytes.ReplaceAll(base, []byte("old"), []byte("new"))
++
++	payload, err := encodeHistoryDelta(base, content, 3)
++	if err != nil {
++		t.Fatalf("encodeHistoryDelta returned error: %v", err)
++	}
++
++	decoded, err := decodeHistoryDelta(payload, base, 3)
++	if err != nil {
++		t.Fatalf("decodeHistoryDelta returned error: %v", err)
++	}
++	if !bytes.Equal(decoded, content) {
++		t.Fatal("decoded delta does not match original content")
++	}
++}
++
++func TestFileHistorySnapshotRoundTrip(t *testing.T) {
++	content := []byte("echo starting server\njava -jar server.jar\n")
++
++	payload, err := encodeHistorySnapshot(content, 3)
++	if err != nil {
++		t.Fatalf("encodeHistorySnapshot returned error: %v", err)
++	}
++
++	decoded, err := decodeHistorySnapshot(payload)
++	if err != nil {
++		t.Fatalf("decodeHistorySnapshot returned error: %v", err)
++	}
++	if !bytes.Equal(decoded, content) {
++		t.Fatal("decoded snapshot does not match original content")
++	}
++}
++
++func TestFileHistoryPathFilter(t *testing.T) {
++	allowed := []string{
++		"/ServerStart.bat",
++		"/server.properties",
++		"/config/custom.dat.txt",
++		"/no-extension",
++	}
++	for _, path := range allowed {
++		if !isFileHistoryPathAllowed(path) {
++			t.Fatalf("expected %s to be tracked", path)
++		}
++	}
++
++	skipped := []string{
++		"/server.jar",
++		"/world/region/r.0.0.mca",
++		"/backup.tar.gz",
++		"/database.sqlite",
++		"/image.PNG",
++	}
++	for _, path := range skipped {
++		if isFileHistoryPathAllowed(path) {
++			t.Fatalf("expected %s to be skipped", path)
++		}
++	}
++}
++
++func TestFileHistoryBinaryContentFilter(t *testing.T) {
++	if isLikelyBinaryHistoryContent([]byte("line one\nline two\n")) {
++		t.Fatal("expected text content to be tracked")
++	}
++	if !isLikelyBinaryHistoryContent([]byte{0x50, 0x4b, 0x03, 0x04, 0x00}) {
++		t.Fatal("expected nul-containing content to be skipped")
++	}
++	if !isLikelyBinaryHistoryContent([]byte{0x01, 0x02, 0x03, 0x04, 't', 'e', 'x', 't'}) {
++		t.Fatal("expected control-heavy content to be skipped")
++	}
++}
 diff --git a/server/filesystem/errors.go b/server/filesystem/errors.go
 index b977fe6b2e0545a2c23140cc05be9eb25fc87c34..17833eb3ee35c3d380c3c63375c460f60119916d 100644
 --- a/server/filesystem/errors.go

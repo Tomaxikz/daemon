@@ -137,6 +137,7 @@ func putServerRenameFiles(c *gin.Context) {
 					}
 					return err
 				}
+				s.RenameFileHistory(pf, pt)
 				return nil
 			}
 		})
@@ -213,7 +214,11 @@ func postServerDeleteFiles(c *gin.Context) {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				return s.Filesystem().Delete(pi)
+				if err := s.Filesystem().Delete(pi); err != nil {
+					return err
+				}
+				s.ForgetFileHistory(pi)
+				return nil
 			}
 		})
 	}
@@ -246,6 +251,12 @@ func postServerWriteFile(c *gin.Context) {
 		return
 	}
 
+	var before []byte
+	trackRevision := server.ShouldRecordFileHistory(f, uint64(c.Request.ContentLength))
+	if trackRevision {
+		before, _ = captureFileRevisionContent(s, f)
+	}
+
 	if err := s.Filesystem().Write(f, c.Request.Body, c.Request.ContentLength, 0o644); err != nil {
 		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -256,6 +267,18 @@ func postServerWriteFile(c *gin.Context) {
 
 		middleware.CaptureAndAbort(c, err)
 		return
+	}
+
+	if trackRevision {
+		after, ok := captureFileRevisionContent(s, f)
+		if ok {
+			revisionID, err := s.RecordFileRevision(f, before, after, strings.TrimSpace(c.Query("user")))
+			if err != nil {
+				s.Log().WithError(err).WithField("path", f).Warn("failed to record file revision")
+			} else if revisionID > 0 {
+				c.Header("X-File-Revision-Id", strconv.FormatInt(revisionID, 10))
+			}
+		}
 	}
 
 	c.Status(http.StatusNoContent)
