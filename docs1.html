@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Network Statistics Manager Installation guide</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+        <style>
+            ::-webkit-scrollbar { height: 8px; }
+            ::-webkit-scrollbar-track { background-color: #57534e; border-radius: 10px; }
+            ::-webkit-scrollbar-thumb { background-color: #b8aca1; border-radius: 10px; }
+        </style>
+    </head>
+    <body class="bg-stone-800">
+        <div class="justify-center items-center flex flex-col px-3 md:px-4 pb-20 gap-4">
+            <h1 class="text-white font-bold text-2xl md:text-4xl mt-20">Network Statistics Manager - V-A.1.0.0</h1>
+            <p class="text-stone-400 text-[16px] font-medium">Installation guide</p>
+
+            <h1 class="mt-10 text-white font-bold text-lg">Panel install using Ainx or Blueprint</h1>
+            <p class="text-stone-400 text-sm max-w-[900px] text-center">
+                The panel side can be installed by either package format. Remove the old standalone/manual panel edits first if they were previously added.
+            </p>
+            <div class="flex flex-col md:flex-row gap-5 w-full max-w-[1420px] justify-center">
+                <div class="code-block bg-emerald-600 rounded-lg p-3 flex flex-row justify-between items-center gap-2 mt-2 w-full md:w-auto">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-emerald-200 font-mono shrink-0">$</span>
+                        <code class="text-white font-mono text-sm break-all">ainx install networkstats.ainx</code>
+                    </div>
+                    <button onclick="copyButton(this)" class="bg-emerald-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-emerald-800 transition duration-200 shrink-0">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+                <div class="code-block bg-blue-600 rounded-lg p-3 flex flex-row justify-between items-center gap-2 mt-2 w-full md:w-auto">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-blue-200 font-mono shrink-0">$</span>
+                        <code class="text-white font-mono text-sm break-all">blueprint -install networkstats</code>
+                    </div>
+                    <button onclick="copyButton(this)" class="bg-blue-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-blue-800 transition duration-200 shrink-0">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="w-full max-w-[1420px] bg-yellow-500/15 border border-yellow-500/60 border-l-4 rounded-lg p-4 mt-10">
+                <div class="flex items-start gap-3">
+                    <i class="fa-solid fa-triangle-exclamation text-yellow-300 mt-1"></i>
+                    <div>
+                        <h2 class="text-yellow-100 font-bold text-lg">Panel cleanup if you used old manual edits</h2>
+                        <p class="text-yellow-100/90 mt-2">
+                            If this is a fresh Ainx or Blueprint install, skip old manual cleanup. If you previously pasted the standalone panel edits by hand, remove those old route, navigation, scheduler, and dashboard edits before installing the package.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full max-w-[1420px] bg-stone-700 rounded-lg p-4">
+                <h2 class="text-white font-bold text-xl">Install the panel package</h2>
+                <div class="flex flex-wrap gap-2 items-center mt-3">
+                    <p class="text-stone-300">In</p>
+                    <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/var/www/pterodactyl</code>
+                </div>
+                <p class="text-stone-300 mt-3">Execute one of these:</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div class="code-block bg-stone-900 rounded-lg p-3 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">ainx install networkstats.ainx</code></pre>
+                        </div>
+                    </div>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 border-l-4 border-blue-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">blueprint -install networkstats</code></pre>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-stone-400 mt-3 text-sm">
+                    Ainx and Blueprint install the panel files, dashboard route, API routes, migrations, console commands, and build steps. Keep the Wings edits below as separate daemon-side changes.
+                </p>
+            </div>
+
+            <h1 class="mt-20 text-white text-2xl md:text-4xl font-bold">Wings modifications guide</h1>
+            <p class="text-stone-400 text-[16px] font-medium mb-10">Daemon-side changes</p>
+
+            <div class="w-full max-w-[1420px]">
+                <div class="flex flex-col md:flex-row justify-center gap-2 bg-stone-900 rounded-lg p-2 mb-5" role="tablist" aria-label="Wings install options">
+                    <button type="button" data-wings-tab="prebuilt" onclick="setWingsOption('prebuilt')" class="w-full md:w-auto bg-emerald-600 text-white font-bold px-4 py-2 rounded-md cursor-pointer transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="true" aria-controls="wings-prebuilt">
+                        Pre-built
+                    </button>
+                    <button type="button" data-wings-tab="patch" onclick="setWingsOption('patch')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-patch">
+                        Patch file
+                    </button>
+                    <button type="button" data-wings-tab="manual" onclick="setWingsOption('manual')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-manual">
+                        Manual edits
+                    </button>
+                </div>
+
+                <div id="wings-prebuilt" data-wings-panel="prebuilt" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel">
+                    <h1 class="text-white font-bold text-xl">Install the prebuilt Wings binary</h1>
+                    <p class="text-stone-300 mt-3">Use this if you just want the daemon already patched and built.</p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">sudo mkdir -p /etc/pterodactyl
+ARCH="$([[ "$(uname -m)" == "x86_64" ]] &amp;&amp; echo "amd64" || echo "arm64")"
+sudo curl -L -o /usr/local/bin/wings \
+  "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${ARCH}"
+sudo chmod u+x /usr/local/bin/wings
+sudo systemctl restart wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Release page:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/releases/tag/dev-latest">https://github.com/Tomaxikz/daemon/releases/tag/dev-latest</a>
+                    </p>
+                </div>
+
+                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Apply the patch from the Wings root</h1>
+                    <p class="text-stone-300 mt-3">
+                        Run this inside the root folder of the Wings source repo, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -L -o tomaxikz.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/tomaxikz.patch"
+git apply tomaxikz.patch
+go build
+sudo systemctl stop wings
+sudo mv wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Patch file:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch">https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch</a>
+                    </p>
+                </div>
+
+                <div id="wings-manual" data-wings-panel="manual" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Edit Wings by hand</h1>
+                    <p class="text-stone-300 mt-3">
+                        If you are not using the patch, run this from the root of the Wings source repo to add the daemon-side Network Statistics Manager files.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -L -o router/nsm_router.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/nsm_router.go"
+curl -L -o server/protocol_stats.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/protocol_stats.go"
+curl -L -o server/protocol_monitor.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/protocol_monitor.go"</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        The protocol stats endpoint uses <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/nsm_router.go</code> and <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server/protocol_stats.go</code>. Keep <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server/protocol_monitor.go</code> with the manual files so the install matches the patch.
+                    </p>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Add packet fields</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/environment/stats.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">Paste below <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">TxBytes uint64 `json:"tx_bytes"`</code>:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">RxPackets uint64 `json:"rx_packets"`
+TxPackets uint64 `json:"tx_packets"`
+RxErrors uint64 `json:"rx_errors"`
+TxErrors uint64 `json:"tx_errors"`
+RxDropped uint64 `json:"rx_dropped"`
+TxDropped uint64 `json:"tx_dropped"`</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Collect packet values</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/environment/docker/stats.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">Paste below <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">st.Network.TxBytes += nw.TxBytes</code>:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">st.Network.RxPackets += nw.RxPackets
+st.Network.TxPackets += nw.TxPackets
+st.Network.RxErrors += nw.RxErrors
+st.Network.TxErrors += nw.TxErrors
+st.Network.RxDropped += nw.RxDropped
+st.Network.TxDropped += nw.TxDropped</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Initialize packet values</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/server/resources.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">Paste below <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">ru.Network.RxBytes = 0</code>:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">ru.Network.TxPackets = 0
+ru.Network.RxPackets = 0</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Add protocols route</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/router.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">Paste below <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server.GET("/logs", getServerLogs)</code>:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">server.GET("/stats/protocols", getServerProtocolStats)</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Build and restart Wings</h2>
+                        <p class="text-stone-300 mt-3">Execute:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">go build
+sudo systemctl stop wings
+sudo mv wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            function copyButton(button) {
+                const code = button.closest(".code-block").querySelector("code").innerText;
+                const textarea = document.createElement("textarea");
+                textarea.value = code;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textarea);
+                button.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = '<i class="fa-solid fa-copy"></i> Copy';
+                }, 2000);
+            }
+
+            function setWingsOption(option) {
+                const activeClasses = ["bg-emerald-600", "text-white"];
+                const inactiveClasses = ["bg-stone-800", "text-stone-300", "hover:bg-stone-600"];
+
+                document.querySelectorAll("[data-wings-panel]").forEach((panel) => {
+                    panel.hidden = panel.dataset.wingsPanel !== option;
+                });
+
+                document.querySelectorAll("[data-wings-tab]").forEach((tab) => {
+                    const isActive = tab.dataset.wingsTab === option;
+                    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+                    tab.classList.remove(...activeClasses, ...inactiveClasses);
+                    tab.classList.add(...(isActive ? activeClasses : inactiveClasses));
+                });
+            }
+        </script>
+    </body>
+</html>

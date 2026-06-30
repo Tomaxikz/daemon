@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Better Files Manager Ainx guide</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+        <style>
+            ::-webkit-scrollbar { height: 8px; }
+            ::-webkit-scrollbar-track { background-color: #57534e; border-radius: 10px; }
+            ::-webkit-scrollbar-thumb { background-color: #b8aca1; border-radius: 10px; }
+        </style>
+    </head>
+    <body class="bg-stone-800">
+        <div class="justify-center items-center flex flex-col px-3 md:px-4 pb-20 gap-4">
+            <h1 class="text-white font-bold text-2xl md:text-4xl mt-20">Better Files Manager - V-A.1.0.0</h1>
+            <p class="text-stone-400 text-[16px] font-medium">Installation guide</p>
+
+            <h1 class="mt-10 text-white font-bold text-lg">Install using install script</h1>
+            <div class="flex flex-col md:flex-row gap-5 w-full max-w-[1420px] justify-center">
+                <div class="code-block bg-emerald-600 rounded-lg p-3 flex flex-row justify-between items-center gap-2 mt-2 w-full md:w-auto">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-emerald-200 font-mono shrink-0">$</span>
+                        <code class="text-white font-mono text-sm break-all">ainx install betterfilesmanager.ainx</code>
+                    </div>
+                    <button onclick="copyButton(this)" class="bg-emerald-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-emerald-800 transition duration-200 shrink-0">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+                <div class="code-block bg-blue-600 rounded-lg p-3 flex flex-row justify-between items-center gap-2 mt-2 w-full md:w-auto">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-blue-200 font-mono shrink-0">$</span>
+                        <code class="text-white font-mono text-sm break-all">blueprint -install betterfilesmanager</code>
+                    </div>
+                    <button onclick="copyButton(this)" class="bg-blue-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-blue-800 transition duration-200 shrink-0">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 w-[200px] mt-5">
+                <div class="flex-1 h-px bg-stone-500"></div>
+                <p class="text-stone-400 font-bold">Or</p>
+                <div class="flex-1 h-px bg-stone-500"></div>
+            </div>
+            <h1 class="mt-2 text-white font-bold text-lg mb-10">Using manual steps</h1>
+
+            <div class="w-full max-w-[1420px] bg-yellow-500/15 border border-yellow-500/60 border-l-4 rounded-lg p-4 mt-10">
+                <div class="flex items-start gap-3">
+                    <i class="fa-solid fa-triangle-exclamation text-yellow-300 mt-1"></i>
+                    <div>
+                        <h2 class="text-yellow-100 font-bold text-lg">Only do this if you used the old standalone/manual install</h2>
+                        <p class="text-yellow-100/90 mt-2">
+                            If this is a fresh Blueprint or Ainx install, skip the cleanup section. If your Panel already has the old manual standalone version, remove those manual edits first, then install with Ainx.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full max-w-[1420px] bg-stone-700 rounded-lg p-4">
+                <h2 class="text-white font-bold text-xl">Old standalone cleanup checklist</h2>
+                <p class="text-stone-300 mt-3">
+                    These are the old manual Panel edits to reverse before switching to Ainx. Red blocks are code or files to remove. Green blocks are code to restore. Each code box scrolls if the snippet is longer than the visible area.
+                </p>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0">
+                        <h3 class="text-white font-bold">resources/scripts/routers/routes.ts</h3>
+                        <p class="text-stone-300 mt-2">1. Remove this Better Files import if it exists:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">import { BetterFileManagerContainer } from '@/components/server/betterfiles';</code></pre>
+                        </div>
+                        <p class="text-stone-300 mt-3">2. Remove this old standalone route replacement:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-56 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">{
+    path: '/files',
+    permission: 'file.*',
+    name: 'Files',
+    component: BetterFileManagerContainer,
+},</code></pre>
+                        </div>
+                        <p class="text-stone-300 mt-3">3. Restore the normal Pterodactyl file manager routes:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-emerald-500 max-h-64 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">{
+    path: '/files',
+    permission: 'file.*',
+    name: 'Files',
+    component: FileManagerContainer,
+},
+{
+    path: '/files/:action(edit|new)',
+    permission: 'file.*',
+    name: undefined,
+    component: FileEditContainer,
+},</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0">
+                        <h3 class="text-white font-bold">routes/api-client.php</h3>
+                        <p class="text-stone-300 mt-2">Remove this manual route include if it exists:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">require __DIR__ . '/api-better-files.php';</code></pre>
+                        </div>
+                        <p class="text-stone-300 mt-3">Then delete this old standalone route file if it exists:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">routes/api-better-files.php</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0">
+                        <h3 class="text-white font-bold">routes/admin.php</h3>
+                        <p class="text-stone-300 mt-2">Remove these old standalone admin routes if they exist:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-56 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">Route::get('/better-files', [Admin\Settings\BetterFilesController::class, 'index'])-&gt;name('admin.settings.betterfiles');
+Route::patch('/better-files', [Admin\Settings\BetterFilesController::class, 'update']);</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0">
+                        <h3 class="text-white font-bold">resources/views/partials/admin/settings/nav.blade.php</h3>
+                        <p class="text-stone-300 mt-2">Remove this old Better Files settings navigation link if it exists:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">&lt;li @if($activeTab === 'better-files')class="active"@endif&gt;&lt;a href="{{ route('admin.settings.betterfiles') }}"&gt;Better Files&lt;/a&gt;&lt;/li&gt;</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0">
+                        <h3 class="text-white font-bold">app/Console/Kernel.php</h3>
+                        <p class="text-stone-300 mt-2">Remove this old standalone trash cleanup scheduler entry if it exists:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">$schedule-&gt;command(\Pterodactyl\Console\Commands\BetterFilesTrashCleanupCommand::class)-&gt;daily();</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0">
+                        <h3 class="text-white font-bold">webpack.config.js</h3>
+                        <p class="text-stone-300 mt-2">Remove the old standalone Monaco plugin import if it was added manually:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');</code></pre>
+                        </div>
+                        <p class="text-stone-300 mt-3">Remove the old manually added Monaco plugin entry if it exists:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-56 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">new MonacoWebpackPlugin({
+    filename: isProduction ? 'monaco/[name].[contenthash:8].worker.js' : 'monaco/[name].worker.js',
+    publicPath: process.env.WEBPACK_PUBLIC_PATH || '/assets/',
+}),</code></pre>
+                        </div>
+                        <p class="text-stone-300 mt-3">If you added this rule only for the standalone install, remove it too:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-red-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">{
+    test: /\.(woff|woff2|ttf)$/i,
+    type: 'asset/resource',
+},</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="bg-stone-800 rounded-lg p-4 min-w-0 lg:col-span-2">
+                        <h3 class="text-white font-bold">Finish cleanup</h3>
+                        <p class="text-stone-300 mt-2">After removing the old standalone edits above, clear caches and rebuild the Panel:</p>
+                        <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-emerald-500 max-h-48 overflow-auto">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <pre><code class="text-white text-sm">php artisan optimize:clear
+yarn build:production
+php artisan optimize</code></pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full max-w-[1420px] bg-stone-700 rounded-lg p-4 mt-6">
+                <h2 class="text-white font-bold text-xl">What Ainx handles</h2>
+                <p class="text-stone-300 mt-3">
+                    The Ainx package handles the Panel-side addon install. Do not run the old standalone artisan installer. Do not repeat the old manual Panel file edits after installing Ainx.
+                </p>
+                <p class="text-stone-300 mt-3">
+                    The only manual section kept below is for Wings. Use it only if you want the daemon-backed Better Files features such as live collaboration, search streaming, media streaming, archive tools, and Git daemon endpoints. NBT and database previews run through the Panel and do not need Wings edits.
+                </p>
+            </div>
+
+            <h1 class="mt-20 text-white text-2xl md:text-4xl font-bold">Wings modifications guide</h1>
+            <p class="text-stone-400 text-[16px] font-medium mb-10">Daemon-side changes</p>
+
+            <div class="w-full max-w-[1420px]">
+                <div class="bg-emerald-500/15 border border-emerald-500/60 border-l-4 rounded-lg p-4 mb-5">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-info text-emerald-300 mt-1"></i>
+                        <div>
+                            <h2 class="text-emerald-100 font-bold text-lg">Recommended Wings install</h2>
+                            <p class="text-emerald-100/90 mt-2">
+                                We recommend using the pre-built Wings binary or applying the full patch file. The full patched daemon also includes fixes for Pterodactyl Wings bugs that may not be patched upstream yet.
+                            </p>
+                            <p class="text-emerald-100/90 mt-2">
+                                If you need to apply Wings edits from other addons, apply this patch first or clone our daemon repo first, then add the other addon changes on top.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row justify-center gap-2 bg-stone-900 rounded-lg p-2 mb-5" role="tablist" aria-label="Wings install options">
+                    <button type="button" data-wings-tab="prebuilt" onclick="setWingsOption('prebuilt')" class="w-full md:w-auto bg-emerald-600 text-white font-bold px-4 py-2 rounded-md cursor-pointer transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="true" aria-controls="wings-prebuilt">
+                        Pre-built
+                    </button>
+                    <button type="button" data-wings-tab="patch" onclick="setWingsOption('patch')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-patch">
+                        Patch file
+                    </button>
+                    <button type="button" data-wings-tab="manual" onclick="setWingsOption('manual')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-manual">
+                        Manual edits
+                    </button>
+                </div>
+
+                <div id="wings-prebuilt" data-wings-panel="prebuilt" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel">
+                    <h1 class="text-white font-bold text-xl">Install the prebuilt Wings binary</h1>
+                    <p class="text-stone-300 mt-3">Use this if you just want the daemon already patched and built with the Better Files Wings handlers.</p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">sudo mkdir -p /etc/pterodactyl
+ARCH="$([[ "$(uname -m)" == "x86_64" ]] &amp;&amp; echo "amd64" || echo "arm64")"
+sudo curl -L -o /usr/local/bin/wings \
+  "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${ARCH}"
+sudo chmod u+x /usr/local/bin/wings
+sudo systemctl restart wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Release page:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/releases/tag/dev-latest">https://github.com/Tomaxikz/daemon/releases/tag/dev-latest</a>
+                    </p>
+                </div>
+
+                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Apply the patch from the Wings root</h1>
+                    <p class="text-stone-300 mt-3">
+                        Run this inside the root folder of the Wings source repo, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -L -o tomaxikz.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/tomaxikz.patch"
+git apply tomaxikz.patch
+go build
+sudo systemctl stop wings
+sudo mv wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Patch file:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch">https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch</a>
+                    </p>
+                </div>
+
+                <div id="wings-manual" data-wings-panel="manual" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Edit Wings by hand</h1>
+                    <p class="text-stone-300 mt-3">
+                        Run every command in this tab from the root of the Wings source repo, where <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code> exists. The manual install has two parts: first download the new files, then add the small wiring snippets to the existing Wings files. Do not edit <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/router_download.go</code>; normal downloads stay unchanged.
+                    </p>
+                    <div class="bg-stone-800 rounded-lg p-4 mt-4 border border-stone-600">
+                        <h2 class="text-white font-bold text-lg">Manual edit order</h2>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">1.</span> Download the new Go files.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">2.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router.go</code> for routes.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">3.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/websocket/websocket.go</code> for live collaboration.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">4.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">config/config.go</code> for file history settings.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">5.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router_server_files.go</code> for revision tracking.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">6.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/middleware/middleware.go</code> for stream-only CORS.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">7.</span> Build and restart Wings.</p>
+                        </div>
+                    </div>
+                    <h2 class="text-white font-bold text-lg mt-6">Download the new Go files</h2>
+                    <p class="text-stone-300 mt-3">
+                        This creates the missing folders and downloads the new Better Files, file history, archive, stream, Git, collaboration, and Docker helper files.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">mkdir -p router/websocket environment/docker server
+curl -L -o router/websocket/limiter.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/limiter.go"
+curl -L -o router/websocket/betterfiles_collaboration.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/betterfiles_collaboration.go"
+curl -L -o server/file_history.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/file_history.go"
+curl -L -o router/router_server_files_revisions.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_revisions.go"
+curl -L -o router/router_server_git.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_git.go"
+curl -L -o router/router_server_files_search.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_search.go"
+curl -L -o router/router_server_betterfiles_collaboration.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_betterfiles_collaboration.go"
+curl -L -o router/router_server_archive_nbt.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_archive_nbt.go"
+curl -L -o router/router_cdn_stream.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_cdn_stream.go"
+curl -L -o router/router_download_helpers.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_download_helpers.go"
+curl -L -o environment/docker/client_accessor.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/environment/docker/client_accessor.go"</code></pre>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit router/router.go</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/router.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Find the authenticated server routes block. Put this Git block after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server.POST("/commands", postServerCommands)</code> and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server.POST("/install", postServerInstall)</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">git := server.Group("/git")
+{
+    git.GET("/status", getServerGitStatus)
+    git.POST("/clone", postServerGitClone)
+    git.POST("/pull", postServerGitPull)
+    git.POST("/diff", postServerGitDiff)
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In the same file, find <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">files := server.Group("/files")</code>. Put these lines inside that block, right after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">files.GET("/contents", getServerFileContents)</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">files.GET("/revisions", getServerFileRevisions)
+files.GET("/revisions/:revision", getServerFileRevision)
+files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
+files.GET("/search", getServerFilesSearch)
+files.GET("/archive/list", getServerArchiveList)
+files.POST("/archive/extract", postServerArchiveExtract)
+files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Still in <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/router.go</code>, put this near the top public download routes, directly after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router.GET("/download/file", getDownloadFile)</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">router.GET("/download/stream", getDownloadStream)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-yellow-100/90 mt-3">
+                            Leave <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router.GET("/download/file", getDownloadFile)</code> and <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router/router_download.go</code> alone. The media player uses the new <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">/download/stream</code> route.
+                        </p>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit router/websocket/websocket.go</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/websocket/websocket.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Find <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">func (h *Handler) HandleInbound(ctx context.Context, m Message) error</code>. Paste this after the non-auth token validation block and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">switch m.Event</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+    return err
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit config/config.go</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/config/config.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Find <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">type SystemConfiguration struct</code>. Add this field near the other directory/config fields, for example after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">BackupDirectory</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Then add this type below the end of <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">SystemConfiguration</code>, outside of that struct.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">type FileHistoryConfiguration struct {
+    Enabled             bool   `default:"true" yaml:"enabled"`
+    ZstdLevel           int    `default:"12" yaml:"zstd_level"`
+    AnchorInterval      uint64 `default:"4" yaml:"anchor_interval"`
+    KeepChains          uint64 `default:"2" yaml:"keep_chains"`
+    FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
+    PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
+    PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit router/router_server_files.go</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/router_server_files.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">putServerRenameFiles</code>, add this immediately after the successful <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">fs.Rename(pf, pt)</code> call and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">return nil</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">s.RenameFileHistory(pf, pt)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">postServerDeleteFiles</code>, change the delete branch so it calls this after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">s.Filesystem().Delete(pi)</code> succeeds.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">s.ForgetFileHistory(pi)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">postServerWriteFile</code>, add this after the <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">Missing Content-Length</code> check and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">s.Filesystem().Write</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">var before []byte
+trackRevision := server.ShouldRecordFileHistory(f, uint64(c.Request.ContentLength))
+if trackRevision {
+    before, _ = captureFileRevisionContent(s, f)
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Then add this after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">s.Filesystem().Write</code> succeeds and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">c.Status(http.StatusNoContent)</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">if trackRevision {
+    after, ok := captureFileRevisionContent(s, f)
+    if ok {
+        revisionID, err := s.RecordFileRevision(f, before, after, strings.TrimSpace(c.Query("user")))
+        if err != nil {
+            s.Log().WithError(err).WithField("path", f).Warn("failed to record file revision")
+        } else if revisionID &gt; 0 {
+            c.Header("X-File-Revision-Id", strconv.FormatInt(revisionID, 10))
+        }
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit router/middleware/middleware.go</h2>
+                        <div class="flex flex-wrap gap-2 items-center mt-3">
+                            <p class="text-stone-300">In</p>
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/middleware/middleware.go</code>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">SetAccessControlHeaders</code>, keep the normal <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">Access-Control-Allow-Headers</code> line, then add this block directly after it. This is only for <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">/download/stream</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">if isStreamDownloadRequest(c) {
+    c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
+    c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
+    c.Header("Vary", "Origin, Access-Control-Request-Headers")
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In the same function, replace the existing private network CORS block with this version so the corrected header is only used by the stream route.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">if allowPrivateNetwork {
+    if isStreamDownloadRequest(c) {
+        c.Header("Access-Control-Allow-Private-Network", "true")
+    } else {
+        c.Header("Access-Control-Request-Private-Network", "true")
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Add this helper below <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">SetAccessControlHeaders</code> and before the next middleware function.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">func isStreamDownloadRequest(c *gin.Context) bool {
+    return c.Request != nil &amp;&amp; c.Request.URL != nil &amp;&amp; c.Request.URL.Path == "/download/stream"
+}</code></pre>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Build and restart Wings</h2>
+                        <p class="text-stone-300 mt-3">Execute:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">go build
+sudo systemctl stop wings
+sudo mv wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            function copyButton(button) {
+                const code = button.closest(".code-block").querySelector("code").innerText;
+                const textarea = document.createElement("textarea");
+                textarea.value = code;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textarea);
+                button.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = '<i class="fa-solid fa-copy"></i> Copy';
+                }, 2000);
+            }
+
+            function setWingsOption(option) {
+                const activeClasses = ["bg-emerald-600", "text-white"];
+                const inactiveClasses = ["bg-stone-800", "text-stone-300", "hover:bg-stone-600"];
+
+                document.querySelectorAll("[data-wings-panel]").forEach((panel) => {
+                    panel.hidden = panel.dataset.wingsPanel !== option;
+                });
+
+                document.querySelectorAll("[data-wings-tab]").forEach((tab) => {
+                    const isActive = tab.dataset.wingsTab === option;
+
+                    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+                    tab.classList.remove(...activeClasses, ...inactiveClasses);
+                    tab.classList.add(...(isActive ? activeClasses : inactiveClasses));
+                });
+            }
+        </script>
+    </body>
+</html>

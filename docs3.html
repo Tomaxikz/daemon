@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Better Console Installation guide</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+        <style>
+            ::-webkit-scrollbar { height: 8px; }
+            ::-webkit-scrollbar-track { background-color: #57534e; border-radius: 10px; }
+            ::-webkit-scrollbar-thumb { background-color: #b8aca1; border-radius: 10px; }
+        </style>
+    </head>
+    <body class="bg-stone-800">
+        <div class="justify-center items-center flex flex-col px-3 md:px-4 pb-20 gap-4">
+            <h1 class="text-white font-bold text-2xl md:text-4xl mt-20">Better Console - V-A.1.0.0</h1>
+            <p class="text-stone-400 text-[16px] font-medium">Installation guide</p>
+
+            <h1 class="mt-10 text-white font-bold text-lg">Install using Ainx or Blueprint</h1>
+            <p class="text-stone-400 text-sm max-w-[900px] text-center">
+                Install the panel side with one package command.
+            </p>
+            <div class="flex flex-col md:flex-row gap-5 w-full max-w-[1420px] justify-center">
+                <div class="code-block bg-emerald-600 rounded-lg p-3 flex flex-row justify-between items-center gap-2 mt-2 w-full md:w-auto">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-emerald-200 font-mono shrink-0">$</span>
+                        <code class="text-white font-mono text-sm break-all">ainx install betterconsole.ainx</code>
+                    </div>
+                    <button onclick="copyButton(this)" class="bg-emerald-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-emerald-800 transition duration-200 shrink-0">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+                <div class="code-block bg-blue-600 rounded-lg p-3 flex flex-row justify-between items-center gap-2 mt-2 w-full md:w-auto">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="text-blue-200 font-mono shrink-0">$</span>
+                        <code class="text-white font-mono text-sm break-all">blueprint -install betterconsole</code>
+                    </div>
+                    <button onclick="copyButton(this)" class="bg-blue-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-blue-800 transition duration-200 shrink-0">
+                        <i class="fa-solid fa-copy"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="w-full max-w-[1420px] bg-stone-700 rounded-lg p-4 mt-6">
+                <h2 class="text-white font-bold text-xl">Panel install only</h2>
+                <p class="text-stone-300 mt-3">
+                    Ainx and Blueprint install the panel-side addon files and build steps. The Wings daemon update is separate and should be handled below with either the pre-built binary or the full patch file.
+                </p>
+            </div>
+
+            <h1 class="mt-20 text-white text-2xl md:text-4xl font-bold">Wings modifications guide</h1>
+            <p class="text-stone-400 text-[16px] font-medium mb-10">Daemon-side changes</p>
+
+            <div class="w-full max-w-[1420px]">
+                <div class="bg-emerald-500/15 border border-emerald-500/60 border-l-4 rounded-lg p-4 mb-5">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-circle-info text-emerald-300 mt-1"></i>
+                        <div>
+                            <h2 class="text-emerald-100 font-bold text-lg">Recommended Wings install</h2>
+                            <p class="text-emerald-100/90 mt-2">
+                                Use the pre-built Wings binary or apply the full patch file.
+                            </p>
+                            <p class="text-emerald-100/90 mt-2">
+                                If you need Wings edits from other addons, apply this patch first or clone our daemon repo first, then add the other addon changes on top.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col md:flex-row justify-center gap-2 bg-stone-900 rounded-lg p-2 mb-5" role="tablist" aria-label="Wings install options">
+                    <button type="button" data-wings-tab="prebuilt" onclick="setWingsOption('prebuilt')" class="w-full md:w-auto bg-emerald-600 text-white font-bold px-4 py-2 rounded-md cursor-pointer transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="true" aria-controls="wings-prebuilt">
+                        Pre-built
+                    </button>
+                    <button type="button" data-wings-tab="patch" onclick="setWingsOption('patch')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-patch">
+                        Patch file
+                    </button>
+                </div>
+
+                <div id="wings-prebuilt" data-wings-panel="prebuilt" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel">
+                    <h1 class="text-white font-bold text-xl">Install the prebuilt Wings binary</h1>
+                    <p class="text-stone-300 mt-3">Use this if you just want the daemon already patched and built.</p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">sudo mkdir -p /etc/pterodactyl
+ARCH="$([[ "$(uname -m)" == "x86_64" ]] &amp;&amp; echo "amd64" || echo "arm64")"
+sudo curl -L -o /usr/local/bin/wings \
+  "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${ARCH}"
+sudo chmod u+x /usr/local/bin/wings
+sudo systemctl restart wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Release page:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/releases/tag/dev-latest">https://github.com/Tomaxikz/daemon/releases/tag/dev-latest</a>
+                    </p>
+                </div>
+
+                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Apply the patch from the Wings root</h1>
+                    <p class="text-stone-300 mt-3">
+                        Run this inside the root folder of the Wings source repo, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -L -o tomaxikz.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/tomaxikz.patch"
+git apply tomaxikz.patch
+go build
+sudo systemctl stop wings
+sudo mv wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Patch file:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch">https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+        <script>
+            function copyButton(button) {
+                const code = button.closest(".code-block").querySelector("code").innerText;
+                const textarea = document.createElement("textarea");
+                textarea.value = code;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textarea);
+                button.innerHTML = '<i class="fa-solid fa-check"></i> Copied!';
+                setTimeout(() => {
+                    button.innerHTML = '<i class="fa-solid fa-copy"></i> Copy';
+                }, 2000);
+            }
+
+            function setWingsOption(option) {
+                const activeClasses = ["bg-emerald-600", "text-white"];
+                const inactiveClasses = ["bg-stone-800", "text-stone-300", "hover:bg-stone-600"];
+
+                document.querySelectorAll("[data-wings-panel]").forEach((panel) => {
+                    panel.hidden = panel.dataset.wingsPanel !== option;
+                });
+
+                document.querySelectorAll("[data-wings-tab]").forEach((tab) => {
+                    const isActive = tab.dataset.wingsTab === option;
+                    tab.setAttribute("aria-selected", isActive ? "true" : "false");
+                    tab.classList.remove(...activeClasses, ...inactiveClasses);
+                    tab.classList.add(...(isActive ? activeClasses : inactiveClasses));
+                });
+            }
+        </script>
+    </body>
+</html>

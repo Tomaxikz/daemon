@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index a83936d882d9b13e7c8b063941856759d78acb40..df47b7b2ffccce267725aa0e3eb78ff0fce22c1d 100644
+index b1331236f8f10eea37caa06e7a99a818cf159749..cb820ac96b45fd9fe5650bc94e54bf8be0b52b68 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -69,6 +69,13 @@ type SftpConfiguration struct {
@@ -258,7 +258,7 @@ index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66
 +	}
 +}
 diff --git a/environment/docker/container.go b/environment/docker/container.go
-index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98ea0cb46e4 100644
+index f503af1d2a4448b74166c999d37332bfcfc3f045..775cdfa1e16aae4218ae7af960593b3e9b8d6606 100644
 --- a/environment/docker/container.go
 +++ b/environment/docker/container.go
 @@ -11,7 +11,6 @@ import (
@@ -279,7 +279,7 @@ index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98e
  	// Images prefixed with a ~ are local images that we do not need to try and pull.
  	if strings.HasPrefix(img, "~") {
  		return nil
-@@ -385,6 +381,7 @@ func (e *Environment) ensureImageExists(img string) error {
+@@ -378,6 +374,7 @@ func (e *Environment) ensureImageExists(img string) error {
  	}
  
  	out, err := e.client.ImagePull(ctx, img, imagePullOptions)
@@ -287,7 +287,7 @@ index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98e
  	if err != nil {
  		images, ierr := e.client.ImageList(ctx, image.ListOptions{})
  		if ierr != nil {
-@@ -400,7 +397,7 @@ func (e *Environment) ensureImageExists(img string) error {
+@@ -393,7 +390,7 @@ func (e *Environment) ensureImageExists(img string) error {
  				}
  
  				log.WithFields(log.Fields{
@@ -296,7 +296,7 @@ index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98e
  					"container_id": e.Id,
  					"err":          err.Error(),
  				}).Warn("unable to pull requested image from remote source, however the image exists locally")
-@@ -411,29 +408,30 @@ func (e *Environment) ensureImageExists(img string) error {
+@@ -404,29 +401,30 @@ func (e *Environment) ensureImageExists(img string) error {
  			}
  		}
  
@@ -715,10 +715,10 @@ index d08411cce8e18de88008df04789d40bc24e55ad7..795f9cc70d9a23c5a8f6cb6fa334582d
  	StatusEvent                 = "status"
  	StatsEvent                  = "stats"
 diff --git a/server/install.go b/server/install.go
-index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84989291c6 100644
+index 0d31d50cf47397c936cea16faa89a1e9cbef32a4..e964c2ff0e0342a6a70f44aa6e5f8fb8892ba9fe 100644
 --- a/server/install.go
 +++ b/server/install.go
-@@ -259,6 +259,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+@@ -270,6 +270,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
  	}
  
  	r, err := ip.client.ImagePull(ip.Server.Context(), ip.Script.ContainerImage, imagePullOptions)
@@ -726,7 +726,7 @@ index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84
  	if err != nil {
  		images, ierr := ip.client.ImageList(ip.Server.Context(), image.ListOptions{})
  		if ierr != nil {
-@@ -274,7 +275,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+@@ -285,7 +286,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
  				}
  
  				log.WithFields(log.Fields{
@@ -735,7 +735,7 @@ index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84
  					"err":   err.Error(),
  				}).Warn("unable to pull requested image from remote source, however the image exists locally")
  
-@@ -288,12 +289,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+@@ -299,12 +300,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
  	}
  	defer r.Close()
  
@@ -759,7 +759,7 @@ index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84
  	}
  
  	if err := scanner.Err(); err != nil {
-@@ -505,13 +515,32 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
+@@ -516,13 +526,32 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
  	}
  	defer reader.Close()
  

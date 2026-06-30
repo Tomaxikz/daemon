@@ -100,7 +100,7 @@ index f411c53b72e37c52577bafc7d54f324857f990a8..e02d61ea67a8f6cdfaa3cfd53f7bf97c
  			}
  		}()
 diff --git a/config/config.go b/config/config.go
-index a83936d882d9b13e7c8b063941856759d78acb40..047521e3c7739ab5105856b744aca07bb83069d4 100644
+index b1331236f8f10eea37caa06e7a99a818cf159749..501388e29d71042ccd2d564c9648411741577b0a 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -30,6 +30,8 @@ import (
@@ -153,7 +153,7 @@ index a83936d882d9b13e7c8b063941856759d78acb40..047521e3c7739ab5105856b744aca07b
  type CrashDetection struct {
  	// CrashDetectionEnabled sets if crash detection is enabled globally for all servers on this node.
  	CrashDetectionEnabled bool `default:"true" yaml:"enabled"`
-@@ -511,6 +533,10 @@ func EnsurePterodactylUser() error {
+@@ -515,6 +537,10 @@ func EnsurePterodactylUser() error {
  	}
  
  	log.WithField("username", _config.System.Username).Info("checking for pterodactyl system user")
@@ -164,7 +164,7 @@ index a83936d882d9b13e7c8b063941856759d78acb40..047521e3c7739ab5105856b744aca07b
  	u, err := user.Lookup(_config.System.Username)
  	// If an error is returned but it isn't the unknown user error just abort
  	// the process entirely. If we did find a user, return it immediately.
-@@ -524,11 +550,13 @@ func EnsurePterodactylUser() error {
+@@ -528,11 +554,13 @@ func EnsurePterodactylUser() error {
  		return nil
  	}
  
@@ -180,7 +180,7 @@ index a83936d882d9b13e7c8b063941856759d78acb40..047521e3c7739ab5105856b744aca07b
  		// We have to create the group first on Alpine, so do that here before continuing on
  		// to the user creation process.
  		if _, err := exec.Command("addgroup", "-S", _config.System.Username).Output(); err != nil {
-@@ -536,8 +564,7 @@ func EnsurePterodactylUser() error {
+@@ -540,8 +568,7 @@ func EnsurePterodactylUser() error {
  		}
  	}
  
@@ -457,7 +457,7 @@ index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f5436541
 +	return e.client
 +}
 diff --git a/environment/docker/container.go b/environment/docker/container.go
-index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98ea0cb46e4 100644
+index f503af1d2a4448b74166c999d37332bfcfc3f045..775cdfa1e16aae4218ae7af960593b3e9b8d6606 100644
 --- a/environment/docker/container.go
 +++ b/environment/docker/container.go
 @@ -11,7 +11,6 @@ import (
@@ -478,7 +478,7 @@ index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98e
  	// Images prefixed with a ~ are local images that we do not need to try and pull.
  	if strings.HasPrefix(img, "~") {
  		return nil
-@@ -385,6 +381,7 @@ func (e *Environment) ensureImageExists(img string) error {
+@@ -378,6 +374,7 @@ func (e *Environment) ensureImageExists(img string) error {
  	}
  
  	out, err := e.client.ImagePull(ctx, img, imagePullOptions)
@@ -486,7 +486,7 @@ index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98e
  	if err != nil {
  		images, ierr := e.client.ImageList(ctx, image.ListOptions{})
  		if ierr != nil {
-@@ -400,7 +397,7 @@ func (e *Environment) ensureImageExists(img string) error {
+@@ -393,7 +390,7 @@ func (e *Environment) ensureImageExists(img string) error {
  				}
  
  				log.WithFields(log.Fields{
@@ -495,7 +495,7 @@ index 46b6744ccd355470bdc2181162f69539f6c9e7bf..374372a91cbc6c77665afd4ed1cbe98e
  					"container_id": e.Id,
  					"err":          err.Error(),
  				}).Warn("unable to pull requested image from remote source, however the image exists locally")
-@@ -411,29 +408,30 @@ func (e *Environment) ensureImageExists(img string) error {
+@@ -404,29 +401,30 @@ func (e *Environment) ensureImageExists(img string) error {
  			}
  		}
  
@@ -767,10 +767,10 @@ index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..e778c3b04c057454c47015e4e44f0979
  golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
  golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 diff --git a/internal/ufs/fs_unix.go b/internal/ufs/fs_unix.go
-index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbcc340e761 100644
+index b3197bfd6685881bb39a8c58504de1cec9313a49..4e2194c8289663a7e7d488da7d49c3a13d5c45b7 100644
 --- a/internal/ufs/fs_unix.go
 +++ b/internal/ufs/fs_unix.go
-@@ -540,10 +540,6 @@ func (fs *UnixFS) Lstatat(dirfd int, name string) (FileInfo, error) {
+@@ -539,10 +539,6 @@ func (fs *UnixFS) Lstatat(dirfd int, name string) (FileInfo, error) {
  	return fs._fstatat("lstatat", dirfd, name, AT_SYMLINK_NOFOLLOW)
  }
  
@@ -781,7 +781,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
  	dirfd, name, closeFd, err := fs.safePath(name)
  	defer closeFd()
-@@ -553,10 +549,6 @@ func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
+@@ -552,10 +548,6 @@ func (fs *UnixFS) _fstat(op string, name string, flags int) (FileInfo, error) {
  	return fs._fstatat(op, dirfd, name, flags)
  }
  
@@ -792,7 +792,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  func (fs *UnixFS) _fstatat(op string, dirfd int, name string, flags int) (FileInfo, error) {
  	var s fileStat
  	if err := ignoringEINTR(func() error {
-@@ -656,6 +648,9 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
+@@ -655,6 +647,9 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
  // was configured to enable openat2 support, unix.Openat2 will be used instead
  // of unix.Openat due to having better security properties for our use-case.
  func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, error) {
@@ -802,7 +802,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  	if flag&O_NOFOLLOW == 0 {
  		flag |= O_NOFOLLOW
  	}
-@@ -664,7 +659,7 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -663,7 +658,7 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  	for {
  		var err error
  		if fs.useOpenat2 {
@@ -811,7 +811,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  		} else {
  			fd, err = fs._openat(dirfd, name, flag, uint32(syscallMode(mode)))
  		}
-@@ -690,7 +685,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -689,7 +684,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  	finalPath, err := filepath.EvalSymlinks(filepath.Join("/proc/self/fd/", strconv.Itoa(fd)))
  	if err != nil {
  		if !errors.Is(err, ErrNotExist) {
@@ -821,7 +821,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  		}
  
  		// The target of one of the symlinks (EvalSymlinks is recursive)
-@@ -698,7 +694,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -697,7 +693,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  		// that for further validation instead.
  		var pErr *PathError
  		if !errors.As(err, &pErr) {
@@ -831,7 +831,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  		}
  
  		// Update the final path to whatever directory or path didn't exist while
-@@ -714,7 +711,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -713,7 +710,8 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  		if fs.useOpenat2 {
  			op = "openat2"
  		}
@@ -841,7 +841,7 @@ index 97224c3051aa2d92d9ef2723fff24e8f6da31ff4..0a1678bfdba28432bd6d9e85a7ac7fbc
  			Op:   op,
  			Path: name,
  			Err:  ErrBadPathResolution,
-@@ -722,6 +720,10 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
+@@ -721,6 +719,10 @@ func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int,
  	}
  
  	// Return the file descriptor and any potential error.
@@ -5458,19 +5458,19 @@ index 4482667e67723a87eeb47735708f96206806c5db..5213c751c3c7d4c247525dfd4d555926
  	case AuthenticationEvent:
  		{
 diff --git a/server/backup/backup.go b/server/backup/backup.go
-index 01e73d0dd40f52cee29578e10c5cc7e19cc508d6..8041b782b98608d8fcf7b91613b044d7014b40a6 100644
+index e625344e4b70ff0d6763db3915a55c947e422a19..61e4b18c5f4a4edc96e7733290f329dfe5e85fd4 100644
 --- a/server/backup/backup.go
 +++ b/server/backup/backup.go
-@@ -106,7 +106,7 @@ func (b *Backup) Size() (int64, error) {
+@@ -132,7 +132,7 @@ func (b *Backup) Size() (int64, error) {
  	return st.Size(), nil
  }
  
 -// Checksum returns the SHA256 checksum of a backup.
 +// Checksum returns the SHA1 checksum of a backup.
  func (b *Backup) Checksum() ([]byte, error) {
- 	h := sha1.New()
- 
-@@ -128,7 +128,7 @@ func (b *Backup) Checksum() ([]byte, error) {
+ 	if err := b.validateIdentifier(); err != nil {
+ 		return nil, err
+@@ -157,7 +157,7 @@ func (b *Backup) Checksum() ([]byte, error) {
  // the disk to the caller.
  func (b *Backup) Details(ctx context.Context, parts []remote.BackupPart) (*ArchiveDetails, error) {
  	ad := ArchiveDetails{ChecksumType: "sha1", Parts: parts}
@@ -6792,10 +6792,10 @@ index 112f99648c6a94661b67251ffab26cb91c92b027..5b078075188126212f003a5748b16b70
  	}
  	st, err := statFromFile(f)
 diff --git a/server/filesystem/filesystem_test.go b/server/filesystem/filesystem_test.go
-index 67c60d1478af8c3cb8a5e6f3a77fb0b6b9c87817..c17f1cf2d0eeaaedadcbb73341122887e1aef638 100644
+index 2014c8a9a82fa6ba24696c275f4e6821559c293e..bc57f4e1620b1343463d3d3de2594c6909a5b848 100644
 --- a/server/filesystem/filesystem_test.go
 +++ b/server/filesystem/filesystem_test.go
-@@ -90,8 +90,15 @@ func TestFilesystem_Openfile(t *testing.T) {
+@@ -91,8 +91,15 @@ func TestFilesystem_Openfile(t *testing.T) {
  			_, _, err := fs.File("foo/bar.txt")
  
  			g.Assert(err).IsNotNil()
@@ -8913,10 +8913,10 @@ index 0000000000000000000000000000000000000000..8b5c1d338376c96b316b0103b2a2c042
 +	})
 +}
 diff --git a/server/install.go b/server/install.go
-index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84989291c6 100644
+index 0d31d50cf47397c936cea16faa89a1e9cbef32a4..e964c2ff0e0342a6a70f44aa6e5f8fb8892ba9fe 100644
 --- a/server/install.go
 +++ b/server/install.go
-@@ -259,6 +259,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+@@ -270,6 +270,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
  	}
  
  	r, err := ip.client.ImagePull(ip.Server.Context(), ip.Script.ContainerImage, imagePullOptions)
@@ -8924,7 +8924,7 @@ index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84
  	if err != nil {
  		images, ierr := ip.client.ImageList(ip.Server.Context(), image.ListOptions{})
  		if ierr != nil {
-@@ -274,7 +275,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+@@ -285,7 +286,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
  				}
  
  				log.WithFields(log.Fields{
@@ -8933,7 +8933,7 @@ index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84
  					"err":   err.Error(),
  				}).Warn("unable to pull requested image from remote source, however the image exists locally")
  
-@@ -288,12 +289,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
+@@ -299,12 +300,21 @@ func (ip *InstallationProcess) pullInstallationImage() error {
  	}
  	defer r.Close()
  
@@ -8957,7 +8957,7 @@ index 8c29f1c7a14b86516dd970117bbbc267be8e5a1d..8b422af7a004cf11557f8f4f9f360a84
  	}
  
  	if err := scanner.Err(); err != nil {
-@@ -505,13 +515,32 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
+@@ -516,13 +526,32 @@ func (ip *InstallationProcess) StreamOutput(ctx context.Context, id string) erro
  	}
  	defer reader.Close()
  

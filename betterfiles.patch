@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index a83936d882d9b13e7c8b063941856759d78acb40..b976cdd3917dc600763f2d8330b3c60bd1b8e5c3 100644
+index b1331236f8f10eea37caa06e7a99a818cf159749..547a88be02d4a2c5e7016e41ae14b85f4e87ea64 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -138,6 +138,9 @@ type SystemConfiguration struct {
@@ -3019,10 +3019,10 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +}
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad84d6a7cc
+index 0000000000000000000000000000000000000000..f2c5845ed6b22afdae4ceaca2379c54b82fd09c8
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
-@@ -0,0 +1,1123 @@
+@@ -0,0 +1,1124 @@
 +package websocket
 +
 +import (
@@ -3084,7 +3084,7 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +type betterFilesCollabSessionInfo struct {
 +	Code         string `json:"code"`
 +	ServerUUID   string `json:"server_uuid"`
-+	OwnerUUID    string `json:"owner_uuid"`
++	OwnerUUID   string `json:"owner_uuid"`
 +	Mode         string `json:"mode"`
 +	MaxUsers     int    `json:"max_users"`
 +	MaxFileBytes int    `json:"max_file_bytes"`
@@ -3194,7 +3194,7 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	sync.RWMutex
 +	Code         string
 +	ServerUUID   string
-+	OwnerUUID    string
++	OwnerUUID   string
 +	Mode         string
 +	MaxUsers     int
 +	MaxFileBytes int
@@ -3210,9 +3210,10 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +// HandleBetterFilesCollaboration handles Better Files live collaboration socket messages.
 +// Add this near the top of Handler.HandleInbound after TokenValid succeeds:
 +//
-+//	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
-+//	    return err
-+//	}
++//     if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
++//         return err
++//     }
++//
 +func (h *Handler) HandleBetterFilesCollaboration(ctx context.Context, m Message) (bool, error) {
 +	switch m.Event {
 +	case BetterFilesCollabJoinEvent:
@@ -3395,12 +3396,12 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	}
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPresenceOut, map[string]any{
-+		"code":      payload.Code,
-+		"path":      payload.Path,
-+		"line":      payload.Line,
-+		"column":    payload.Column,
++		"code": payload.Code,
++		"path": payload.Path,
++		"line": payload.Line,
++		"column": payload.Column,
 +		"selection": betterFilesCollabSafeText(payload.Selection, 120),
-+		"user":      member.User,
++		"user": member.User,
 +	})
 +	return nil
 +}
@@ -3509,13 +3510,13 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	}
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabSnapshotOut, map[string]any{
-+		"code":    payload.Code,
-+		"path":    payload.Path,
++		"code": payload.Code,
++		"path": payload.Path,
 +		"content": payload.Content,
 +		"version": payload.Version,
-+		"line":    payload.Line,
-+		"column":  payload.Column,
-+		"user":    member.User,
++		"line": payload.Line,
++		"column": payload.Column,
++		"user": member.User,
 +	})
 +	return nil
 +}
@@ -3559,11 +3560,11 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	}
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabFileSavedOut, map[string]any{
-+		"code":    payload.Code,
-+		"path":    payload.Path,
++		"code": payload.Code,
++		"path": payload.Path,
 +		"content": payload.Content,
 +		"version": payload.Version,
-+		"user":    member.User,
++		"user": member.User,
 +	})
 +	return nil
 +}
@@ -3589,10 +3590,10 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	}
 +
 +	return h.betterFilesCollabSend(betterFilesCollabFileCheckResultEvent, map[string]any{
-+		"path":       path,
++		"path": path,
 +		"request_id": betterFilesCollabSafeText(payload.RequestID, 80),
-+		"conflicts":  conflicts,
-+		"users":      users,
++		"conflicts": conflicts,
++		"users": users,
 +	})
 +}
 +
@@ -3638,9 +3639,9 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +		}
 +
 +		betterFilesCollabBroadcast(session, "", betterFilesCollabExternalEditOut, map[string]any{
-+			"code":          session.Code,
-+			"path":          path,
-+			"user":          user,
++			"code": session.Code,
++			"path": path,
++			"user": user,
 +			"editing_users": users,
 +		})
 +	}
@@ -3732,7 +3733,7 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	return betterFilesCollabSessionInfo{
 +		Code:         code,
 +		ServerUUID:   token.ServerUUID,
-+		OwnerUUID:    token.OwnerUUID,
++		OwnerUUID:   token.OwnerUUID,
 +		Mode:         mode,
 +		MaxUsers:     maxUsers,
 +		MaxFileBytes: maxFileBytes,
@@ -3775,7 +3776,7 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	session := &betterFilesCollabSession{
 +		Code:         code,
 +		ServerUUID:   info.ServerUUID,
-+		OwnerUUID:    info.OwnerUUID,
++		OwnerUUID:   info.OwnerUUID,
 +		Mode:         mode,
 +		MaxUsers:     maxUsers,
 +		MaxFileBytes: maxFileBytes,
@@ -3977,9 +3978,9 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +func betterFilesCollabBroadcastMembers(session *betterFilesCollabSession) {
 +	members := betterFilesCollabMembers(session)
 +	betterFilesCollabBroadcast(session, "", betterFilesCollabMembersEvent, map[string]any{
-+		"code":    session.Code,
++		"code": session.Code,
 +		"members": members,
-+		"mode":    session.Mode,
++		"mode": session.Mode,
 +	})
 +}
 +
@@ -3996,7 +3997,7 @@ index 0000000000000000000000000000000000000000..15fcd8051172e1f2e1449d51887351ad
 +	session.RUnlock()
 +
 +	betterFilesCollabBroadcast(session, "", betterFilesCollabFileUsersEvent, map[string]any{
-+		"code":  session.Code,
++		"code": session.Code,
 +		"files": fileUsers,
 +	})
 +}
