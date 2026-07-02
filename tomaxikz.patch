@@ -1026,7 +1026,7 @@ index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532c9477a97 100644
+index bdac76065242c834f37f74a68fdba2211df96125..72f457b6be8d4de73624dbdced658fd545e5ebc2 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -1037,7 +1037,7 @@ index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532
  	router.POST("/upload/file", postServerUploadFiles)
  
  	// This route is special it sits above all the other requests because we are
-@@ -75,10 +76,17 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -75,10 +76,18 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  	{
  		server.GET("", getServer)
  		server.DELETE("", deleteServer)
@@ -1049,6 +1049,7 @@ index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532
 +		git := server.Group("/git")
 +		{
 +			git.GET("/status", getServerGitStatus)
++			git.POST("/install", postServerGitInstall)
 +			git.POST("/clone", postServerGitClone)
 +			git.POST("/pull", postServerGitPull)
 +			git.POST("/diff", postServerGitDiff)
@@ -1056,7 +1057,7 @@ index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532
  		server.POST("/install", postServerInstall)
  		server.POST("/reinstall", postServerReinstall)
  		server.POST("/sync", postServerSync)
-@@ -92,6 +100,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -92,6 +101,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  		files := server.Group("/files")
  		{
  			files.GET("/contents", getServerFileContents)
@@ -1069,7 +1070,7 @@ index bdac76065242c834f37f74a68fdba2211df96125..600383fa86e06e131d5461e44aa95532
  			files.GET("/list-directory", getServerListDirectory)
  			files.PUT("/rename", putServerRenameFiles)
  			files.POST("/copy", postServerCopyFile)
-@@ -101,6 +115,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -101,6 +116,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  			files.POST("/compress", postServerCompressFiles)
  			files.POST("/decompress", postServerDecompressFiles)
  			files.POST("/chmod", postServerChmodFile)
@@ -2978,10 +2979,10 @@ index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d3128
 +}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b421acfdbe
+index 0000000000000000000000000000000000000000..663d4f7963c200287cd4a1d7e48b88d0d51cc336
 --- /dev/null
 +++ b/router/router_server_git.go
-@@ -0,0 +1,1015 @@
+@@ -0,0 +1,1189 @@
 +package router
 +
 +import (
@@ -3012,6 +3013,7 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +
 +const gitContainerRoot = "/home/container"
 +const gitBetterFilesTrashDir = ".trash-bin"
++const gitRootUser = "0"
 +
 +type gitCloneTargetMode int
 +
@@ -3092,6 +3094,23 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +	ExitCode int    `json:"exit_code"`
 +}
 +
++type gitInstallResponse struct {
++	Installed        bool   `json:"installed"`
++	AlreadyInstalled bool   `json:"already_installed"`
++	PackageManager   string `json:"package_manager"`
++	GitPath          string `json:"git_path"`
++	Version          string `json:"version"`
++	Stdout           string `json:"stdout"`
++	Stderr           string `json:"stderr"`
++}
++
++type gitPackageManager struct {
++	Name     string
++	Paths    []string
++	Commands [][]string
++	Env      []string
++}
++
 +type validatedGitRepositoryURL struct {
 +	URL            string
 +	CurlOptResolve string
@@ -3111,6 +3130,94 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +	}
 +
 +	return ""
++}
++
++func postServerGitInstall(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++
++	env, ok := s.Environment.(*docker.Environment)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "Git operations are only supported in Docker environments.",
++		})
++		return
++	}
++
++	lock := gitLockFor(env.Id)
++	if !lock.TryLock() {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
++		return
++	}
++	defer lock.Unlock()
++
++	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
++	defer cancel()
++
++	if gitBin := findGitBinary(ctx, env); gitBin != "" {
++		version := gitVersion(ctx, env, gitBin)
++		c.JSON(http.StatusOK, gitInstallResponse{
++			Installed:        true,
++			AlreadyInstalled: true,
++			PackageManager:   "none",
++			GitPath:          gitBin,
++			Version:          version,
++		})
++		return
++	}
++
++	pm, binaryPath := detectGitPackageManager(ctx, env)
++	if pm == nil {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"error": "No supported package manager was found in this container. Use an image that includes Git.",
++		})
++		return
++	}
++
++	var combinedStdout, combinedStderr strings.Builder
++	for _, args := range pm.Commands {
++		cmd := append([]string{binaryPath}, args...)
++		result, err := execInContainerAsUser(ctx, env, cmd, "/", gitRootUser, append(gitInstallEnv(), pm.Env...))
++		if err != nil {
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++		combinedStdout.WriteString(result.Stdout)
++		combinedStderr.WriteString(result.Stderr)
++		if result.ExitCode != 0 {
++			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++				"installed":       false,
++				"package_manager": pm.Name,
++				"error":           "Git installation failed.",
++				"stdout":          strings.TrimSpace(maskGitOutput(combinedStdout.String())),
++				"stderr":          strings.TrimSpace(maskGitOutput(combinedStderr.String())),
++				"exit_code":       result.ExitCode,
++			})
++			return
++		}
++	}
++
++	gitPathCache.Delete(env.Id)
++	gitBin := findGitBinary(ctx, env)
++	if gitBin == "" {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
++			"installed":       false,
++			"package_manager": pm.Name,
++			"error":           "Package install completed, but Git still was not found in a trusted path.",
++			"stdout":          strings.TrimSpace(maskGitOutput(combinedStdout.String())),
++			"stderr":          strings.TrimSpace(maskGitOutput(combinedStderr.String())),
++		})
++		return
++	}
++
++	c.JSON(http.StatusOK, gitInstallResponse{
++		Installed:        true,
++		AlreadyInstalled: false,
++		PackageManager:   pm.Name,
++		GitPath:          gitBin,
++		Version:          gitVersion(ctx, env, gitBin),
++		Stdout:           strings.TrimSpace(maskGitOutput(combinedStdout.String())),
++		Stderr:           strings.TrimSpace(maskGitOutput(combinedStderr.String())),
++	})
 +}
 +
 +func getServerGitStatus(c *gin.Context) {
@@ -3548,6 +3655,70 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +	return execInContainer(ctx, env, cmd, workDir)
 +}
 +
++func gitVersion(ctx context.Context, env *docker.Environment, gitBin string) string {
++	result, err := execInContainer(ctx, env, []string{gitBin, "--version"}, gitContainerRoot)
++	if err != nil || result.ExitCode != 0 {
++		return ""
++	}
++	return strings.TrimSpace(result.Stdout)
++}
++
++func detectGitPackageManager(ctx context.Context, env *docker.Environment) (*gitPackageManager, string) {
++	managers := []gitPackageManager{
++		{
++			Name:  "apt",
++			Paths: []string{"/usr/bin/apt-get", "/bin/apt-get"},
++			Commands: [][]string{
++				{"update"},
++				{"install", "-y", "--no-install-recommends", "git", "ca-certificates"},
++			},
++			Env: []string{
++				"DEBIAN_FRONTEND=noninteractive",
++				"APT_LISTCHANGES_FRONTEND=none",
++			},
++		},
++		{
++			Name:     "apk",
++			Paths:    []string{"/sbin/apk", "/usr/sbin/apk", "/bin/apk", "/usr/bin/apk"},
++			Commands: [][]string{{"add", "--no-cache", "git", "ca-certificates"}},
++		},
++		{
++			Name:     "dnf",
++			Paths:    []string{"/usr/bin/dnf", "/bin/dnf"},
++			Commands: [][]string{{"install", "-y", "git", "ca-certificates"}},
++		},
++		{
++			Name:     "microdnf",
++			Paths:    []string{"/usr/bin/microdnf", "/bin/microdnf"},
++			Commands: [][]string{{"install", "-y", "git", "ca-certificates"}},
++		},
++		{
++			Name:     "yum",
++			Paths:    []string{"/usr/bin/yum", "/bin/yum"},
++			Commands: [][]string{{"install", "-y", "git", "ca-certificates"}},
++		},
++	}
++
++	for i := range managers {
++		for _, p := range managers[i].Paths {
++			res, err := execInContainerAsUser(ctx, env, []string{p, "--version"}, "/", gitRootUser, gitInstallEnv())
++			if err == nil && res.ExitCode == 0 {
++				return &managers[i], p
++			}
++		}
++	}
++
++	return nil, ""
++}
++
++func gitInstallEnv() []string {
++	return []string{
++		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
++		"HOME=/root",
++		"GIT_TERMINAL_PROMPT=0",
++	}
++}
++
 +func gitBaseCommand(gitBin string) []string {
 +	return []string{
 +		gitBin,
@@ -3938,6 +4109,10 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +}
 +
 +func execInContainer(ctx context.Context, env *docker.Environment, cmd []string, workDir string) (*gitResponse, error) {
++	return execInContainerAsUser(ctx, env, cmd, workDir, getContainerUser(), gitSafeEnv)
++}
++
++func execInContainerAsUser(ctx context.Context, env *docker.Environment, cmd []string, workDir string, user string, execEnv []string) (*gitResponse, error) {
 +	cli := env.Client()
 +
 +	execConfig := container.ExecOptions{
@@ -3945,8 +4120,8 @@ index 0000000000000000000000000000000000000000..688a39630656536a5647be6223f968b4
 +		WorkingDir:   workDir,
 +		AttachStdout: true,
 +		AttachStderr: true,
-+		Env:          gitSafeEnv,
-+		User:         getContainerUser(),
++		Env:          execEnv,
++		User:         user,
 +	}
 +
 +	exec, err := cli.ContainerExecCreate(ctx, env.Id, execConfig)

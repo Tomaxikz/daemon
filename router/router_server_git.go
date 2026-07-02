@@ -28,6 +28,7 @@ import (
 
 const gitContainerRoot = "/home/container"
 const gitBetterFilesTrashDir = ".trash-bin"
+const gitRootUser = "0"
 
 type gitCloneTargetMode int
 
@@ -108,6 +109,23 @@ type gitResponse struct {
 	ExitCode int    `json:"exit_code"`
 }
 
+type gitInstallResponse struct {
+	Installed        bool   `json:"installed"`
+	AlreadyInstalled bool   `json:"already_installed"`
+	PackageManager   string `json:"package_manager"`
+	GitPath          string `json:"git_path"`
+	Version          string `json:"version"`
+	Stdout           string `json:"stdout"`
+	Stderr           string `json:"stderr"`
+}
+
+type gitPackageManager struct {
+	Name     string
+	Paths    []string
+	Commands [][]string
+	Env      []string
+}
+
 type validatedGitRepositoryURL struct {
 	URL            string
 	CurlOptResolve string
@@ -127,6 +145,94 @@ func findGitBinary(ctx context.Context, env *docker.Environment) string {
 	}
 
 	return ""
+}
+
+func postServerGitInstall(c *gin.Context) {
+	s := middleware.ExtractServer(c)
+
+	env, ok := s.Environment.(*docker.Environment)
+	if !ok {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": "Git operations are only supported in Docker environments.",
+		})
+		return
+	}
+
+	lock := gitLockFor(env.Id)
+	if !lock.TryLock() {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
+		return
+	}
+	defer lock.Unlock()
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
+	defer cancel()
+
+	if gitBin := findGitBinary(ctx, env); gitBin != "" {
+		version := gitVersion(ctx, env, gitBin)
+		c.JSON(http.StatusOK, gitInstallResponse{
+			Installed:        true,
+			AlreadyInstalled: true,
+			PackageManager:   "none",
+			GitPath:          gitBin,
+			Version:          version,
+		})
+		return
+	}
+
+	pm, binaryPath := detectGitPackageManager(ctx, env)
+	if pm == nil {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"error": "No supported package manager was found in this container. Use an image that includes Git.",
+		})
+		return
+	}
+
+	var combinedStdout, combinedStderr strings.Builder
+	for _, args := range pm.Commands {
+		cmd := append([]string{binaryPath}, args...)
+		result, err := execInContainerAsUser(ctx, env, cmd, "/", gitRootUser, append(gitInstallEnv(), pm.Env...))
+		if err != nil {
+			middleware.CaptureAndAbort(c, err)
+			return
+		}
+		combinedStdout.WriteString(result.Stdout)
+		combinedStderr.WriteString(result.Stderr)
+		if result.ExitCode != 0 {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+				"installed":       false,
+				"package_manager": pm.Name,
+				"error":           "Git installation failed.",
+				"stdout":          strings.TrimSpace(maskGitOutput(combinedStdout.String())),
+				"stderr":          strings.TrimSpace(maskGitOutput(combinedStderr.String())),
+				"exit_code":       result.ExitCode,
+			})
+			return
+		}
+	}
+
+	gitPathCache.Delete(env.Id)
+	gitBin := findGitBinary(ctx, env)
+	if gitBin == "" {
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+			"installed":       false,
+			"package_manager": pm.Name,
+			"error":           "Package install completed, but Git still was not found in a trusted path.",
+			"stdout":          strings.TrimSpace(maskGitOutput(combinedStdout.String())),
+			"stderr":          strings.TrimSpace(maskGitOutput(combinedStderr.String())),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gitInstallResponse{
+		Installed:        true,
+		AlreadyInstalled: false,
+		PackageManager:   pm.Name,
+		GitPath:          gitBin,
+		Version:          gitVersion(ctx, env, gitBin),
+		Stdout:           strings.TrimSpace(maskGitOutput(combinedStdout.String())),
+		Stderr:           strings.TrimSpace(maskGitOutput(combinedStderr.String())),
+	})
 }
 
 func getServerGitStatus(c *gin.Context) {
@@ -564,6 +670,70 @@ func execGit(ctx context.Context, env *docker.Environment, gitBin string, args [
 	return execInContainer(ctx, env, cmd, workDir)
 }
 
+func gitVersion(ctx context.Context, env *docker.Environment, gitBin string) string {
+	result, err := execInContainer(ctx, env, []string{gitBin, "--version"}, gitContainerRoot)
+	if err != nil || result.ExitCode != 0 {
+		return ""
+	}
+	return strings.TrimSpace(result.Stdout)
+}
+
+func detectGitPackageManager(ctx context.Context, env *docker.Environment) (*gitPackageManager, string) {
+	managers := []gitPackageManager{
+		{
+			Name:  "apt",
+			Paths: []string{"/usr/bin/apt-get", "/bin/apt-get"},
+			Commands: [][]string{
+				{"update"},
+				{"install", "-y", "--no-install-recommends", "git", "ca-certificates"},
+			},
+			Env: []string{
+				"DEBIAN_FRONTEND=noninteractive",
+				"APT_LISTCHANGES_FRONTEND=none",
+			},
+		},
+		{
+			Name:     "apk",
+			Paths:    []string{"/sbin/apk", "/usr/sbin/apk", "/bin/apk", "/usr/bin/apk"},
+			Commands: [][]string{{"add", "--no-cache", "git", "ca-certificates"}},
+		},
+		{
+			Name:     "dnf",
+			Paths:    []string{"/usr/bin/dnf", "/bin/dnf"},
+			Commands: [][]string{{"install", "-y", "git", "ca-certificates"}},
+		},
+		{
+			Name:     "microdnf",
+			Paths:    []string{"/usr/bin/microdnf", "/bin/microdnf"},
+			Commands: [][]string{{"install", "-y", "git", "ca-certificates"}},
+		},
+		{
+			Name:     "yum",
+			Paths:    []string{"/usr/bin/yum", "/bin/yum"},
+			Commands: [][]string{{"install", "-y", "git", "ca-certificates"}},
+		},
+	}
+
+	for i := range managers {
+		for _, p := range managers[i].Paths {
+			res, err := execInContainerAsUser(ctx, env, []string{p, "--version"}, "/", gitRootUser, gitInstallEnv())
+			if err == nil && res.ExitCode == 0 {
+				return &managers[i], p
+			}
+		}
+	}
+
+	return nil, ""
+}
+
+func gitInstallEnv() []string {
+	return []string{
+		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+		"HOME=/root",
+		"GIT_TERMINAL_PROMPT=0",
+	}
+}
+
 func gitBaseCommand(gitBin string) []string {
 	return []string{
 		gitBin,
@@ -954,6 +1124,10 @@ func getContainerUser() string {
 }
 
 func execInContainer(ctx context.Context, env *docker.Environment, cmd []string, workDir string) (*gitResponse, error) {
+	return execInContainerAsUser(ctx, env, cmd, workDir, getContainerUser(), gitSafeEnv)
+}
+
+func execInContainerAsUser(ctx context.Context, env *docker.Environment, cmd []string, workDir string, user string, execEnv []string) (*gitResponse, error) {
 	cli := env.Client()
 
 	execConfig := container.ExecOptions{
@@ -961,8 +1135,8 @@ func execInContainer(ctx context.Context, env *docker.Environment, cmd []string,
 		WorkingDir:   workDir,
 		AttachStdout: true,
 		AttachStderr: true,
-		Env:          gitSafeEnv,
-		User:         getContainerUser(),
+		Env:          execEnv,
+		User:         user,
 	}
 
 	exec, err := cli.ContainerExecCreate(ctx, env.Id, execConfig)

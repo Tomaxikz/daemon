@@ -83,6 +83,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 		git := server.Group("/git")
 		{
 			git.GET("/status", getServerGitStatus)
+			git.POST("/install", postServerGitInstall)
 			git.POST("/clone", postServerGitClone)
 			git.POST("/pull", postServerGitPull)
 			git.POST("/diff", postServerGitDiff)
