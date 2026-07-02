@@ -18,15 +18,20 @@ import (
 
 	"github.com/apex/log"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/gin-gonic/gin"
 	"github.com/pterodactyl/wings/config"
 	"github.com/pterodactyl/wings/environment/docker"
 	"github.com/pterodactyl/wings/router/middleware"
+	wserver "github.com/pterodactyl/wings/server"
 	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
 const gitContainerRoot = "/home/container"
+const gitHelperRoot = "/mnt/server"
+const gitHelperImage = "alpine:3.20"
 const gitBetterFilesTrashDir = ".trash-bin"
 const gitRootUser = "0"
 
@@ -38,8 +43,9 @@ const (
 )
 
 var (
-	gitPathCache sync.Map
-	gitLocks     sync.Map
+	gitPathCache       sync.Map
+	gitLocks           sync.Map
+	gitHelperImagePull sync.Mutex
 
 	gitTrustedBinaries = []string{
 		"/usr/bin/git",
@@ -126,6 +132,15 @@ type gitPackageManager struct {
 	Env      []string
 }
 
+type gitRunner struct {
+	env        *docker.Environment
+	serverID   string
+	fsRoot     string
+	bin        string
+	helper     bool
+	helperUser string
+}
+
 type validatedGitRepositoryURL struct {
 	URL            string
 	CurlOptResolve string
@@ -133,18 +148,82 @@ type validatedGitRepositoryURL struct {
 
 func findGitBinary(ctx context.Context, env *docker.Environment) string {
 	if cached, ok := gitPathCache.Load(env.Id); ok {
-		return cached.(string)
+		p := cached.(string)
+		if gitBinaryWorks(ctx, env, p) {
+			return p
+		}
+		gitPathCache.Delete(env.Id)
 	}
 
 	for _, p := range gitTrustedBinaries {
-		res, err := execInContainer(ctx, env, []string{p, "--version"}, gitContainerRoot)
-		if err == nil && res.ExitCode == 0 {
+		if gitBinaryWorks(ctx, env, p) {
 			gitPathCache.Store(env.Id, p)
 			return p
 		}
 	}
 
 	return ""
+}
+
+func gitBinaryWorks(ctx context.Context, env *docker.Environment, gitBin string) bool {
+	res, err := execInContainer(ctx, env, []string{gitBin, "--version"}, gitContainerRoot)
+	return err == nil && res.ExitCode == 0
+}
+
+func newGitRunner(ctx context.Context, s *wserver.Server, env *docker.Environment) *gitRunner {
+	if gitBin := findGitBinary(ctx, env); gitBin != "" {
+		return &gitRunner{
+			env: env,
+			bin: gitBin,
+		}
+	}
+
+	return &gitRunner{
+		env:        env,
+		serverID:   s.ID(),
+		fsRoot:     s.Filesystem().Path(),
+		bin:        "git",
+		helper:     true,
+		helperUser: getContainerUser(),
+	}
+}
+
+func (r *gitRunner) exec(ctx context.Context, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
+	cmd := gitBaseCommand(r.bin)
+	for _, remote := range remotes {
+		if remote.CurlOptResolve == "" {
+			continue
+		}
+		cmd = append(cmd, "-c", "http.curloptResolve="+remote.CurlOptResolve)
+	}
+	cmd = append(cmd, args...)
+
+	if r.helper {
+		return execGitInHelperContainer(ctx, r, cmd, workDir)
+	}
+
+	return execInContainer(ctx, r.env, cmd, workDir)
+}
+
+func (r *gitRunner) version(ctx context.Context) string {
+	var result *gitResponse
+	var err error
+	if r.helper {
+		result, err = execGitInHelperContainer(ctx, r, []string{r.bin, "--version"}, gitContainerRoot)
+	} else {
+		result, err = execInContainer(ctx, r.env, []string{r.bin, "--version"}, gitContainerRoot)
+	}
+	if err != nil || result.ExitCode != 0 {
+		return ""
+	}
+	return strings.TrimSpace(result.Stdout)
+}
+
+func gitRuntimeName(runner *gitRunner) string {
+	if runner.helper {
+		return "helper"
+	}
+	return "container"
 }
 
 func postServerGitInstall(c *gin.Context) {
@@ -169,21 +248,32 @@ func postServerGitInstall(c *gin.Context) {
 	defer cancel()
 
 	if gitBin := findGitBinary(ctx, env); gitBin != "" {
-		version := gitVersion(ctx, env, gitBin)
 		c.JSON(http.StatusOK, gitInstallResponse{
 			Installed:        true,
 			AlreadyInstalled: true,
 			PackageManager:   "none",
 			GitPath:          gitBin,
-			Version:          version,
+			Version:          gitVersion(ctx, env, gitBin),
 		})
 		return
 	}
 
 	pm, binaryPath := detectGitPackageManager(ctx, env)
 	if pm == nil {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "No supported package manager was found in this container. Use an image that includes Git.",
+		runner := newGitRunner(ctx, s, env)
+		version := runner.version(ctx)
+		if version == "" {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{
+				"error": "No supported package manager was found in this container, and the Git helper container could not run. Use an image that includes Git.",
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gitInstallResponse{
+			Installed:        true,
+			AlreadyInstalled: false,
+			PackageManager:   "helper",
+			GitPath:          "git",
+			Version:          version,
 		})
 		return
 	}
@@ -252,19 +342,12 @@ func getServerGitStatus(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 90*time.Second)
 	defer cancel()
 
-	gitBin := findGitBinary(ctx, env)
-	if gitBin == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"available": false,
-			"is_repo":   false,
-		})
-		return
-	}
+	runner := newGitRunner(ctx, s, env)
 
-	checkResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
+	checkResult, err := runner.exec(ctx, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -273,19 +356,21 @@ func getServerGitStatus(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"available": true,
 			"is_repo":   false,
+			"runtime":   gitRuntimeName(runner),
 			"error":     strings.TrimSpace(maskGitOutput(checkResult.Stderr + checkResult.Stdout)),
 		})
 		return
 	}
 
-	statusResult, _ := execGit(ctx, env, gitBin, []string{"status", "--porcelain", "-b"}, workDir)
-	branchResult, _ := execGit(ctx, env, gitBin, []string{"rev-parse", "--abbrev-ref", "HEAD"}, workDir)
-	remoteResult, _ := execGit(ctx, env, gitBin, []string{"remote", "-v"}, workDir)
-	logResult, _ := execGit(ctx, env, gitBin, []string{"log", "--oneline", "-20"}, workDir)
+	statusResult, _ := runner.exec(ctx, []string{"status", "--porcelain", "-b"}, workDir)
+	branchResult, _ := runner.exec(ctx, []string{"rev-parse", "--abbrev-ref", "HEAD"}, workDir)
+	remoteResult, _ := runner.exec(ctx, []string{"remote", "-v"}, workDir)
+	logResult, _ := runner.exec(ctx, []string{"log", "--oneline", "-20"}, workDir)
 
 	c.JSON(http.StatusOK, gin.H{
 		"available": true,
 		"is_repo":   true,
+		"runtime":   gitRuntimeName(runner),
 		"branch":    strings.TrimSpace(branchResult.Stdout),
 		"status":    statusResult.Stdout,
 		"remotes":   maskGitOutput(remoteResult.Stdout),
@@ -341,13 +426,7 @@ func postServerGitClone(c *gin.Context) {
 
 	targetServerPath := containerPathToServerPath(targetPath)
 
-	gitBin := findGitBinary(ctx, env)
-	if gitBin == "" {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "Git is not installed in this container image.",
-		})
-		return
-	}
+	runner := newGitRunner(ctx, s, env)
 
 	lock := gitLockFor(env.Id)
 	if !lock.TryLock() {
@@ -395,7 +474,7 @@ func postServerGitClone(c *gin.Context) {
 		}()
 	}
 
-	result, err := execGit(ctx, env, gitBin, []string{
+	result, err := runner.exec(ctx, []string{
 		"clone",
 		"--depth=1",
 		"--single-branch",
@@ -456,15 +535,9 @@ func postServerGitPull(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Minute)
 	defer cancel()
 
-	gitBin := findGitBinary(ctx, env)
-	if gitBin == "" {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "Git is not installed in this container image.",
-		})
-		return
-	}
+	runner := newGitRunner(ctx, s, env)
 
-	checkResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
+	checkResult, err := runner.exec(ctx, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -474,12 +547,12 @@ func postServerGitPull(c *gin.Context) {
 		return
 	}
 
-	if err := ensureNoDangerousLocalGitConfig(ctx, env, gitBin, workDir); err != nil {
+	if err := ensureNoDangerousLocalGitConfig(ctx, runner, workDir); err != nil {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
-	branchResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--abbrev-ref", "HEAD"}, workDir)
+	branchResult, err := runner.exec(ctx, []string{"rev-parse", "--abbrev-ref", "HEAD"}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -490,7 +563,7 @@ func postServerGitPull(c *gin.Context) {
 		return
 	}
 
-	remoteNameResult, err := execGit(ctx, env, gitBin, []string{"config", "--get", "branch." + branch + ".remote"}, workDir)
+	remoteNameResult, err := runner.exec(ctx, []string{"config", "--get", "branch." + branch + ".remote"}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -504,7 +577,7 @@ func postServerGitPull(c *gin.Context) {
 		return
 	}
 
-	mergeRefResult, _ := execGit(ctx, env, gitBin, []string{"config", "--get", "branch." + branch + ".merge"}, workDir)
+	mergeRefResult, _ := runner.exec(ctx, []string{"config", "--get", "branch." + branch + ".merge"}, workDir)
 	remoteBranch := strings.TrimSpace(mergeRefResult.Stdout)
 	remoteBranch = strings.TrimPrefix(remoteBranch, "refs/heads/")
 	if remoteBranch == "" {
@@ -515,7 +588,7 @@ func postServerGitPull(c *gin.Context) {
 		return
 	}
 
-	remoteURLResult, err := execGit(ctx, env, gitBin, []string{"remote", "get-url", remoteName}, workDir)
+	remoteURLResult, err := runner.exec(ctx, []string{"remote", "get-url", remoteName}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -552,7 +625,7 @@ func postServerGitPull(c *gin.Context) {
 	})
 	logger.Info("starting git operation")
 
-	result, err := execGit(ctx, env, gitBin, []string{
+	result, err := runner.exec(ctx, []string{
 		"pull",
 		"--ff-only",
 		"--no-recurse-submodules",
@@ -600,18 +673,12 @@ func postServerGitDiff(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), time.Minute)
 	defer cancel()
 
-	gitBin := findGitBinary(ctx, env)
-	if gitBin == "" {
-		c.AbortWithStatusJSON(http.StatusConflict, gin.H{
-			"error": "Git is not installed in this container image.",
-		})
-		return
-	}
+	runner := newGitRunner(ctx, s, env)
 
-	checkResult, err := execGit(ctx, env, gitBin, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
+	checkResult, err := runner.exec(ctx, []string{"rev-parse", "--is-inside-work-tree"}, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -621,7 +688,7 @@ func postServerGitDiff(c *gin.Context) {
 		return
 	}
 
-	if err := ensureNoDangerousLocalGitConfig(ctx, env, gitBin, workDir); err != nil {
+	if err := ensureNoDangerousLocalGitConfig(ctx, runner, workDir); err != nil {
 		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
@@ -629,13 +696,13 @@ func postServerGitDiff(c *gin.Context) {
 	cachedArgs := gitDiffArgs(true, diffPath)
 	unstagedArgs := gitDiffArgs(false, diffPath)
 
-	cachedResult, err := execGit(ctx, env, gitBin, cachedArgs, workDir)
+	cachedResult, err := runner.exec(ctx, cachedArgs, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
 	}
 
-	unstagedResult, err := execGit(ctx, env, gitBin, unstagedArgs, workDir)
+	unstagedResult, err := runner.exec(ctx, unstagedArgs, workDir)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
@@ -658,18 +725,6 @@ func postServerGitDiff(c *gin.Context) {
 	c.JSON(http.StatusOK, maskGitResponse(result))
 }
 
-func execGit(ctx context.Context, env *docker.Environment, gitBin string, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
-	cmd := gitBaseCommand(gitBin)
-	for _, remote := range remotes {
-		if remote.CurlOptResolve == "" {
-			continue
-		}
-		cmd = append(cmd, "-c", "http.curloptResolve="+remote.CurlOptResolve)
-	}
-	cmd = append(cmd, args...)
-	return execInContainer(ctx, env, cmd, workDir)
-}
-
 func gitVersion(ctx context.Context, env *docker.Environment, gitBin string) string {
 	result, err := execInContainer(ctx, env, []string{gitBin, "--version"}, gitContainerRoot)
 	if err != nil || result.ExitCode != 0 {
@@ -684,8 +739,12 @@ func detectGitPackageManager(ctx context.Context, env *docker.Environment) (*git
 			Name:  "apt",
 			Paths: []string{"/usr/bin/apt-get", "/bin/apt-get"},
 			Commands: [][]string{
-				{"update"},
-				{"install", "-y", "--no-install-recommends", "git", "ca-certificates"},
+				{"-o", "Dpkg::Use-Pty=0", "update"},
+				{
+					"-o", "Dpkg::Use-Pty=0",
+					"-o", "Dpkg::Options::=--force-confold",
+					"install", "-y", "--no-install-recommends", "git", "ca-certificates",
+				},
 			},
 			Env: []string{
 				"DEBIAN_FRONTEND=noninteractive",
@@ -695,7 +754,7 @@ func detectGitPackageManager(ctx context.Context, env *docker.Environment) (*git
 		{
 			Name:     "apk",
 			Paths:    []string{"/sbin/apk", "/usr/sbin/apk", "/bin/apk", "/usr/bin/apk"},
-			Commands: [][]string{{"add", "--no-cache", "git", "ca-certificates"}},
+			Commands: [][]string{{"add", "--no-cache", "--no-progress", "git", "ca-certificates"}},
 		},
 		{
 			Name:     "dnf",
@@ -730,8 +789,160 @@ func gitInstallEnv() []string {
 	return []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"HOME=/root",
+		"LC_ALL=C",
 		"GIT_TERMINAL_PROMPT=0",
 	}
+}
+
+func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []string, workDir string) (*gitResponse, error) {
+	if err := ensureGitHelperImage(ctx, runner.env); err != nil {
+		return nil, err
+	}
+
+	cli := runner.env.Client()
+	helperCmd := append([]string(nil), cmd...)
+	for i := range helperCmd {
+		helperCmd[i] = gitHelperPath(helperCmd[i])
+	}
+
+	script := strings.Join([]string{
+		`if ! command -v git >/dev/null 2>&1 || ! command -v su-exec >/dev/null 2>&1; then`,
+		`apk add --no-cache --no-progress git openssh-client ca-certificates su-exec`,
+		`fi`,
+		`exec su-exec "$BFM_GIT_USER" "$@"`,
+	}, "\n")
+
+	containerName := fmt.Sprintf("%s_bfm_git_%d", runner.serverID, time.Now().UnixNano())
+	conf := &container.Config{
+		Hostname:     "bfm-git",
+		AttachStdout: true,
+		AttachStderr: true,
+		Cmd:          append([]string{"sh", "-lc", script, "bfm-git"}, helperCmd...),
+		Image:        gitHelperImage,
+		WorkingDir:   gitHelperPath(workDir),
+		Env: append(append([]string(nil), gitSafeEnv...), []string{
+			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+			"BFM_GIT_USER=" + runner.helperUser,
+		}...),
+		Labels: map[string]string{
+			"Service":       "Pterodactyl",
+			"ContainerType": "betterfiles_git_helper",
+			"ServerID":      runner.serverID,
+		},
+	}
+
+	cfg := config.Get()
+	hostConf := &container.HostConfig{
+		Mounts: []mount.Mount{
+			{
+				Target:   gitHelperRoot,
+				Source:   runner.fsRoot,
+				Type:     mount.TypeBind,
+				ReadOnly: false,
+			},
+		},
+		Tmpfs: map[string]string{
+			"/tmp": "rw,exec,nosuid,size=" + strconv.Itoa(int(cfg.Docker.TmpfsSize)) + "M",
+		},
+		DNS:         cfg.Docker.Network.Dns,
+		LogConfig:   cfg.Docker.ContainerLogConfig(),
+		NetworkMode: container.NetworkMode(cfg.Docker.Network.Mode),
+		UsernsMode:  container.UsernsMode(cfg.Docker.UsernsMode),
+	}
+
+	created, err := cli.ContainerCreate(ctx, conf, hostConf, nil, nil, containerName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = cli.ContainerRemove(context.Background(), created.ID, container.RemoveOptions{Force: true, RemoveVolumes: true})
+	}()
+
+	if err := cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+		return nil, err
+	}
+
+	wait, waitErr := cli.ContainerWait(ctx, created.ID, container.WaitConditionNotRunning)
+	var statusCode int64
+	select {
+	case err := <-waitErr:
+		if err != nil {
+			return nil, err
+		}
+	case result := <-wait:
+		statusCode = result.StatusCode
+	case <-ctx.Done():
+		return &gitResponse{Stderr: "command timed out", ExitCode: 124}, nil
+	}
+
+	logs, err := cli.ContainerLogs(ctx, created.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
+	if err != nil {
+		return nil, err
+	}
+	defer logs.Close()
+
+	var stdout, stderr bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdout, &stderr, logs); err != nil {
+		return nil, err
+	}
+
+	output := gitContainerPath(stdout.String())
+	errOutput := gitContainerPath(stderr.String())
+	if len(output) > 512*1024 {
+		output = output[:512*1024] + "\n...(truncated)"
+	}
+	if len(errOutput) > 64*1024 {
+		errOutput = errOutput[:64*1024] + "\n...(truncated)"
+	}
+
+	return &gitResponse{
+		Stdout:   output,
+		Stderr:   errOutput,
+		ExitCode: int(statusCode),
+	}, nil
+}
+
+func ensureGitHelperImage(ctx context.Context, env *docker.Environment) error {
+	cli := env.Client()
+	if _, err := cli.ImageInspect(ctx, gitHelperImage); err == nil {
+		return nil
+	}
+
+	gitHelperImagePull.Lock()
+	defer gitHelperImagePull.Unlock()
+
+	if _, err := cli.ImageInspect(ctx, gitHelperImage); err == nil {
+		return nil
+	}
+
+	_, registryAuth := config.Get().Docker.RegistryCredentialsForImage(gitHelperImage)
+	pullOptions := image.PullOptions{}
+	if registryAuth != nil {
+		if encoded, err := registryAuth.Base64(); err == nil {
+			pullOptions.RegistryAuth = encoded
+		}
+	}
+	reader, err := cli.ImagePull(ctx, gitHelperImage, pullOptions)
+	if err != nil {
+		return err
+	}
+	defer reader.Close()
+	_, err = io.Copy(io.Discard, reader)
+	return err
+}
+
+func gitHelperPath(value string) string {
+	if value == gitContainerRoot {
+		return gitHelperRoot
+	}
+	if strings.HasPrefix(value, gitContainerRoot+"/") {
+		return gitHelperRoot + strings.TrimPrefix(value, gitContainerRoot)
+	}
+	return value
+}
+
+func gitContainerPath(value string) string {
+	return strings.ReplaceAll(value, gitHelperRoot, gitContainerRoot)
 }
 
 func gitBaseCommand(gitBin string) []string {
@@ -752,8 +963,8 @@ func gitBaseCommand(gitBin string) []string {
 	}
 }
 
-func ensureNoDangerousLocalGitConfig(ctx context.Context, env *docker.Environment, gitBin string, workDir string) error {
-	result, err := execGit(ctx, env, gitBin, []string{
+func ensureNoDangerousLocalGitConfig(ctx context.Context, runner *gitRunner, workDir string) error {
+	result, err := runner.exec(ctx, []string{
 		"config",
 		"--local",
 		"--get-regexp",
