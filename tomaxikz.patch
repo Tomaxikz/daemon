@@ -1,5 +1,5 @@
 diff --git a/cmd/configure.go b/cmd/configure.go
-index 03553b8d6cdbb0ffb142962112fd3ae73de3994a..e51c8292f774afe8209e8650ae995b355c87fe6c 100644
+index 03553b8..e51c829 100644
 --- a/cmd/configure.go
 +++ b/cmd/configure.go
 @@ -124,9 +124,6 @@ func configureCmdRun(cmd *cobra.Command, args []string) {
@@ -23,7 +23,7 @@ index 03553b8d6cdbb0ffb142962112fd3ae73de3994a..e51c8292f774afe8209e8650ae995b35
  	cfg, err := config.NewAtPath(configPath)
  	if err != nil {
 diff --git a/cmd/diagnostics.go b/cmd/diagnostics.go
-index aa3bd8b698dfaea4d1f1b75014fbae1541279fe8..8cbbd1ff74f36dc27e51938e2d36e39052efc48b 100644
+index aa3bd8b..8cbbd1f 100644
 --- a/cmd/diagnostics.go
 +++ b/cmd/diagnostics.go
 @@ -32,6 +32,7 @@ import (
@@ -53,7 +53,7 @@ index aa3bd8b698dfaea4d1f1b75014fbae1541279fe8..8cbbd1ff74f36dc27e51938e2d36e390
  		} else {
  			fmt.Fprintf(output, "%s\n", string(c))
 diff --git a/cmd/root.go b/cmd/root.go
-index f411c53b72e37c52577bafc7d54f324857f990a8..e02d61ea67a8f6cdfaa3cfd53f7bf97c71fa58f1 100644
+index f411c53..e02d61e 100644
 --- a/cmd/root.go
 +++ b/cmd/root.go
 @@ -330,9 +330,10 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
@@ -100,7 +100,7 @@ index f411c53b72e37c52577bafc7d54f324857f990a8..e02d61ea67a8f6cdfaa3cfd53f7bf97c
  			}
  		}()
 diff --git a/config/config.go b/config/config.go
-index b1331236f8f10eea37caa06e7a99a818cf159749..501388e29d71042ccd2d564c9648411741577b0a 100644
+index b133123..501388e 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -30,6 +30,8 @@ import (
@@ -191,7 +191,7 @@ index b1331236f8f10eea37caa06e7a99a818cf159749..501388e29d71042ccd2d564c96484117
  	}
  	u, err = user.Lookup(_config.System.Username)
 diff --git a/environment/docker/api.go b/environment/docker/api.go
-index 82080db02abbb60c9a08f5fe655812b4121ca874..863140948467bfa71ba27d57d5eaa82319124267 100644
+index 82080db..8631409 100644
 --- a/environment/docker/api.go
 +++ b/environment/docker/api.go
 @@ -25,7 +25,6 @@ var (
@@ -204,7 +204,7 @@ index 82080db02abbb60c9a08f5fe655812b4121ca874..863140948467bfa71ba27d57d5eaa823
  	scheme  string
 diff --git a/environment/docker/betterconsole_pull_progress.go b/environment/docker/betterconsole_pull_progress.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8ed965d15891c1a00f5a4a045e5f2bb3180c6fcd
+index 0000000..8ed965d
 --- /dev/null
 +++ b/environment/docker/betterconsole_pull_progress.go
 @@ -0,0 +1,171 @@
@@ -381,7 +381,7 @@ index 0000000000000000000000000000000000000000..8ed965d15891c1a00f5a4a045e5f2bb3
 +}
 diff --git a/environment/docker/betterconsole_pull_progress_test.go b/environment/docker/betterconsole_pull_progress_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66603eaa2f
+index 0000000..af0cc2d
 --- /dev/null
 +++ b/environment/docker/betterconsole_pull_progress_test.go
 @@ -0,0 +1,58 @@
@@ -445,7 +445,7 @@ index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66
 +}
 diff --git a/environment/docker/client_accessor.go b/environment/docker/client_accessor.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f543654187eee676
+index 0000000..f8eea15
 --- /dev/null
 +++ b/environment/docker/client_accessor.go
 @@ -0,0 +1,7 @@
@@ -457,7 +457,7 @@ index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f5436541
 +	return e.client
 +}
 diff --git a/environment/docker/container.go b/environment/docker/container.go
-index f503af1d2a4448b74166c999d37332bfcfc3f045..775cdfa1e16aae4218ae7af960593b3e9b8d6606 100644
+index f503af1..775cdfa 100644
 --- a/environment/docker/container.go
 +++ b/environment/docker/container.go
 @@ -11,7 +11,6 @@ import (
@@ -535,7 +535,7 @@ index f503af1d2a4448b74166c999d37332bfcfc3f045..775cdfa1e16aae4218ae7af960593b3e
  	return nil
  }
 diff --git a/environment/docker/environment.go b/environment/docker/environment.go
-index 47f2d33812f052403990cd5ea66ba9bedafd2f1c..52bc1f9d227a14eb80086556651c819c72517d43 100644
+index 47f2d33..52bc1f9 100644
 --- a/environment/docker/environment.go
 +++ b/environment/docker/environment.go
 @@ -3,7 +3,6 @@ package docker
@@ -573,7 +573,7 @@ index 47f2d33812f052403990cd5ea66ba9bedafd2f1c..52bc1f9d227a14eb80086556651c819c
  
  // Config returns the environment configuration allowing a process to make
 diff --git a/environment/docker/stats.go b/environment/docker/stats.go
-index 7a984399c4f0587e63b41f9bd23e11e67b97cce2..1f6642753d695dd5ecc0c456ac5d5434527ccd88 100644
+index 7a98439..1f66427 100644
 --- a/environment/docker/stats.go
 +++ b/environment/docker/stats.go
 @@ -88,6 +88,12 @@ func (e *Environment) pollResources(ctx context.Context) error {
@@ -590,7 +590,7 @@ index 7a984399c4f0587e63b41f9bd23e11e67b97cce2..1f6642753d695dd5ecc0c456ac5d5434
  
  			e.Events().Publish(environment.ResourceEvent, st)
 diff --git a/environment/stats.go b/environment/stats.go
-index 5d5c8720307f3d0c717d159eb9be6f851ac25925..b33ff4db83f45aec221044297d95d407740567c7 100644
+index 5d5c872..b33ff4d 100644
 --- a/environment/stats.go
 +++ b/environment/stats.go
 @@ -27,4 +27,10 @@ type Stats struct {
@@ -605,7 +605,7 @@ index 5d5c8720307f3d0c717d159eb9be6f851ac25925..b33ff4db83f45aec221044297d95d407
 +	TxDropped uint64 `json:"tx_dropped"`
  }
 diff --git a/go.mod b/go.mod
-index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..701a5a9c7cf704d21cbb310efade53ea88468334 100644
+index 6ed6d60..701a5a9 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -1,8 +1,6 @@
@@ -659,7 +659,7 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..701a5a9c7cf704d21cbb310efade53ea
  	google.golang.org/protobuf v1.36.5 // indirect
  	gotest.tools/v3 v3.0.2 // indirect
 diff --git a/go.sum b/go.sum
-index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..e778c3b04c057454c47015e4e44f0979f0927582 100644
+index 9e2465a..e778c3b 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -57,8 +57,8 @@ github.com/bodgit/sevenzip v1.6.1 h1:kikg2pUMYC9ljU7W9SaqHXhym5HyKm8/M/jd31fYan4
@@ -767,7 +767,7 @@ index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..e778c3b04c057454c47015e4e44f0979
  golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
  golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 diff --git a/internal/ufs/fs_unix.go b/internal/ufs/fs_unix.go
-index b3197bfd6685881bb39a8c58504de1cec9313a49..4e2194c8289663a7e7d488da7d49c3a13d5c45b7 100644
+index b3197bf..4e2194c 100644
 --- a/internal/ufs/fs_unix.go
 +++ b/internal/ufs/fs_unix.go
 @@ -539,10 +539,6 @@ func (fs *UnixFS) Lstatat(dirfd int, name string) (FileInfo, error) {
@@ -853,7 +853,7 @@ index b3197bfd6685881bb39a8c58504de1cec9313a49..4e2194c8289663a7e7d488da7d49c3a1
  }
  
 diff --git a/internal/ufs/walk_unix.go b/internal/ufs/walk_unix.go
-index 065afc22956b1b272cc5577da627787a16722891..c8167524d3080d4abb410cac4ad762049d1c8c77 100644
+index 065afc2..c816752 100644
 --- a/internal/ufs/walk_unix.go
 +++ b/internal/ufs/walk_unix.go
 @@ -304,11 +304,3 @@ func (de dirent) Open() (File, error) {
@@ -869,7 +869,7 @@ index 065afc22956b1b272cc5577da627787a16722891..c8167524d3080d4abb410cac4ad76204
 -	de.dirfd = 0
 -}
 diff --git a/router/middleware/middleware.go b/router/middleware/middleware.go
-index 190871149a34778f688b62a62f2ca093614809c7..d999eb2ee598b488ad5a6da6cd91adc08e5a77c1 100644
+index 1908711..d999eb2 100644
 --- a/router/middleware/middleware.go
 +++ b/router/middleware/middleware.go
 @@ -102,10 +102,20 @@ func SetAccessControlHeaders() gin.HandlerFunc {
@@ -907,7 +907,7 @@ index 190871149a34778f688b62a62f2ca093614809c7..d999eb2ee598b488ad5a6da6cd91adc0
  // the request context, and the logger for the context is also updated to include
 diff --git a/router/middleware/middleware_test.go b/router/middleware/middleware_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..56c478cd7bc74fe6adc8e570371215e3eb515e3e
+index 0000000..56c478c
 --- /dev/null
 +++ b/router/middleware/middleware_test.go
 @@ -0,0 +1,85 @@
@@ -998,7 +998,7 @@ index 0000000000000000000000000000000000000000..56c478cd7bc74fe6adc8e570371215e3
 +}
 diff --git a/router/nsm_router.go b/router/nsm_router.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e62970dfc
+index 0000000..fea5c8d
 --- /dev/null
 +++ b/router/nsm_router.go
 @@ -0,0 +1,23 @@
@@ -1026,7 +1026,7 @@ index 0000000000000000000000000000000000000000..fea5c8df7254725837f5c262047d4c8e
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac76065242c834f37f74a68fdba2211df96125..72f457b6be8d4de73624dbdced658fd545e5ebc2 100644
+index bdac760..72f457b 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -1080,7 +1080,7 @@ index bdac76065242c834f37f74a68fdba2211df96125..72f457b6be8d4de73624dbdced658fd5
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..9afddc7af0c83cd106b628acee1eeb17b6471949
+index 0000000..9afddc7
 --- /dev/null
 +++ b/router/router_cdn_stream.go
 @@ -0,0 +1,48 @@
@@ -1134,7 +1134,7 @@ index 0000000000000000000000000000000000000000..9afddc7af0c83cd106b628acee1eeb17
 +}
 diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828f18c68dd
+index 0000000..ff4dcb4
 --- /dev/null
 +++ b/router/router_download_helpers.go
 @@ -0,0 +1,206 @@
@@ -1346,7 +1346,7 @@ index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828
 +}
 diff --git a/router/router_download_helpers_test.go b/router/router_download_helpers_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26df8101e2d
+index 0000000..7ed8d5a
 --- /dev/null
 +++ b/router/router_download_helpers_test.go
 @@ -0,0 +1,164 @@
@@ -1516,7 +1516,7 @@ index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26d
 +}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625c32f97e0
+index 0000000..f3a3c19
 --- /dev/null
 +++ b/router/router_server_archive_nbt.go
 @@ -0,0 +1,496 @@
@@ -2018,7 +2018,7 @@ index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625
 +}
 diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7df283e95b
+index 0000000..3b91d18
 --- /dev/null
 +++ b/router/router_server_betterfiles_collaboration.go
 @@ -0,0 +1,39 @@
@@ -2062,7 +2062,7 @@ index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7d
 +	c.JSON(http.StatusOK, gin.H{"closed": closed})
 +}
 diff --git a/router/router_server_files.go b/router/router_server_files.go
-index 88acfdb77307fd12253099871c30b8f1f1189166..769808a3cc12dedaccd7e71bd11a2bc8ec6e5343 100644
+index 88acfdb..769808a 100644
 --- a/router/router_server_files.go
 +++ b/router/router_server_files.go
 @@ -9,7 +9,6 @@ import (
@@ -2210,7 +2210,7 @@ index 88acfdb77307fd12253099871c30b8f1f1189166..769808a3cc12dedaccd7e71bd11a2bc8
  	if err != nil {
 diff --git a/router/router_server_files_revisions.go b/router/router_server_files_revisions.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d3be75f7b
+index 0000000..9ea5000
 --- /dev/null
 +++ b/router/router_server_files_revisions.go
 @@ -0,0 +1,146 @@
@@ -2362,7 +2362,7 @@ index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d
 +}
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d31286d521da9
+index 0000000..43f8d3e
 --- /dev/null
 +++ b/router/router_server_files_search.go
 @@ -0,0 +1,611 @@
@@ -2979,7 +2979,7 @@ index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d3128
 +}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004acfd548b1a
+index 0000000..cc79320
 --- /dev/null
 +++ b/router/router_server_git.go
 @@ -0,0 +1,1431 @@
@@ -4415,7 +4415,7 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +	}, nil
 +}
 diff --git a/router/router_transfer.go b/router/router_transfer.go
-index 0a635ef0bdba5fe985fa3b07dd5da3a090e10017..7593a8cdfcb378b18e42312edfc08fd0642f724e 100644
+index 0a635ef..7593a8c 100644
 --- a/router/router_transfer.go
 +++ b/router/router_transfer.go
 @@ -72,7 +72,7 @@ func postTransfers(c *gin.Context) {
@@ -4428,7 +4428,7 @@ index 0a635ef0bdba5fe985fa3b07dd5da3a090e10017..7593a8cdfcb378b18e42312edfc08fd0
  			}
  			middleware.CaptureAndAbort(c, err)
 diff --git a/router/tokens/token_store.go b/router/tokens/token_store.go
-index 6728efd17b29c586c96611891b9daf734e6cab7a..a441d6b4a234d742ffa0d7fb287f2dcbbf855e5f 100644
+index 6728efd..a441d6b 100644
 --- a/router/tokens/token_store.go
 +++ b/router/tokens/token_store.go
 @@ -13,16 +13,17 @@ type TokenStore struct {
@@ -4451,9 +4451,31 @@ index 6728efd17b29c586c96611891b9daf734e6cab7a..a441d6b4a234d742ffa0d7fb287f2dcb
  
  	return _tokens
  }
+diff --git a/router/websocket/betterconsole_events.go b/router/websocket/betterconsole_events.go
+new file mode 100644
+index 0000000..3fa992f
+--- /dev/null
++++ b/router/websocket/betterconsole_events.go
+@@ -0,0 +1,16 @@
++package websocket
++
++import "github.com/pterodactyl/wings/server"
++
++var betterConsoleListenerEvents = []string{
++	server.ImagePullStartedEvent,
++	server.ImagePullProgressEvent,
++	server.ImagePullCompletedEvent,
++}
++
++func isBetterConsoleInstallOutputEvent(event Event) bool {
++	return event == server.InstallOutputEvent ||
++		event == server.ImagePullStartedEvent ||
++		event == server.ImagePullProgressEvent ||
++		event == server.ImagePullCompletedEvent
++}
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f2c5845ed6b22afdae4ceaca2379c54b82fd09c8
+index 0000000..f2c5845
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
 @@ -0,0 +1,1124 @@
@@ -5582,7 +5604,7 @@ index 0000000000000000000000000000000000000000..f2c5845ed6b22afdae4ceaca2379c54b
 +	return value
 +}
 diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
-index 57315a96f2d7baba708d8f9bf1333aed935182d6..547d4999fc0779b4e08010d198794c18a3d967d9 100644
+index 57315a9..547d499 100644
 --- a/router/websocket/limiter.go
 +++ b/router/websocket/limiter.go
 @@ -1,6 +1,7 @@
@@ -5632,7 +5654,7 @@ index 57315a96f2d7baba708d8f9bf1333aed935182d6..547d4999fc0779b4e08010d198794c18
 +	return strings.HasPrefix(string(e), "betterfiles:collab:")
 +}
 diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
-index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4babcbab4 100644
+index 12e5f81..13a3944 100644
 --- a/router/websocket/listeners.go
 +++ b/router/websocket/listeners.go
 @@ -3,6 +3,7 @@ package websocket
@@ -5643,7 +5665,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4
  	"sync"
  	"time"
  
-@@ -66,19 +67,30 @@ func (h *Handler) listenForExpiration(ctx context.Context) {
+@@ -66,7 +67,7 @@ func (h *Handler) listenForExpiration(ctx context.Context) {
  	}
  }
  
@@ -5652,19 +5674,12 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4
  	server.StatsEvent,
  	server.StatusEvent,
  	server.ConsoleOutputEvent,
- 	server.InstallOutputEvent,
- 	server.InstallStartedEvent,
- 	server.InstallCompletedEvent,
-+	server.ImagePullStartedEvent,
-+	server.ImagePullProgressEvent,
-+	server.ImagePullCompletedEvent,
- 	server.DaemonMessageEvent,
- 	server.BackupCompletedEvent,
+@@ -78,7 +79,15 @@ var e = []string{
  	server.BackupRestoreCompletedEvent,
  	server.TransferLogsEvent,
  	server.TransferStatusEvent,
 -}
-+}, serverImporterListenerEvents...)
++}, append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)
 +
 +var allowedServerEvents = func() map[string]struct{} {
 +	events := make(map[string]struct{}, len(e))
@@ -5676,7 +5691,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4
  
  // ListenForServerEvents will listen for different events happening on a server
  // and send them along to the connected websocket client. This function will
-@@ -93,10 +105,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+@@ -93,10 +102,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
  	eventChan := make(chan []byte)
  	logOutput := make(chan []byte, 8)
  	installOutput := make(chan []byte, 4)
@@ -5694,7 +5709,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4
  
  	onError := func(evt string, err2 error) {
  		h.Logger().WithField("event", evt).WithField("error", err2).Error("failed to send event over server websocket")
-@@ -130,6 +148,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+@@ -130,6 +145,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
  			if err := events.DecodeTo(b, &e); err != nil {
  				continue
  			}
@@ -5704,7 +5719,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4
  			var sendErr error
  			message := Message{Event: Event(e.Topic)}
  			if str, ok := e.Data.(string); ok {
-@@ -157,7 +178,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+@@ -157,7 +175,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
  	// These functions will automatically close the channel if it hasn't been already.
  	h.server.Events().Off(eventChan)
  	h.server.Sink(system.LogSink).Off(logOutput)
@@ -5717,7 +5732,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..df014ec3cc8dc6f2688b7a4c07de20a4
  	// got canceled or because we ran into an error. If the "err" variable is nil
 diff --git a/router/websocket/listeners_test.go b/router/websocket/listeners_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..bc47188709f25f3b9c208840239e671e0f8ee733
+index 0000000..bc47188
 --- /dev/null
 +++ b/router/websocket/listeners_test.go
 @@ -0,0 +1,16 @@
@@ -5739,7 +5754,7 @@ index 0000000000000000000000000000000000000000..bc47188709f25f3b9c208840239e671e
 +}
 diff --git a/router/websocket/server_importer.go b/router/websocket/server_importer.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..db03c4aadb86b2e57326e3aad87c3d0c47a69eb7
+index 0000000..db03c4a
 --- /dev/null
 +++ b/router/websocket/server_importer.go
 @@ -0,0 +1,42 @@
@@ -5787,7 +5802,7 @@ index 0000000000000000000000000000000000000000..db03c4aadb86b2e57326e3aad87c3d0c
 +}
 diff --git a/router/websocket/server_importer_events.go b/router/websocket/server_importer_events.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..af0aabd0f75e2cbc40be0a483cbebb6f50320a82
+index 0000000..af0aabd
 --- /dev/null
 +++ b/router/websocket/server_importer_events.go
 @@ -0,0 +1,17 @@
@@ -5810,7 +5825,7 @@ index 0000000000000000000000000000000000000000..af0aabd0f75e2cbc40be0a483cbebb6f
 +}
 diff --git a/router/websocket/server_importer_listener.go b/router/websocket/server_importer_listener.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..45c0b5565590f1b50484e173816e4300bee2df6e
+index 0000000..45c0b55
 --- /dev/null
 +++ b/router/websocket/server_importer_listener.go
 @@ -0,0 +1,8 @@
@@ -5823,7 +5838,7 @@ index 0000000000000000000000000000000000000000..45c0b5565590f1b50484e173816e4300
 +	server.ServerImporterCompletedEvent,
 +}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667e67723a87eeb47735708f96206806c5db..5213c751c3c7d4c247525dfd4d55592673125245 100644
+index 4482667..e8070eb 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
 @@ -36,6 +36,7 @@ const (
@@ -5834,19 +5849,16 @@ index 4482667e67723a87eeb47735708f96206806c5db..5213c751c3c7d4c247525dfd4d555926
  )
  
  type Handler struct {
-@@ -147,7 +148,10 @@ func (h *Handler) SendJson(v Message) error {
+@@ -147,7 +148,7 @@ func (h *Handler) SendJson(v Message) error {
  	if j := h.GetJwt(); j != nil {
  		// If we're sending installation output but the user does not have the required
  		// permissions to see the output, don't send it down the line.
 -		if v.Event == server.InstallOutputEvent {
-+		if v.Event == server.InstallOutputEvent ||
-+			v.Event == server.ImagePullStartedEvent ||
-+			v.Event == server.ImagePullProgressEvent ||
-+			v.Event == server.ImagePullCompletedEvent {
++		if isBetterConsoleInstallOutputEvent(v.Event) {
  			if !j.HasPermission(PermissionReceiveInstall) {
  				return nil
  			}
-@@ -167,6 +171,12 @@ func (h *Handler) SendJson(v Message) error {
+@@ -167,6 +168,12 @@ func (h *Handler) SendJson(v Message) error {
  				return nil
  			}
  		}
@@ -5859,7 +5871,7 @@ index 4482667e67723a87eeb47735708f96206806c5db..5213c751c3c7d4c247525dfd4d555926
  	}
  
  	if err := h.unsafeSendJson(v); err != nil {
-@@ -300,6 +310,14 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
+@@ -300,6 +307,14 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
  		}
  	}
  
@@ -5875,7 +5887,7 @@ index 4482667e67723a87eeb47735708f96206806c5db..5213c751c3c7d4c247525dfd4d555926
  	case AuthenticationEvent:
  		{
 diff --git a/server/backup/backup.go b/server/backup/backup.go
-index e625344e4b70ff0d6763db3915a55c947e422a19..61e4b18c5f4a4edc96e7733290f329dfe5e85fd4 100644
+index e625344..61e4b18 100644
 --- a/server/backup/backup.go
 +++ b/server/backup/backup.go
 @@ -132,7 +132,7 @@ func (b *Backup) Size() (int64, error) {
@@ -5896,9 +5908,22 @@ index e625344e4b70ff0d6763db3915a55c947e422a19..61e4b18c5f4a4edc96e7733290f329df
  
  	g.Go(func() error {
  		resp, err := b.Checksum()
+diff --git a/server/betterconsole_events.go b/server/betterconsole_events.go
+new file mode 100644
+index 0000000..aebd975
+--- /dev/null
++++ b/server/betterconsole_events.go
+@@ -0,0 +1,7 @@
++package server
++
++const (
++	ImagePullStartedEvent   = "image pull started"
++	ImagePullProgressEvent  = "image pull progress"
++	ImagePullCompletedEvent = "image pull completed"
++)
 diff --git a/server/betterconsole_pull_progress.go b/server/betterconsole_pull_progress.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..7766b99c8ba7cfe578aee7e87ca6e3a7ab5cb96c
+index 0000000..7766b99
 --- /dev/null
 +++ b/server/betterconsole_pull_progress.go
 @@ -0,0 +1,195 @@
@@ -6099,7 +6124,7 @@ index 0000000000000000000000000000000000000000..7766b99c8ba7cfe578aee7e87ca6e3a7
 +}
 diff --git a/server/betterconsole_pull_progress_test.go b/server/betterconsole_pull_progress_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..6831ade0198e498d201ae84141b3ad1058058ad9
+index 0000000..6831ade
 --- /dev/null
 +++ b/server/betterconsole_pull_progress_test.go
 @@ -0,0 +1,44 @@
@@ -6148,7 +6173,7 @@ index 0000000000000000000000000000000000000000..6831ade0198e498d201ae84141b3ad10
 +	}
 +}
 diff --git a/server/console.go b/server/console.go
-index 0cd2ff66c6288a7e8f1f9f9957c8265e03255a14..33fd38a352193400b3b64ce5a8bbb0092d6c5971 100644
+index 0cd2ff6..33fd38a 100644
 --- a/server/console.go
 +++ b/server/console.go
 @@ -2,6 +2,7 @@ package server
@@ -6173,10 +6198,10 @@ index 0cd2ff66c6288a7e8f1f9f9957c8265e03255a14..33fd38a352193400b3b64ce5a8bbb009
  		s.throttler = newConsoleThrottle(throttles.Lines, period)
  		s.throttler.strike = func() {
 diff --git a/server/events.go b/server/events.go
-index d08411cce8e18de88008df04789d40bc24e55ad7..425417398855c830f0898d3169f0feb358e772e8 100644
+index d08411c..d7876aa 100644
 --- a/server/events.go
 +++ b/server/events.go
-@@ -7,18 +7,23 @@ import (
+@@ -7,18 +7,20 @@ import (
  
  // Defines all the possible output events for a server.
  const (
@@ -6196,9 +6221,6 @@ index d08411cce8e18de88008df04789d40bc24e55ad7..425417398855c830f0898d3169f0feb3
 +	InstallOutputEvent           = "install output"
 +	InstallStartedEvent          = "install started"
 +	InstallCompletedEvent        = "install completed"
-+	ImagePullStartedEvent        = "image pull started"
-+	ImagePullProgressEvent       = "image pull progress"
-+	ImagePullCompletedEvent      = "image pull completed"
 +	ConsoleOutputEvent           = "console output"
 +	StatusEvent                  = "status"
 +	StatsEvent                   = "stats"
@@ -6214,7 +6236,7 @@ index d08411cce8e18de88008df04789d40bc24e55ad7..425417398855c830f0898d3169f0feb3
  // Events returns the server's emitter instance.
 diff --git a/server/file_history.go b/server/file_history.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717ca8a08f58
+index 0000000..98f3cf3
 --- /dev/null
 +++ b/server/file_history.go
 @@ -0,0 +1,783 @@
@@ -7003,7 +7025,7 @@ index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717c
 +}
 diff --git a/server/file_history_test.go b/server/file_history_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af92b9280e
+index 0000000..32cabc5
 --- /dev/null
 +++ b/server/file_history_test.go
 @@ -0,0 +1,140 @@
@@ -7148,7 +7170,7 @@ index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af
 +	}
 +}
 diff --git a/server/filesystem/errors.go b/server/filesystem/errors.go
-index b977fe6b2e0545a2c23140cc05be9eb25fc87c34..17833eb3ee35c3d380c3c63375c460f60119916d 100644
+index b977fe6..17833eb 100644
 --- a/server/filesystem/errors.go
 +++ b/server/filesystem/errors.go
 @@ -2,12 +2,8 @@ package filesystem
@@ -7192,7 +7214,7 @@ index b977fe6b2e0545a2c23140cc05be9eb25fc87c34..17833eb3ee35c3d380c3c63375c460f6
  func IsFilesystemError(err error) bool {
  	var fserr *Error
 diff --git a/server/filesystem/filesystem.go b/server/filesystem/filesystem.go
-index 112f99648c6a94661b67251ffab26cb91c92b027..5b078075188126212f003a5748b16b706806d9f8 100644
+index 112f996..5b07807 100644
 --- a/server/filesystem/filesystem.go
 +++ b/server/filesystem/filesystem.go
 @@ -75,6 +75,12 @@ func (fs *Filesystem) ReadDirStat(path string) ([]ufs.FileInfo, error) {
@@ -7209,7 +7231,7 @@ index 112f99648c6a94661b67251ffab26cb91c92b027..5b078075188126212f003a5748b16b70
  	}
  	st, err := statFromFile(f)
 diff --git a/server/filesystem/filesystem_test.go b/server/filesystem/filesystem_test.go
-index 2014c8a9a82fa6ba24696c275f4e6821559c293e..bc57f4e1620b1343463d3d3de2594c6909a5b848 100644
+index 2014c8a..bc57f4e 100644
 --- a/server/filesystem/filesystem_test.go
 +++ b/server/filesystem/filesystem_test.go
 @@ -91,8 +91,15 @@ func TestFilesystem_Openfile(t *testing.T) {
@@ -7231,7 +7253,7 @@ index 2014c8a9a82fa6ba24696c275f4e6821559c293e..bc57f4e1620b1343463d3d3de2594c69
  
  		g.It("returns file stat information", func() {
 diff --git a/server/filesystem/path.go b/server/filesystem/path.go
-index edb1cad6df39eec2f7e26c0d54d8f2438242f6b8..279823a23dd78c2a6e641efd396fdfff80a739dd 100644
+index edb1cad..279823a 100644
 --- a/server/filesystem/path.go
 +++ b/server/filesystem/path.go
 @@ -1,9 +1,6 @@
@@ -7269,7 +7291,7 @@ index edb1cad6df39eec2f7e26c0d54d8f2438242f6b8..279823a23dd78c2a6e641efd396fdfff
 -}
 diff --git a/server/import.go b/server/import.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..452855accf0135e0094f94392b59fb19337cb12c
+index 0000000..452855a
 --- /dev/null
 +++ b/server/import.go
 @@ -0,0 +1,1833 @@
@@ -9108,7 +9130,7 @@ index 0000000000000000000000000000000000000000..452855accf0135e0094f94392b59fb19
 +}
 diff --git a/server/import_progress.go b/server/import_progress.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8b5c1d338376c96b316b0103b2a2c0425f615f57
+index 0000000..8b5c1d3
 --- /dev/null
 +++ b/server/import_progress.go
 @@ -0,0 +1,217 @@
@@ -9330,7 +9352,7 @@ index 0000000000000000000000000000000000000000..8b5c1d338376c96b316b0103b2a2c042
 +	})
 +}
 diff --git a/server/install.go b/server/install.go
-index 0d31d50cf47397c936cea16faa89a1e9cbef32a4..e964c2ff0e0342a6a70f44aa6e5f8fb8892ba9fe 100644
+index 0d31d50..e964c2f 100644
 --- a/server/install.go
 +++ b/server/install.go
 @@ -270,6 +270,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
@@ -9409,7 +9431,7 @@ index 0d31d50cf47397c936cea16faa89a1e9cbef32a4..e964c2ff0e0342a6a70f44aa6e5f8fb8
  // looks at the globally defined install container limits and attempts to use
  // the higher of the two (defined limits & server limits). This allows for servers
 diff --git a/server/listeners.go b/server/listeners.go
-index d39e6649d6d3e908f503447862693e2ba87144b1..5e186ebc5d21cb811deac8545000f352d0d638e1 100644
+index d39e664..5e186eb 100644
 --- a/server/listeners.go
 +++ b/server/listeners.go
 @@ -9,19 +9,13 @@ import (
@@ -9454,7 +9476,7 @@ index d39e6649d6d3e908f503447862693e2ba87144b1..5e186ebc5d21cb811deac8545000f352
  					}
 diff --git a/server/protocol_monitor.go b/server/protocol_monitor.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..acea374a068b0e4b103bddd3af10b4aeb36f71ce
+index 0000000..acea374
 --- /dev/null
 +++ b/server/protocol_monitor.go
 @@ -0,0 +1,85 @@
@@ -9545,7 +9567,7 @@ index 0000000000000000000000000000000000000000..acea374a068b0e4b103bddd3af10b4ae
 +}
 diff --git a/server/protocol_stats.go b/server/protocol_stats.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..1fcc0a6b9a82d0fdcae7fe28ab07a7bf17ebf9ca
+index 0000000..1fcc0a6
 --- /dev/null
 +++ b/server/protocol_stats.go
 @@ -0,0 +1,135 @@
@@ -9685,7 +9707,7 @@ index 0000000000000000000000000000000000000000..1fcc0a6b9a82d0fdcae7fe28ab07a7bf
 +	return stats, nil
 +}
 diff --git a/server/resources.go b/server/resources.go
-index e11adf59a791aa1c34507cf0ab2e56e87bf8ddb4..d0ef20173835e88178ea4072829d9f6bc4710466 100644
+index e11adf5..d0ef201 100644
 --- a/server/resources.go
 +++ b/server/resources.go
 @@ -56,4 +56,6 @@ func (ru *ResourceUsage) Reset() {
@@ -9696,7 +9718,7 @@ index e11adf59a791aa1c34507cf0ab2e56e87bf8ddb4..d0ef20173835e88178ea4072829d9f6b
 +	ru.Network.RxPackets = 0
  }
 diff --git a/server/server.go b/server/server.go
-index a1777b047ba40a7d9060d76a298ecf7df6a2284a..83d60861f437b375f7818d2bcee7aaca801f2bd5 100644
+index a1777b0..83d6086 100644
 --- a/server/server.go
 +++ b/server/server.go
 @@ -74,9 +74,6 @@ type Server struct {
@@ -9710,7 +9732,7 @@ index a1777b047ba40a7d9060d76a298ecf7df6a2284a..83d60861f437b375f7818d2bcee7aaca
  
  // New returns a new server instance with a context and all of the default
 diff --git a/server/transfer/archive.go b/server/transfer/archive.go
-index 26cfddcaa7bff796fde2f7b0d108aecc89c807e8..9f20db67e7b7e8ae9e7e32435d06a68c21e782cb 100644
+index 26cfddc..9f20db6 100644
 --- a/server/transfer/archive.go
 +++ b/server/transfer/archive.go
 @@ -18,6 +18,9 @@ func (t *Transfer) Archive() (*Archive, error) {
@@ -9725,7 +9747,7 @@ index 26cfddcaa7bff796fde2f7b0d108aecc89c807e8..9f20db67e7b7e8ae9e7e32435d06a68c
  		t.archive = NewArchive(t, uint64(rawSize))
 diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8530704f05b95c18543ca0797996ec6d9e86bdf0
+index 0000000..8530704
 --- /dev/null
 +++ b/sftp/betterconsole_shell.go
 @@ -0,0 +1,347 @@
@@ -10077,7 +10099,7 @@ index 0000000000000000000000000000000000000000..8530704f05b95c18543ca0797996ec6d
 +	}, line)
 +}
 diff --git a/sftp/server.go b/sftp/server.go
-index e2263a4af3009000df4d087743564fee49e671d8..0965725020d1d1d06e79627e69aa3a409eddf88e 100644
+index e2263a4..0965725 100644
 --- a/sftp/server.go
 +++ b/sftp/server.go
 @@ -12,6 +12,7 @@ import (
@@ -10242,7 +10264,7 @@ index e2263a4af3009000df4d087743564fee49e671d8..0965725020d1d1d06e79627e69aa3a40
  	}
  	o, err := os.OpenFile(c.PrivateKeyPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
 diff --git a/system/const.go b/system/const.go
-index aebbc68b3a80ed725085d2e5c693722cb332fb3b..6e7730102d226cf44f4ba77386bd1d24cd72259f 100644
+index aebbc68..6e77301 100644
 --- a/system/const.go
 +++ b/system/const.go
 @@ -1,3 +1,3 @@

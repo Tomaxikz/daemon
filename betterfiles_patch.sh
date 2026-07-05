@@ -1,0 +1,745 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+RAW_BASE="${TOMAXIKZ_RAW_BASE:-https://raw.githubusercontent.com/Tomaxikz/daemon/develop}"
+BACKUP_ROOT="${TOMAXIKZ_BACKUP_ROOT:-.tomaxikz-betterfiles-backups}"
+BACKUP_DIR="${BACKUP_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)"
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    BOLD="$(printf '\033[1m')"
+    DIM="$(printf '\033[2m')"
+    RESET="$(printf '\033[0m')"
+    RED="$(printf '\033[31m')"
+    GREEN="$(printf '\033[32m')"
+    YELLOW="$(printf '\033[33m')"
+    BLUE="$(printf '\033[34m')"
+    CYAN="$(printf '\033[36m')"
+else
+    BOLD=""
+    DIM=""
+    RESET=""
+    RED=""
+    GREEN=""
+    YELLOW=""
+    BLUE=""
+    CYAN=""
+fi
+
+SPINNER_PID=""
+
+log() {
+    printf '%s[betterfiles]%s %s\n' "$CYAN" "$RESET" "$*"
+}
+
+ok() {
+    printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$*"
+}
+
+warn() {
+    printf '%s[WARN]%s %s\n' "$YELLOW" "$RESET" "$*"
+}
+
+section() {
+    printf '\n%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"
+}
+
+fail() {
+    printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$*" >&2
+    exit 1
+}
+
+banner() {
+    printf '%s%s%s\n' "$BOLD" "Better Files Wings installer" "$RESET"
+    printf '%s%s%s\n' "$DIM" "Anchor-based installer for Tomaxikz daemon Better Files features" "$RESET"
+}
+
+start_spinner() {
+    local message="$1"
+    if [ ! -t 1 ] || [ -n "${NO_COLOR:-}" ]; then
+        log "$message"
+        return
+    fi
+
+    (
+        local frames='|/-\'
+        local i=0
+        while :; do
+            printf '\r%s[%s]%s %s' "$CYAN" "${frames:i++%${#frames}:1}" "$RESET" "$message"
+            sleep 0.1
+        done
+    ) &
+    SPINNER_PID="$!"
+}
+
+stop_spinner() {
+    local status="$1"
+    local message="$2"
+    if [ -n "${SPINNER_PID:-}" ]; then
+        kill "$SPINNER_PID" >/dev/null 2>&1 || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+        SPINNER_PID=""
+        printf '\r\033[K'
+    fi
+
+    case "$status" in
+        ok) ok "$message" ;;
+        warn) warn "$message" ;;
+        *) fail "$message" ;;
+    esac
+}
+
+run_with_spinner() {
+    local message="$1"
+    shift
+    start_spinner "$message"
+    if "$@"; then
+        stop_spinner ok "$message"
+    else
+        stop_spinner error "$message failed"
+    fi
+}
+
+cleanup_spinner() {
+    if [ -n "${SPINNER_PID:-}" ]; then
+        kill "$SPINNER_PID" >/dev/null 2>&1 || true
+        wait "$SPINNER_PID" 2>/dev/null || true
+    fi
+}
+
+trap cleanup_spinner EXIT
+
+need_cmd() {
+    command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+fetch_file() {
+    local remote_path="$1"
+    local local_path="$2"
+    local url="${RAW_BASE%/}/${remote_path}"
+    local tmp
+
+    mkdir -p "$(dirname "$local_path")"
+    case "$local_path" in
+        *.go) tmp="$(mktemp --suffix=.go)" ;;
+        *) tmp="$(mktemp)" ;;
+    esac
+    start_spinner "download ${remote_path}"
+    curl -fsSL --retry 3 --retry-delay 1 -o "$tmp" "$url" || {
+        rm -f "$tmp"
+        stop_spinner error "failed to download ${url}"
+    }
+    if [ "${local_path%.go}" != "$local_path" ]; then
+        gofmt -w "$tmp" || {
+            rm -f "$tmp"
+            stop_spinner error "downloaded Go file is not valid: ${url}"
+        }
+    fi
+
+    if [ -f "$local_path" ] && cmp -s "$tmp" "$local_path"; then
+        stop_spinner ok "unchanged ${local_path}"
+        rm -f "$tmp"
+        return
+    fi
+
+    if [ -f "$local_path" ]; then
+        mkdir -p "${BACKUP_DIR}/$(dirname "$local_path")"
+        cp -p "$local_path" "${BACKUP_DIR}/${local_path}"
+        warn "backed up ${local_path}"
+    fi
+
+    mv "$tmp" "$local_path"
+    stop_spinner ok "updated ${local_path}"
+}
+
+banner
+
+[ -f go.mod ] || fail "run this from the Wings source root, where go.mod exists"
+grep -q 'github.com/pterodactyl/wings' go.mod || fail "go.mod does not look like a Pterodactyl Wings module"
+
+section "Checking requirements"
+need_cmd curl
+need_cmd python3
+need_cmd go
+need_cmd gofmt
+ok "required commands are available"
+
+section "Downloading Better Files files"
+fetch_file "environment/docker/client_accessor.go" "environment/docker/client_accessor.go"
+fetch_file "router/middleware/middleware_test.go" "router/middleware/middleware_test.go"
+fetch_file "router/router_cdn_stream.go" "router/router_cdn_stream.go"
+fetch_file "router/router_download_helpers.go" "router/router_download_helpers.go"
+fetch_file "router/router_download_helpers_test.go" "router/router_download_helpers_test.go"
+fetch_file "router/router_server_archive_nbt.go" "router/router_server_archive_nbt.go"
+fetch_file "router/router_server_betterfiles_collaboration.go" "router/router_server_betterfiles_collaboration.go"
+fetch_file "router/router_server_files_revisions.go" "router/router_server_files_revisions.go"
+fetch_file "router/router_server_files_search.go" "router/router_server_files_search.go"
+fetch_file "router/router_server_git.go" "router/router_server_git.go"
+fetch_file "router/websocket/betterfiles_collaboration.go" "router/websocket/betterfiles_collaboration.go"
+fetch_file "server/file_history.go" "server/file_history.go"
+fetch_file "server/file_history_test.go" "server/file_history_test.go"
+
+section "Applying anchor-based source edits"
+export BFM_COLOR_RESET="$RESET"
+export BFM_COLOR_GREEN="$GREEN"
+export BFM_COLOR_YELLOW="$YELLOW"
+export BFM_COLOR_RED="$RED"
+export BFM_COLOR_CYAN="$CYAN"
+python3 - "$BACKUP_DIR" <<'PY'
+from pathlib import Path
+import os
+import shutil
+import sys
+
+backup_dir = Path(sys.argv[1])
+RESET = os.environ.get("BFM_COLOR_RESET", "")
+GREEN = os.environ.get("BFM_COLOR_GREEN", "")
+YELLOW = os.environ.get("BFM_COLOR_YELLOW", "")
+RED = os.environ.get("BFM_COLOR_RED", "")
+CYAN = os.environ.get("BFM_COLOR_CYAN", "")
+
+
+def ok(message):
+    print(f"{GREEN}[OK]{RESET} {message}")
+
+
+def warn(message):
+    print(f"{YELLOW}[WARN]{RESET} {message}")
+
+
+def fail(message):
+    print(f"{RED}[ERROR]{RESET} {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def backup(path):
+    target = backup_dir / path
+    if target.exists():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(path, target)
+
+
+def read_text(path_name):
+    path = Path(path_name)
+    if not path.exists():
+        fail(f"required file is missing: {path_name}")
+    return path, path.read_text()
+
+
+def write_text(path, original, updated, description):
+    if updated == original:
+        return False
+    backup(path)
+    path.write_text(updated)
+    ok(f"patched {path}: {description}")
+    return True
+
+
+def replace_once(path_name, old, new, present, description):
+    path, text = read_text(path_name)
+    if present in text:
+        ok(f"already patched {path_name}: {description}")
+        return False
+    if old not in text:
+        fail(f"could not find expected source in {path_name} for {description}")
+    return write_text(path, text, text.replace(old, new, 1), description)
+
+
+def insert_after(path_name, anchor, addition, present, description):
+    path, text = read_text(path_name)
+    if present in text:
+        ok(f"already patched {path_name}: {description}")
+        return False
+    if anchor not in text:
+        fail(f"could not find anchor in {path_name} for {description}")
+    return write_text(path, text, text.replace(anchor, anchor + addition, 1), description)
+
+
+def insert_before(path_name, anchor, addition, present, description):
+    path, text = read_text(path_name)
+    if present in text:
+        ok(f"already patched {path_name}: {description}")
+        return False
+    if anchor not in text:
+        fail(f"could not find anchor in {path_name} for {description}")
+    return write_text(path, text, text.replace(anchor, addition + anchor, 1), description)
+
+
+def remove_once(path_name, old, description):
+    path, text = read_text(path_name)
+    if old not in text:
+        ok(f"already clean {path_name}: {description}")
+        return False
+    return write_text(path, text, text.replace(old, "", 1), description)
+
+
+def route_conflict_guard(path_name, route, expected_handler):
+    _, text = read_text(path_name)
+    marker = f'"{route}"'
+    if marker not in text:
+        return
+    expected = f'{marker}, {expected_handler}'
+    if expected not in text:
+        fail(f"{path_name} already contains route {route} with a different handler")
+
+
+file_history_field = '''\
+	// FileHistory controls bounded per-file revision storage for panel file edits.
+	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
+
+'''
+
+file_history_type = '''\
+type FileHistoryConfiguration struct {
+	Enabled             bool   `default:"true" yaml:"enabled"`
+	ZstdLevel           int    `default:"12" yaml:"zstd_level"`
+	AnchorInterval      uint64 `default:"4" yaml:"anchor_interval"`
+	KeepChains          uint64 `default:"2" yaml:"keep_chains"`
+	FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
+	PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
+	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
+}
+
+'''
+
+insert_after(
+    "config/config.go",
+    '	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`\n\n',
+    file_history_field,
+    "FileHistory FileHistoryConfiguration",
+    "file history config field",
+)
+insert_before(
+    "config/config.go",
+    "type CrashDetection struct {\n",
+    file_history_type,
+    "type FileHistoryConfiguration struct",
+    "file history config type",
+)
+
+for route, handler in [
+    ("/download/stream", "getDownloadStream"),
+    ("/git/status", "getServerGitStatus"),
+    ("/revisions", "getServerFileRevisions"),
+    ("/search", "getServerFilesSearch"),
+    ("/archive/list", "getServerArchiveList"),
+    ("/collaboration/revoke", "postServerBetterFilesCollaborationRevoke"),
+]:
+    route_conflict_guard("router/router.go", route, handler)
+
+insert_after(
+    "router/router.go",
+    '	router.GET("/download/file", getDownloadFile)\n',
+    '	router.GET("/download/stream", getDownloadStream)\n',
+    'router.GET("/download/stream", getDownloadStream)',
+    "stream download route",
+)
+
+git_routes = '''\
+		git := server.Group("/git")
+		{
+			git.GET("/status", getServerGitStatus)
+			git.POST("/install", postServerGitInstall)
+			git.POST("/clone", postServerGitClone)
+			git.POST("/pull", postServerGitPull)
+			git.POST("/diff", postServerGitDiff)
+		}
+'''
+insert_after(
+    "router/router.go",
+    '		server.POST("/commands", postServerCommands)\n',
+    git_routes,
+    'git.GET("/status", getServerGitStatus)',
+    "Git API routes",
+)
+
+file_routes = '''\
+			files.GET("/revisions", getServerFileRevisions)
+			files.GET("/revisions/:revision", getServerFileRevision)
+			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
+			files.GET("/search", getServerFilesSearch)
+			files.GET("/archive/list", getServerArchiveList)
+			files.POST("/archive/extract", postServerArchiveExtract)
+'''
+insert_after(
+    "router/router.go",
+    '			files.GET("/contents", getServerFileContents)\n',
+    file_routes,
+    'files.GET("/revisions", getServerFileRevisions)',
+    "Better Files file routes",
+)
+insert_after(
+    "router/router.go",
+    '			files.POST("/chmod", postServerChmodFile)\n',
+    '			files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)\n',
+    'files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)',
+    "collaboration revoke route",
+)
+
+stream_cors = '''\
+
+		if isStreamDownloadRequest(c) {
+			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
+			c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
+			c.Header("Vary", "Origin, Access-Control-Request-Headers")
+		}
+'''
+insert_after(
+    "router/middleware/middleware.go",
+    '		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")\n',
+    stream_cors,
+    "Access-Control-Expose-Headers",
+    "stream CORS headers",
+)
+replace_once(
+    "router/middleware/middleware.go",
+    '''\
+		if allowPrivateNetwork {
+			c.Header("Access-Control-Request-Private-Network", "true")
+		}
+''',
+    '''\
+		if allowPrivateNetwork {
+			if isStreamDownloadRequest(c) {
+				c.Header("Access-Control-Allow-Private-Network", "true")
+			} else {
+				c.Header("Access-Control-Request-Private-Network", "true")
+			}
+		}
+''',
+    "Access-Control-Allow-Private-Network",
+    "stream private-network CORS header",
+)
+insert_before(
+    "router/middleware/middleware.go",
+    "// ServerExists will ensure that the requested server exists in this setup.\n",
+    '''\
+func isStreamDownloadRequest(c *gin.Context) bool {
+	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
+}
+
+''',
+    "func isStreamDownloadRequest",
+    "stream CORS helper",
+)
+
+insert_after(
+    "router/websocket/websocket.go",
+    '''\
+	if m.Event != AuthenticationEvent {
+		if err := h.TokenValid(); err != nil {
+			h.unsafeSendJson(Message{
+				Event: JwtErrorEvent,
+				Args:  []string{err.Error()},
+			})
+			return nil
+		}
+	}
+''',
+    '''\
+
+	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+		return err
+	}
+''',
+    "HandleBetterFilesCollaboration",
+    "Better Files collaboration websocket handler",
+)
+
+insert_after(
+    "router/websocket/limiter.go",
+    "import (\n",
+    '	"strings"\n',
+    '"strings"',
+    "collaboration limiter string helper import",
+)
+insert_after(
+    "router/websocket/limiter.go",
+    "func limitValuesFor(e Event) (rate.Limit, int) {\n",
+    '''\
+	// Better Files live collaboration snapshots need a small dedicated bucket.
+	// Sharing Wings' default 4/sec bucket makes editors drift a character or two
+	// behind during normal typing.
+	if e == Event("betterfiles:collab:patch") {
+		return rate.Every(time.Millisecond * 50), 40
+	}
+	if e == Event("betterfiles:collab:snapshot") {
+		return rate.Every(time.Millisecond * 250), 12
+	}
+	if e == Event("betterfiles:collab:presence") {
+		return rate.Every(time.Millisecond * 250), 12
+	}
+	if isBetterFilesCollaborationEvent(e) {
+		return rate.Every(time.Millisecond * 200), 10
+	}
+
+''',
+    'Event("betterfiles:collab:patch")',
+    "collaboration websocket rate limits",
+)
+replace_once(
+    "router/websocket/limiter.go",
+    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {\n",
+    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n",
+    "SendCommandEvent || isBetterFilesCollaborationEvent(e)",
+    "collaboration dedicated limiter buckets",
+)
+insert_after(
+    "router/websocket/limiter.go",
+    '''\
+func limiterName(e Event) Event {
+	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {
+		return e
+	}
+
+	return "_default"
+}
+''',
+    '''\
+
+func isBetterFilesCollaborationEvent(e Event) bool {
+	return strings.HasPrefix(string(e), "betterfiles:collab:")
+}
+''',
+    "func isBetterFilesCollaborationEvent(e Event) bool",
+    "collaboration event classifier",
+)
+
+remove_once(
+    "router/router_server_files.go",
+    '	"path/filepath"\n',
+    "unused filepath import",
+)
+insert_after(
+    "router/router_server_files.go",
+    '''\
+				if err := fs.Rename(pf, pt); err != nil {
+					// Return nil if the error is an is not exists.
+					if errors.Is(err, os.ErrNotExist) {
+						s.Log().WithField("error", err).
+							WithField("from_path", pf).
+							WithField("to_path", pt).
+							Warn("failed to rename: source or target does not exist")
+						return nil
+					}
+					return err
+				}
+''',
+    "				s.RenameFileHistory(pf, pt)\n",
+    "RenameFileHistory",
+    "file history rename hook",
+)
+replace_once(
+    "router/router_server_files.go",
+    '''\
+			default:
+				return s.Filesystem().Delete(pi)
+''',
+    '''\
+			default:
+				if err := s.Filesystem().Delete(pi); err != nil {
+					return err
+				}
+				s.ForgetFileHistory(pi)
+				return nil
+''',
+    "ForgetFileHistory",
+    "file history delete hook",
+)
+insert_after(
+    "router/router_server_files.go",
+    '''\
+	if c.Request.ContentLength == -1 {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "Missing Content-Length",
+		})
+		return
+	}
+''',
+    '''\
+
+	var before []byte
+	trackRevision := server.ShouldRecordFileHistory(f, uint64(c.Request.ContentLength))
+	if trackRevision {
+		before, _ = captureFileRevisionContent(s, f)
+	}
+''',
+    "trackRevision := server.ShouldRecordFileHistory",
+    "file history write pre-image",
+)
+insert_after(
+    "router/router_server_files.go",
+    '''\
+	if err := s.Filesystem().Write(f, c.Request.Body, c.Request.ContentLength, 0o644); err != nil {
+		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "Cannot write file, name conflicts with an existing directory by the same name.",
+			})
+			return
+		}
+
+		middleware.CaptureAndAbort(c, err)
+		return
+	}
+''',
+    '''\
+
+	if trackRevision {
+		after, ok := captureFileRevisionContent(s, f)
+		if ok {
+			revisionID, err := s.RecordFileRevision(f, before, after, strings.TrimSpace(c.Query("user")))
+			if err != nil {
+				s.Log().WithError(err).WithField("path", f).Warn("failed to record file revision")
+			} else if revisionID > 0 {
+				c.Header("X-File-Revision-Id", strconv.FormatInt(revisionID, 10))
+			}
+		}
+	}
+''',
+    "X-File-Revision-Id",
+    "file history write post-image",
+)
+replace_once(
+    "router/router_server_files.go",
+    '	if !ok || !token.HasScope(tokens.FileUpload) {\n',
+    '	if !ok || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {\n',
+    "token.IsUniqueRequest()",
+    "single-use upload token validation",
+)
+replace_once(
+    "router/router_server_files.go",
+    '	directory := c.Query("directory")\n',
+    '''\
+	directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))
+	if directory == "." {
+		directory = "/"
+	}
+''',
+    'directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))',
+    "upload directory normalization",
+)
+insert_after(
+    "router/router_server_files.go",
+    '	maxFileSize := config.Get().Api.UploadLimit\n',
+    '''\
+	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
+	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+			"error": "Upload limit is not configured correctly.",
+		})
+		return
+	}
+''',
+    "maxUploadLimitMB",
+    "upload limit validation",
+)
+replace_once(
+    "router/router_server_files.go",
+    '		if header.Size > maxFileSizeBytes {\n',
+    '		if header.Size < 0 || header.Size > maxFileSizeBytes {\n',
+    "header.Size < 0",
+    "negative upload size validation",
+)
+insert_after(
+    "router/router_server_files.go",
+    '''\
+		totalSize += header.Size
+''',
+    '''\
+		if totalSize > maxFileSizeBytes {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "Total upload size is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
+			})
+			return
+		}
+''',
+    "Total upload size is larger",
+    "total upload size validation",
+)
+insert_after(
+	    "router/router_server_files.go",
+	    '''\
+	for _, header := range headers {
+		// We run this in a different method so I can use defer without any of
+		// the consequences caused by calling it in a loop.
+''',
+	    '''\
+		filename, ok := cleanUploadFilename(header.Filename)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid upload filename.",
+			})
+			return
+		}
+
+		// We run this in a different method so I can use defer without any of
+		// the consequences caused by calling it in a loop.
+''',
+    "cleanUploadFilename(header.Filename)",
+    "upload filename validation",
+)
+replace_once(
+    "router/router_server_files.go",
+    "		if err := handleFileUpload(filepath.Join(directory, header.Filename), s, header); err != nil {\n",
+    "		if err := handleFileUpload(path.Join(directory, filename), s, header); err != nil {\n",
+    "path.Join(directory, filename)",
+    "safe upload target path",
+)
+replace_once(
+    "router/router_server_files.go",
+    '''\
+				"file":      header.Filename,
+				"directory": filepath.Clean(directory),
+''',
+    '''\
+				"file":      filename,
+				"directory": directory,
+''',
+    '"file":      filename',
+    "safe upload activity metadata",
+)
+insert_before(
+    "router/router_server_files.go",
+    "func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {\n",
+    '''\
+func cleanUploadFilename(name string) (string, bool) {
+	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\\`) {
+		return "", false
+	}
+	return name, true
+}
+
+''',
+    "func cleanUploadFilename",
+    "upload filename helper",
+)
+PY
+
+section "Formatting and building"
+run_with_spinner "format Go files" gofmt -w \
+    config/config.go \
+    environment/docker/client_accessor.go \
+    router/middleware/middleware.go \
+    router/middleware/middleware_test.go \
+    router/router.go \
+    router/router_cdn_stream.go \
+    router/router_download_helpers.go \
+    router/router_download_helpers_test.go \
+    router/router_server_archive_nbt.go \
+    router/router_server_betterfiles_collaboration.go \
+    router/router_server_files.go \
+    router/router_server_files_revisions.go \
+    router/router_server_files_search.go \
+    router/router_server_git.go \
+    router/websocket/betterfiles_collaboration.go \
+    router/websocket/limiter.go \
+    router/websocket/websocket.go \
+    server/file_history.go \
+    server/file_history_test.go
+run_with_spinner "build Wings" go build
+
+section "Done"
+ok "Better Files Wings edits are installed and the build succeeded."
+if [ -d "$BACKUP_DIR" ]; then
+    log "backups, if any, are in: ${BACKUP_DIR}"
+fi

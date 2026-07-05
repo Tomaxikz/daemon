@@ -74,15 +74,12 @@ var e = append([]string{
 	server.InstallOutputEvent,
 	server.InstallStartedEvent,
 	server.InstallCompletedEvent,
-	server.ImagePullStartedEvent,
-	server.ImagePullProgressEvent,
-	server.ImagePullCompletedEvent,
 	server.DaemonMessageEvent,
 	server.BackupCompletedEvent,
 	server.BackupRestoreCompletedEvent,
 	server.TransferLogsEvent,
 	server.TransferStatusEvent,
-}, serverImporterListenerEvents...)
+}, append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)
 
 var allowedServerEvents = func() map[string]struct{} {
 	events := make(map[string]struct{}, len(e))

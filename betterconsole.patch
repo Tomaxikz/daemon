@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index b1331236f8f10eea37caa06e7a99a818cf159749..cb820ac96b45fd9fe5650bc94e54bf8be0b52b68 100644
+index b133123..cb820ac 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -69,6 +69,13 @@ type SftpConfiguration struct {
@@ -18,7 +18,7 @@ index b1331236f8f10eea37caa06e7a99a818cf159749..cb820ac96b45fd9fe5650bc94e54bf8b
  // ApiConfiguration defines the configuration for the internal API that is
 diff --git a/environment/docker/betterconsole_pull_progress.go b/environment/docker/betterconsole_pull_progress.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8ed965d15891c1a00f5a4a045e5f2bb3180c6fcd
+index 0000000..8ed965d
 --- /dev/null
 +++ b/environment/docker/betterconsole_pull_progress.go
 @@ -0,0 +1,171 @@
@@ -195,7 +195,7 @@ index 0000000000000000000000000000000000000000..8ed965d15891c1a00f5a4a045e5f2bb3
 +}
 diff --git a/environment/docker/betterconsole_pull_progress_test.go b/environment/docker/betterconsole_pull_progress_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66603eaa2f
+index 0000000..af0cc2d
 --- /dev/null
 +++ b/environment/docker/betterconsole_pull_progress_test.go
 @@ -0,0 +1,58 @@
@@ -258,7 +258,7 @@ index 0000000000000000000000000000000000000000..af0cc2d76409672520c6265d6b3aaf66
 +	}
 +}
 diff --git a/environment/docker/container.go b/environment/docker/container.go
-index f503af1d2a4448b74166c999d37332bfcfc3f045..775cdfa1e16aae4218ae7af960593b3e9b8d6606 100644
+index f503af1..775cdfa 100644
 --- a/environment/docker/container.go
 +++ b/environment/docker/container.go
 @@ -11,7 +11,6 @@ import (
@@ -335,8 +335,30 @@ index f503af1d2a4448b74166c999d37332bfcfc3f045..775cdfa1e16aae4218ae7af960593b3e
  
  	return nil
  }
+diff --git a/router/websocket/betterconsole_events.go b/router/websocket/betterconsole_events.go
+new file mode 100644
+index 0000000..3fa992f
+--- /dev/null
++++ b/router/websocket/betterconsole_events.go
+@@ -0,0 +1,16 @@
++package websocket
++
++import "github.com/pterodactyl/wings/server"
++
++var betterConsoleListenerEvents = []string{
++	server.ImagePullStartedEvent,
++	server.ImagePullProgressEvent,
++	server.ImagePullCompletedEvent,
++}
++
++func isBetterConsoleInstallOutputEvent(event Event) bool {
++	return event == server.InstallOutputEvent ||
++		event == server.ImagePullStartedEvent ||
++		event == server.ImagePullProgressEvent ||
++		event == server.ImagePullCompletedEvent
++}
 diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
-index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9d08d9e4a 100644
+index 12e5f81..d3f639e 100644
 --- a/router/websocket/listeners.go
 +++ b/router/websocket/listeners.go
 @@ -3,6 +3,7 @@ package websocket
@@ -347,20 +369,22 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9
  	"sync"
  	"time"
  
-@@ -73,6 +74,9 @@ var e = []string{
- 	server.InstallOutputEvent,
- 	server.InstallStartedEvent,
- 	server.InstallCompletedEvent,
-+	server.ImagePullStartedEvent,
-+	server.ImagePullProgressEvent,
-+	server.ImagePullCompletedEvent,
- 	server.DaemonMessageEvent,
- 	server.BackupCompletedEvent,
- 	server.BackupRestoreCompletedEvent,
-@@ -80,6 +84,14 @@ var e = []string{
- 	server.TransferStatusEvent,
+@@ -66,7 +67,7 @@ func (h *Handler) listenForExpiration(ctx context.Context) {
+ 	}
  }
  
+-var e = []string{
++var e = append([]string{
+ 	server.StatsEvent,
+ 	server.StatusEvent,
+ 	server.ConsoleOutputEvent,
+@@ -78,7 +79,15 @@ var e = []string{
+ 	server.BackupRestoreCompletedEvent,
+ 	server.TransferLogsEvent,
+ 	server.TransferStatusEvent,
+-}
++}, betterConsoleListenerEvents...)
++
 +var allowedServerEvents = func() map[string]struct{} {
 +	events := make(map[string]struct{}, len(e))
 +	for _, event := range e {
@@ -368,11 +392,10 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9
 +	}
 +	return events
 +}()
-+
+ 
  // ListenForServerEvents will listen for different events happening on a server
  // and send them along to the connected websocket client. This function will
- // block until the context provided to it is canceled.
-@@ -93,10 +105,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+@@ -93,10 +102,16 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
  	eventChan := make(chan []byte)
  	logOutput := make(chan []byte, 8)
  	installOutput := make(chan []byte, 4)
@@ -390,7 +413,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9
  
  	onError := func(evt string, err2 error) {
  		h.Logger().WithField("event", evt).WithField("error", err2).Error("failed to send event over server websocket")
-@@ -130,6 +148,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+@@ -130,6 +145,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
  			if err := events.DecodeTo(b, &e); err != nil {
  				continue
  			}
@@ -400,7 +423,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9
  			var sendErr error
  			message := Message{Event: Event(e.Topic)}
  			if str, ok := e.Data.(string); ok {
-@@ -157,7 +178,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+@@ -157,7 +175,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
  	// These functions will automatically close the channel if it hasn't been already.
  	h.server.Events().Off(eventChan)
  	h.server.Sink(system.LogSink).Off(logOutput)
@@ -413,7 +436,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..b9e5b7699bcae81bb4e7a38c63fe1cb9
  	// got canceled or because we ran into an error. If the "err" variable is nil
 diff --git a/router/websocket/listeners_test.go b/router/websocket/listeners_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..bc47188709f25f3b9c208840239e671e0f8ee733
+index 0000000..bc47188
 --- /dev/null
 +++ b/router/websocket/listeners_test.go
 @@ -0,0 +1,16 @@
@@ -434,24 +457,34 @@ index 0000000000000000000000000000000000000000..bc47188709f25f3b9c208840239e671e
 +	}
 +}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667e67723a87eeb47735708f96206806c5db..44992343b75ebbe6291b69cf9e3a94149c902d2b 100644
+index 4482667..c1a2300 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
-@@ -147,7 +147,10 @@ func (h *Handler) SendJson(v Message) error {
+@@ -147,7 +147,7 @@ func (h *Handler) SendJson(v Message) error {
  	if j := h.GetJwt(); j != nil {
  		// If we're sending installation output but the user does not have the required
  		// permissions to see the output, don't send it down the line.
 -		if v.Event == server.InstallOutputEvent {
-+		if v.Event == server.InstallOutputEvent ||
-+			v.Event == server.ImagePullStartedEvent ||
-+			v.Event == server.ImagePullProgressEvent ||
-+			v.Event == server.ImagePullCompletedEvent {
++		if isBetterConsoleInstallOutputEvent(v.Event) {
  			if !j.HasPermission(PermissionReceiveInstall) {
  				return nil
  			}
+diff --git a/server/betterconsole_events.go b/server/betterconsole_events.go
+new file mode 100644
+index 0000000..aebd975
+--- /dev/null
++++ b/server/betterconsole_events.go
+@@ -0,0 +1,7 @@
++package server
++
++const (
++	ImagePullStartedEvent   = "image pull started"
++	ImagePullProgressEvent  = "image pull progress"
++	ImagePullCompletedEvent = "image pull completed"
++)
 diff --git a/server/betterconsole_pull_progress.go b/server/betterconsole_pull_progress.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..7766b99c8ba7cfe578aee7e87ca6e3a7ab5cb96c
+index 0000000..7766b99
 --- /dev/null
 +++ b/server/betterconsole_pull_progress.go
 @@ -0,0 +1,195 @@
@@ -652,7 +685,7 @@ index 0000000000000000000000000000000000000000..7766b99c8ba7cfe578aee7e87ca6e3a7
 +}
 diff --git a/server/betterconsole_pull_progress_test.go b/server/betterconsole_pull_progress_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..6831ade0198e498d201ae84141b3ad1058058ad9
+index 0000000..6831ade
 --- /dev/null
 +++ b/server/betterconsole_pull_progress_test.go
 @@ -0,0 +1,44 @@
@@ -700,22 +733,8 @@ index 0000000000000000000000000000000000000000..6831ade0198e498d201ae84141b3ad10
 +		t.Fatalf("expected control characters to be stripped, got %q", payload)
 +	}
 +}
-diff --git a/server/events.go b/server/events.go
-index d08411cce8e18de88008df04789d40bc24e55ad7..795f9cc70d9a23c5a8f6cb6fa334582d735c0c8a 100644
---- a/server/events.go
-+++ b/server/events.go
-@@ -11,6 +11,9 @@ const (
- 	InstallOutputEvent          = "install output"
- 	InstallStartedEvent         = "install started"
- 	InstallCompletedEvent       = "install completed"
-+	ImagePullStartedEvent       = "image pull started"
-+	ImagePullProgressEvent      = "image pull progress"
-+	ImagePullCompletedEvent     = "image pull completed"
- 	ConsoleOutputEvent          = "console output"
- 	StatusEvent                 = "status"
- 	StatsEvent                  = "stats"
 diff --git a/server/install.go b/server/install.go
-index 0d31d50cf47397c936cea16faa89a1e9cbef32a4..e964c2ff0e0342a6a70f44aa6e5f8fb8892ba9fe 100644
+index 0d31d50..e964c2f 100644
 --- a/server/install.go
 +++ b/server/install.go
 @@ -270,6 +270,7 @@ func (ip *InstallationProcess) pullInstallationImage() error {
@@ -794,7 +813,7 @@ index 0d31d50cf47397c936cea16faa89a1e9cbef32a4..e964c2ff0e0342a6a70f44aa6e5f8fb8
  // looks at the globally defined install container limits and attempts to use
  // the higher of the two (defined limits & server limits). This allows for servers
 diff --git a/server/listeners.go b/server/listeners.go
-index d39e6649d6d3e908f503447862693e2ba87144b1..5e186ebc5d21cb811deac8545000f352d0d638e1 100644
+index d39e664..5e186eb 100644
 --- a/server/listeners.go
 +++ b/server/listeners.go
 @@ -9,19 +9,13 @@ import (
@@ -839,7 +858,7 @@ index d39e6649d6d3e908f503447862693e2ba87144b1..5e186ebc5d21cb811deac8545000f352
  					}
 diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8530704f05b95c18543ca0797996ec6d9e86bdf0
+index 0000000..8530704
 --- /dev/null
 +++ b/sftp/betterconsole_shell.go
 @@ -0,0 +1,347 @@
@@ -1191,7 +1210,7 @@ index 0000000000000000000000000000000000000000..8530704f05b95c18543ca0797996ec6d
 +	}, line)
 +}
 diff --git a/sftp/server.go b/sftp/server.go
-index e2263a4af3009000df4d087743564fee49e671d8..0965725020d1d1d06e79627e69aa3a409eddf88e 100644
+index e2263a4..0965725 100644
 --- a/sftp/server.go
 +++ b/sftp/server.go
 @@ -12,6 +12,7 @@ import (
