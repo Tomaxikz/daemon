@@ -125,8 +125,12 @@ fetch_file() {
     esac
 
     start_spinner "download ${remote_path}"
-    curl -fsSL --retry 3 --retry-delay 1 -o "$tmp" "$url" || {
+    curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -o "$tmp" "$url" || {
         rm -f "$tmp"
+        if [ -f "$local_path" ]; then
+            stop_spinner warn "could not download ${remote_path}; keeping existing ${local_path}"
+            return
+        fi
         stop_spinner error "failed to download ${url}"
     }
     if [ "${local_path%.go}" != "$local_path" ]; then
