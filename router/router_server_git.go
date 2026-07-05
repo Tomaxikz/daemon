@@ -31,7 +31,6 @@ import (
 
 const gitContainerRoot = "/home/container"
 const gitHelperRoot = "/mnt/server"
-const gitHelperImage = "alpine:3.20"
 const gitBetterFilesTrashDir = ".trash-bin"
 const gitRootUser = "0"
 
@@ -46,6 +45,11 @@ var (
 	gitPathCache       sync.Map
 	gitLocks           sync.Map
 	gitHelperImagePull sync.Mutex
+
+	gitHelperImages = []string{
+		"alpine/git:2.49.1",
+		"alpine:3.20",
+	}
 
 	gitTrustedBinaries = []string{
 		"/usr/bin/git",
@@ -795,7 +799,8 @@ func gitInstallEnv() []string {
 }
 
 func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []string, workDir string) (*gitResponse, error) {
-	if err := ensureGitHelperImage(ctx, runner.env); err != nil {
+	helperImage, err := ensureGitHelperImage(ctx, runner.env)
+	if err != nil {
 		return nil, err
 	}
 
@@ -806,7 +811,7 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 	}
 
 	script := strings.Join([]string{
-		`if ! command -v git >/dev/null 2>&1 || ! command -v su-exec >/dev/null 2>&1; then`,
+		`if ! command -v git >/dev/null 2>&1 || ! command -v su-exec >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1 || [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then`,
 		`apk add --no-cache --no-progress git openssh-client ca-certificates su-exec`,
 		`fi`,
 		`exec su-exec "$BFM_GIT_USER" "$@"`,
@@ -818,7 +823,7 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 		AttachStdout: true,
 		AttachStderr: true,
 		Cmd:          append([]string{"sh", "-lc", script, "bfm-git"}, helperCmd...),
-		Image:        gitHelperImage,
+		Image:        helperImage,
 		WorkingDir:   gitHelperPath(workDir),
 		Env: append(append([]string(nil), gitSafeEnv...), []string{
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
@@ -848,6 +853,17 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 		LogConfig:   cfg.Docker.ContainerLogConfig(),
 		NetworkMode: container.NetworkMode(cfg.Docker.Network.Mode),
 		UsernsMode:  container.UsernsMode(cfg.Docker.UsernsMode),
+		Resources: container.Resources{
+			Memory:    cfg.Docker.InstallerLimits.Memory * 1024 * 1024,
+			CPUQuota:  cfg.Docker.InstallerLimits.Cpu * 1000,
+			CPUPeriod: 100000,
+		},
+		SecurityOpt:    []string{"no-new-privileges"},
+		ReadonlyRootfs: true,
+		CapDrop: []string{
+			"setpcap", "mknod", "audit_write", "net_raw", "dac_override",
+			"fowner", "fsetid", "net_bind_service", "sys_chroot", "setfcap",
+		},
 	}
 
 	created, err := cli.ContainerCreate(ctx, conf, hostConf, nil, nil, containerName)
@@ -902,33 +918,48 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 	}, nil
 }
 
-func ensureGitHelperImage(ctx context.Context, env *docker.Environment) error {
+func ensureGitHelperImage(ctx context.Context, env *docker.Environment) (string, error) {
 	cli := env.Client()
-	if _, err := cli.ImageInspect(ctx, gitHelperImage); err == nil {
-		return nil
+	for _, helperImage := range gitHelperImages {
+		if _, err := cli.ImageInspect(ctx, helperImage); err == nil {
+			return helperImage, nil
+		}
 	}
 
 	gitHelperImagePull.Lock()
 	defer gitHelperImagePull.Unlock()
 
-	if _, err := cli.ImageInspect(ctx, gitHelperImage); err == nil {
-		return nil
+	var failures []string
+	for _, helperImage := range gitHelperImages {
+		if _, err := cli.ImageInspect(ctx, helperImage); err == nil {
+			return helperImage, nil
+		}
+
+		_, registryAuth := config.Get().Docker.RegistryCredentialsForImage(helperImage)
+		pullOptions := image.PullOptions{}
+		if registryAuth != nil {
+			if encoded, err := registryAuth.Base64(); err == nil {
+				pullOptions.RegistryAuth = encoded
+			}
+		}
+		reader, err := cli.ImagePull(ctx, helperImage, pullOptions)
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %s", helperImage, err.Error()))
+			continue
+		}
+		_, copyErr := io.Copy(io.Discard, reader)
+		_ = reader.Close()
+		if copyErr != nil {
+			failures = append(failures, fmt.Sprintf("%s: %s", helperImage, copyErr.Error()))
+			continue
+		}
+		return helperImage, nil
 	}
 
-	_, registryAuth := config.Get().Docker.RegistryCredentialsForImage(gitHelperImage)
-	pullOptions := image.PullOptions{}
-	if registryAuth != nil {
-		if encoded, err := registryAuth.Base64(); err == nil {
-			pullOptions.RegistryAuth = encoded
-		}
+	if len(failures) == 0 {
+		return "", fmt.Errorf("no Git helper images are configured")
 	}
-	reader, err := cli.ImagePull(ctx, gitHelperImage, pullOptions)
-	if err != nil {
-		return err
-	}
-	defer reader.Close()
-	_, err = io.Copy(io.Discard, reader)
-	return err
+	return "", fmt.Errorf("failed to pull any Git helper image: %s", strings.Join(failures, "; "))
 }
 
 func gitHelperPath(value string) string {
