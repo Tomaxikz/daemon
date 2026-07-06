@@ -172,11 +172,11 @@ func (c *SFTPServer) handleBetterConsoleShellCliCommand(term *betterConsoleSshTe
 		term.writeLine("Server Statistics:")
 		term.writeLine(fmt.Sprintf("  Status: %s", srv.Environment.State()))
 		term.writeLine(fmt.Sprintf("  CPU Usage: %.2f%%", stats.CpuAbsolute))
-		term.writeLine(fmt.Sprintf("  Memory Usage: %d bytes", stats.Memory))
-		term.writeLine(fmt.Sprintf("  Disk Usage: %d bytes", stats.Disk))
+		term.writeLine(fmt.Sprintf("  Memory Usage: %s", betterConsoleFormatBytes(stats.Memory)))
+		term.writeLine(fmt.Sprintf("  Disk Usage: %s", betterConsoleFormatSignedBytes(stats.Disk)))
 		term.writeLine("  Network Usage:")
-		term.writeLine(fmt.Sprintf("    Received: %d bytes", stats.Network.RxBytes))
-		term.writeLine(fmt.Sprintf("    Sent: %d bytes", stats.Network.TxBytes))
+		term.writeLine(fmt.Sprintf("    Received: %s", betterConsoleFormatBytes(stats.Network.RxBytes)))
+		term.writeLine(fmt.Sprintf("    Sent: %s", betterConsoleFormatBytes(stats.Network.TxBytes)))
 	default:
 		term.writeLine("Unknown daemon command. Type \"" + betterConsoleShellCliName + " help\".")
 	}
@@ -332,6 +332,33 @@ func betterConsoleEventString(data interface{}) string {
 		}
 		return string(b)
 	}
+}
+
+func betterConsoleFormatBytes(value uint64) string {
+	const unit = 1024
+	if value < unit {
+		if value == 1 {
+			return "1 byte"
+		}
+		return fmt.Sprintf("%d bytes", value)
+	}
+
+	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB"}
+	size := float64(value)
+	unitIndex := -1
+	for size >= unit && unitIndex < len(units)-1 {
+		size /= unit
+		unitIndex++
+	}
+
+	return fmt.Sprintf("%.2f %s (%d bytes)", size, units[unitIndex], value)
+}
+
+func betterConsoleFormatSignedBytes(value int64) string {
+	if value < 0 {
+		return fmt.Sprintf("%d bytes", value)
+	}
+	return betterConsoleFormatBytes(uint64(value))
 }
 
 func betterConsoleSanitizeTerminalLine(line string) string {

@@ -667,6 +667,20 @@ type sshPtyRequest struct {
     "type sshPtyRequest struct",
     "SFTP shell PTY request type",
 )
+replace_once(
+    "sftp/server.go",
+    '''\
+			KeyExchanges: []string{
+				"curve25519-sha256", "curve25519-sha256@libssh.org",
+''',
+    '''\
+			KeyExchanges: []string{
+				ssh.KeyExchangeMLKEM768X25519,
+				"curve25519-sha256", "curve25519-sha256@libssh.org",
+''',
+    "ssh.KeyExchangeMLKEM768X25519",
+    "post-quantum SFTP key exchange",
+)
 sftp_accept_old = '''\
 func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
 	// Before beginning a handshake must be performed on the incoming net.Conn

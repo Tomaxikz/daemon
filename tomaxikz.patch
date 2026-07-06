@@ -9750,7 +9750,7 @@ new file mode 100644
 index 0000000..8530704
 --- /dev/null
 +++ b/sftp/betterconsole_shell.go
-@@ -0,0 +1,347 @@
+@@ -0,0 +1,374 @@
 +package sftp
 +
 +import (
@@ -9925,11 +9925,11 @@ index 0000000..8530704
 +		term.writeLine("Server Statistics:")
 +		term.writeLine(fmt.Sprintf("  Status: %s", srv.Environment.State()))
 +		term.writeLine(fmt.Sprintf("  CPU Usage: %.2f%%", stats.CpuAbsolute))
-+		term.writeLine(fmt.Sprintf("  Memory Usage: %d bytes", stats.Memory))
-+		term.writeLine(fmt.Sprintf("  Disk Usage: %d bytes", stats.Disk))
++		term.writeLine(fmt.Sprintf("  Memory Usage: %s", betterConsoleFormatBytes(stats.Memory)))
++		term.writeLine(fmt.Sprintf("  Disk Usage: %s", betterConsoleFormatSignedBytes(stats.Disk)))
 +		term.writeLine("  Network Usage:")
-+		term.writeLine(fmt.Sprintf("    Received: %d bytes", stats.Network.RxBytes))
-+		term.writeLine(fmt.Sprintf("    Sent: %d bytes", stats.Network.TxBytes))
++		term.writeLine(fmt.Sprintf("    Received: %s", betterConsoleFormatBytes(stats.Network.RxBytes)))
++		term.writeLine(fmt.Sprintf("    Sent: %s", betterConsoleFormatBytes(stats.Network.TxBytes)))
 +	default:
 +		term.writeLine("Unknown daemon command. Type \"" + betterConsoleShellCliName + " help\".")
 +	}
@@ -10087,6 +10087,33 @@ index 0000000..8530704
 +	}
 +}
 +
++func betterConsoleFormatBytes(value uint64) string {
++	const unit = 1024
++	if value < unit {
++		if value == 1 {
++			return "1 byte"
++		}
++		return fmt.Sprintf("%d bytes", value)
++	}
++
++	units := []string{"KiB", "MiB", "GiB", "TiB", "PiB"}
++	size := float64(value)
++	unitIndex := -1
++	for size >= unit && unitIndex < len(units)-1 {
++		size /= unit
++		unitIndex++
++	}
++
++	return fmt.Sprintf("%.2f %s (%d bytes)", size, units[unitIndex], value)
++}
++
++func betterConsoleFormatSignedBytes(value int64) string {
++	if value < 0 {
++		return fmt.Sprintf("%d bytes", value)
++	}
++	return betterConsoleFormatBytes(uint64(value))
++}
++
 +func betterConsoleSanitizeTerminalLine(line string) string {
 +	line = betterConsoleShellAnsiRegex.ReplaceAllString(line, "")
 +
@@ -10134,6 +10161,14 @@ index e2263a4..0965725 100644
  func New(m *server.Manager) *SFTPServer {
  	cfg := config.Get().System
  	return &SFTPServer{
+@@ -81,6 +92,7 @@ func (c *SFTPServer) Run() error {
+ 	conf := &ssh.ServerConfig{
+ 		Config: ssh.Config{
+ 			KeyExchanges: []string{
++				ssh.KeyExchangeMLKEM768X25519,
+ 				"curve25519-sha256", "curve25519-sha256@libssh.org",
+ 				"ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
+ 				"diffie-hellman-group14-sha256",
 @@ -118,10 +129,12 @@ func (c *SFTPServer) Run() error {
  // serve the request or not.
  func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
