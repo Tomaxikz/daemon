@@ -77,7 +77,7 @@ type SftpConfiguration struct {
 
 type SftpShellConfiguration struct {
 	// Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
-	Enabled bool `default:"false" yaml:"enabled"`
+	Enabled bool `default:"true" yaml:"enabled"`
 }
 
 // ApiConfiguration defines the configuration for the internal API that is

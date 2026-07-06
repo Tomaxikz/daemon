@@ -275,7 +275,7 @@ sftp_shell_type = '''\
 
 type SftpShellConfiguration struct {
 	// Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
-	Enabled bool `default:"false" yaml:"enabled"`
+	Enabled bool `default:"true" yaml:"enabled"`
 }
 '''
 insert_after(
@@ -293,13 +293,20 @@ insert_after(
     "SFTP shell config type check",
 )
 if "type SftpShellConfiguration struct" not in Path("config/config.go").read_text():
-    insert_after(
+    insert_before(
         "config/config.go",
-        "}\n\n// ApiConfiguration defines the configuration for the internal API that is\n",
+        "// ApiConfiguration defines the configuration for the internal API that is\n",
         sftp_shell_type,
         "type SftpShellConfiguration struct",
         "SFTP shell config type",
     )
+replace_once(
+    "config/config.go",
+    '	Enabled bool `default:"false" yaml:"enabled"`\n',
+    '	Enabled bool `default:"true" yaml:"enabled"`\n',
+    'Enabled bool `default:"true" yaml:"enabled"`',
+    "SFTP shell default enabled",
+)
 
 remove_once(
     "environment/docker/container.go",
