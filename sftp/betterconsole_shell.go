@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"regexp"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/ssh"
 
@@ -20,8 +21,6 @@ import (
 
 const betterConsoleShellCliName = ".wings"
 const betterConsoleShellMaxLineBytes = 4096
-
-var betterConsoleShellAnsiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 
 func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Server, handler *Handler, ip string) {
 	logOutput := make(chan []byte, 128)
@@ -362,13 +361,110 @@ func betterConsoleFormatSignedBytes(value int64) string {
 }
 
 func betterConsoleSanitizeTerminalLine(line string) string {
-	line = betterConsoleShellAnsiRegex.ReplaceAllString(line, "")
+	var output strings.Builder
+	hasSgr := false
 
-	return strings.Map(func(r rune) rune {
-		if r == '\t' || r >= 32 {
-			return r
+	for i := 0; i < len(line); {
+		if line[i] == '\x1b' {
+			consumed, sgr := betterConsoleEscapeSequence(line[i:])
+			if consumed == 0 {
+				consumed = 1
+			}
+			if sgr != "" {
+				output.WriteString(sgr)
+				hasSgr = true
+			}
+			i += consumed
+			continue
 		}
 
-		return -1
-	}, line)
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if r == '\u009b' {
+			consumed, sgr := betterConsoleCsiSequence(line[i+size:])
+			if sgr != "" {
+				output.WriteString(sgr)
+				hasSgr = true
+			}
+			i += size + consumed
+			continue
+		}
+		if betterConsoleIsControlStringStart(r) {
+			i += size + betterConsoleControlStringLength(line[i+size:])
+			continue
+		}
+		if r != utf8.RuneError || size != 1 {
+			if r == '\t' || !unicode.IsControl(r) {
+				output.WriteString(line[i : i+size])
+			}
+		}
+		i += size
+	}
+
+	if hasSgr {
+		output.WriteString("\x1b[0m")
+	}
+	return output.String()
+}
+
+func betterConsoleEscapeSequence(input string) (int, string) {
+	if len(input) < 2 {
+		return len(input), ""
+	}
+
+	switch input[1] {
+	case '[':
+		consumed, sgr := betterConsoleCsiSequence(input[2:])
+		return 2 + consumed, sgr
+	case ']', 'P', 'X', '^', '_':
+		return 2 + betterConsoleControlStringLength(input[2:]), ""
+	default:
+		return 2, ""
+	}
+}
+
+func betterConsoleCsiSequence(input string) (int, string) {
+	for i := 0; i < len(input); i++ {
+		b := input[i]
+		if b < 0x40 || b > 0x7e {
+			continue
+		}
+
+		params := input[:i]
+		if b != 'm' || len(params) > 64 || !betterConsoleValidSgrParams(params) {
+			return i + 1, ""
+		}
+		return i + 1, "\x1b[" + params + "m"
+	}
+
+	return len(input), ""
+}
+
+func betterConsoleValidSgrParams(params string) bool {
+	for i := 0; i < len(params); i++ {
+		if (params[i] < '0' || params[i] > '9') && params[i] != ';' && params[i] != ':' {
+			return false
+		}
+	}
+	return true
+}
+
+func betterConsoleIsControlStringStart(r rune) bool {
+	return r == '\u0090' || r == '\u0098' || r == '\u009d' || r == '\u009e' || r == '\u009f'
+}
+
+func betterConsoleControlStringLength(input string) int {
+	for i := 0; i < len(input); {
+		if input[i] == '\a' {
+			return i + 1
+		}
+		if input[i] == '\x1b' && i+1 < len(input) && input[i+1] == '\\' {
+			return i + 2
+		}
+		r, size := utf8.DecodeRuneInString(input[i:])
+		if r == '\u009c' {
+			return i + size
+		}
+		i += size
+	}
+	return len(input)
 }

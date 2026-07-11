@@ -81,6 +81,15 @@ func limitValuesFor(e Event) (rate.Limit, int) {
 	if e == Event("betterfiles:collab:presence") {
 		return rate.Every(time.Millisecond * 250), 12
 	}
+	if e == FileCollabUpdateEvent {
+		return rate.Every(time.Millisecond * 25), 80
+	}
+	if e == FileCollabAwarenessEvent {
+		return rate.Every(time.Millisecond * 100), 30
+	}
+	if IsNativeFileCollaborationEvent(e) {
+		return rate.Every(time.Millisecond * 200), 10
+	}
 	if isBetterFilesCollaborationEvent(e) {
 		return rate.Every(time.Millisecond * 200), 10
 	}
@@ -100,7 +109,7 @@ func limitValuesFor(e Event) (rate.Limit, int) {
 }
 
 func limiterName(e Event) Event {
-	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {
+	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {
 		return e
 	}
 
@@ -108,5 +117,11 @@ func limiterName(e Event) Event {
 }
 
 func isBetterFilesCollaborationEvent(e Event) bool {
+	return IsBetterFilesCollaborationEvent(e)
+}
+
+// IsBetterFilesCollaborationEvent reports whether an event belongs to the
+// ordered Better Files collaboration protocol.
+func IsBetterFilesCollaborationEvent(e Event) bool {
 	return strings.HasPrefix(string(e), "betterfiles:collab:")
 }

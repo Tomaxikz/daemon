@@ -151,6 +151,16 @@ fetch_file() {
     stop_spinner ok "updated ${local_path}"
 }
 
+backup_local_file() {
+    local local_path="$1"
+    local target="${BACKUP_DIR}/${local_path}"
+
+    [ -f "$local_path" ] || return
+    [ -f "$target" ] && return
+    mkdir -p "$(dirname "$target")"
+    cp -p "$local_path" "$target"
+}
+
 banner
 
 [ -f go.mod ] || fail "run this from the Wings source root, where go.mod exists"
@@ -169,14 +179,27 @@ fetch_file "router/middleware/middleware_test.go" "router/middleware/middleware_
 fetch_file "router/router_cdn_stream.go" "router/router_cdn_stream.go"
 fetch_file "router/router_download_helpers.go" "router/router_download_helpers.go"
 fetch_file "router/router_download_helpers_test.go" "router/router_download_helpers_test.go"
+fetch_file "router/router_system_config.go" "router/router_system_config.go"
+fetch_file "router/router_system_config_test.go" "router/router_system_config_test.go"
 fetch_file "router/router_server_archive_nbt.go" "router/router_server_archive_nbt.go"
 fetch_file "router/router_server_betterfiles_collaboration.go" "router/router_server_betterfiles_collaboration.go"
 fetch_file "router/router_server_files_revisions.go" "router/router_server_files_revisions.go"
 fetch_file "router/router_server_files_search.go" "router/router_server_files_search.go"
 fetch_file "router/router_server_git.go" "router/router_server_git.go"
 fetch_file "router/websocket/betterfiles_collaboration.go" "router/websocket/betterfiles_collaboration.go"
+fetch_file "router/websocket/betterfiles_collaboration_ot.go" "router/websocket/betterfiles_collaboration_ot.go"
+fetch_file "router/websocket/betterfiles_collaboration_ot_test.go" "router/websocket/betterfiles_collaboration_ot_test.go"
+fetch_file "router/websocket/file_collaboration_yjs.go" "router/websocket/file_collaboration_yjs.go"
+fetch_file "router/websocket/file_collaboration_yjs_test.go" "router/websocket/file_collaboration_yjs_test.go"
 fetch_file "server/file_history.go" "server/file_history.go"
 fetch_file "server/file_history_test.go" "server/file_history_test.go"
+
+section "Installing collaboration dependency"
+backup_local_file "go.mod"
+backup_local_file "go.sum"
+run_with_spinner "pin operational transformation library" go get github.com/shiv248/operational-transformation-go@v1.0.0
+run_with_spinner "pin Yjs-compatible CRDT library" go get github.com/reearth/ygo@v1.31.0
+run_with_spinner "normalize Go dependencies" go mod tidy
 
 section "Applying anchor-based source edits"
 export BFM_COLOR_RESET="$RESET"
@@ -319,6 +342,7 @@ insert_before(
 
 for route, handler in [
     ("/download/stream", "getDownloadStream"),
+    ("/api/system/config", "getSystemConfiguration"),
     ("/git/status", "getServerGitStatus"),
     ("/revisions", "getServerFileRevisions"),
     ("/search", "getServerFilesSearch"),
@@ -333,6 +357,14 @@ insert_after(
     '	router.GET("/download/stream", getDownloadStream)\n',
     'router.GET("/download/stream", getDownloadStream)',
     "stream download route",
+)
+
+insert_after(
+    "router/router.go",
+    '\tprotected.GET("/api/system", getSystemInformation)\n',
+    '\tprotected.GET("/api/system/config", getSystemConfiguration)\n',
+    'protected.GET("/api/system/config", getSystemConfiguration)',
+    "native collaboration capability route",
 )
 
 git_routes = '''\
@@ -445,6 +477,50 @@ insert_after(
     "HandleBetterFilesCollaboration",
     "Better Files collaboration websocket handler",
 )
+insert_after(
+    "router/websocket/websocket.go",
+    '''\
+	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+		return err
+	}
+''',
+    '''\
+	if handled, err := h.HandleNativeFileCollaboration(ctx, m); handled {
+		return err
+	}
+''',
+    "HandleNativeFileCollaboration",
+    "Wings-rs-compatible Yjs collaboration handler",
+)
+insert_after(
+    "router/websocket/websocket.go",
+    "\tlimiter      *LimiterBucket\n",
+    "\tfileCollabCleanup sync.Once\n",
+    "fileCollabCleanup sync.Once",
+    "native collaboration disconnect guard",
+)
+replace_once(
+    "router/websocket/websocket.go",
+    "\tconn.SetReadLimit(4096)\n",
+    '''\
+	// Collaboration updates are chunked, but their base64 and JSON framing can
+	// exceed the historical 4 KiB console-message limit. The router applies the
+	// same 32 KiB bound before dispatching a decoded message.
+	conn.SetReadLimit(32_768)
+''',
+    "conn.SetReadLimit(32_768)",
+    "bounded collaboration websocket frame size",
+)
+insert_after(
+    "router/tokens/websocket.go",
+    '\tUserUUID    string   `json:"user_uuid"`\n',
+    '''\
+	UserName    string   `json:"user_name,omitempty"`
+	UserAvatar  *string  `json:"user_avatar,omitempty"`
+''',
+    '`json:"user_name,omitempty"`',
+    "Wings-rs-compatible participant identity claims",
+)
 
 insert_after(
     "router/websocket/limiter.go",
@@ -477,6 +553,27 @@ insert_after(
     'Event("betterfiles:collab:patch")',
     "collaboration websocket rate limits",
 )
+insert_after(
+    "router/websocket/limiter.go",
+    '''\
+	if e == Event("betterfiles:collab:presence") {
+		return rate.Every(time.Millisecond * 250), 12
+	}
+''',
+    '''\
+	if e == FileCollabUpdateEvent {
+		return rate.Every(time.Millisecond * 25), 80
+	}
+	if e == FileCollabAwarenessEvent {
+		return rate.Every(time.Millisecond * 100), 30
+	}
+	if IsNativeFileCollaborationEvent(e) {
+		return rate.Every(time.Millisecond * 200), 10
+	}
+''',
+    "if e == FileCollabUpdateEvent",
+    "native collaboration websocket rate limits",
+)
 replace_once(
     "router/websocket/limiter.go",
     "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {\n",
@@ -484,11 +581,18 @@ replace_once(
     "SendCommandEvent || isBetterFilesCollaborationEvent(e)",
     "collaboration dedicated limiter buckets",
 )
+replace_once(
+    "router/websocket/limiter.go",
+    "\tif e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n",
+    "\tif e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {\n",
+    "isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)",
+    "native collaboration dedicated limiter buckets",
+)
 insert_after(
     "router/websocket/limiter.go",
     '''\
 func limiterName(e Event) Event {
-	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {
+	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {
 		return e
 	}
 
@@ -498,11 +602,88 @@ func limiterName(e Event) Event {
     '''\
 
 func isBetterFilesCollaborationEvent(e Event) bool {
+	return IsBetterFilesCollaborationEvent(e)
+}
+
+// IsBetterFilesCollaborationEvent reports whether an event belongs to the
+// ordered Better Files collaboration protocol.
+func IsBetterFilesCollaborationEvent(e Event) bool {
 	return strings.HasPrefix(string(e), "betterfiles:collab:")
 }
 ''',
     "func isBetterFilesCollaborationEvent(e Event) bool",
     "collaboration event classifier",
+)
+replace_once(
+    "router/websocket/limiter.go",
+    '''\
+func isBetterFilesCollaborationEvent(e Event) bool {
+	return strings.HasPrefix(string(e), "betterfiles:collab:")
+}
+''',
+    '''\
+func isBetterFilesCollaborationEvent(e Event) bool {
+	return IsBetterFilesCollaborationEvent(e)
+}
+
+// IsBetterFilesCollaborationEvent reports whether an event belongs to the
+// ordered Better Files collaboration protocol.
+func IsBetterFilesCollaborationEvent(e Event) bool {
+	return strings.HasPrefix(string(e), "betterfiles:collab:")
+}
+''',
+    "func IsBetterFilesCollaborationEvent(e Event) bool",
+    "ordered collaboration event classifier",
+)
+
+insert_after(
+    "router/router_server_ws.go",
+    "\trl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)\n",
+    '''\
+	handleMessage := func(msg websocket.Message) {
+		if err := handler.HandleInbound(ctx, msg); err != nil {
+			if errors.Is(err, server.ErrSuspended) {
+				cancel()
+			} else {
+				_ = handler.SendErrorJson(msg, err)
+			}
+		}
+	}
+''',
+    "handleMessage := func(msg websocket.Message)",
+    "ordered collaboration message handler",
+)
+replace_once(
+    "router/router_server_ws.go",
+    '''\
+		go func(msg websocket.Message) {
+			if err := handler.HandleInbound(ctx, msg); err != nil {
+				if errors.Is(err, server.ErrSuspended) {
+					cancel()
+				} else {
+					_ = handler.SendErrorJson(msg, err)
+				}
+			}
+		}(j)
+''',
+    '''\
+		// Authentication and collaboration messages are stateful protocols. Keep
+		// their WebSocket wire order instead of racing them in separate goroutines.
+		if j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) {
+			handleMessage(j)
+			continue
+		}
+		go handleMessage(j)
+''',
+    "websocket.IsBetterFilesCollaborationEvent(j.Event)",
+    "ordered collaboration message dispatch",
+)
+replace_once(
+    "router/router_server_ws.go",
+    "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) {\n",
+    "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {\n",
+    "websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event)",
+    "ordered native collaboration message dispatch",
 )
 
 remove_once(
@@ -725,13 +906,21 @@ run_with_spinner "format Go files" gofmt -w \
     router/router_cdn_stream.go \
     router/router_download_helpers.go \
     router/router_download_helpers_test.go \
+    router/router_system_config.go \
+    router/router_system_config_test.go \
     router/router_server_archive_nbt.go \
     router/router_server_betterfiles_collaboration.go \
     router/router_server_files.go \
     router/router_server_files_revisions.go \
     router/router_server_files_search.go \
     router/router_server_git.go \
+    router/router_server_ws.go \
+    router/tokens/websocket.go \
     router/websocket/betterfiles_collaboration.go \
+    router/websocket/betterfiles_collaboration_ot.go \
+    router/websocket/betterfiles_collaboration_ot_test.go \
+    router/websocket/file_collaboration_yjs.go \
+    router/websocket/file_collaboration_yjs_test.go \
     router/websocket/limiter.go \
     router/websocket/websocket.go \
     server/file_history.go \

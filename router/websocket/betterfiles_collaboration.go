@@ -3,6 +3,9 @@ package websocket
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
 	pathpkg "path"
 	"strings"
 	"sync"
@@ -47,6 +50,8 @@ const (
 	betterFilesCollabMaxPatchChanges = 64
 	betterFilesCollabMaxPathBytes    = 4096
 	betterFilesCollabMaxCursorValue  = 1000000
+	betterFilesCollabMaxDocuments    = 32
+	betterFilesCollabMaxSessionBytes = 32 * 1024 * 1024
 )
 
 type betterFilesCollabUser struct {
@@ -59,7 +64,7 @@ type betterFilesCollabUser struct {
 type betterFilesCollabSessionInfo struct {
 	Code         string `json:"code"`
 	ServerUUID   string `json:"server_uuid"`
-	OwnerUUID   string `json:"owner_uuid"`
+	OwnerUUID    string `json:"owner_uuid"`
 	Mode         string `json:"mode"`
 	MaxUsers     int    `json:"max_users"`
 	MaxFileBytes int    `json:"max_file_bytes"`
@@ -169,12 +174,13 @@ type betterFilesCollabSession struct {
 	sync.RWMutex
 	Code         string
 	ServerUUID   string
-	OwnerUUID   string
+	OwnerUUID    string
 	Mode         string
 	MaxUsers     int
 	MaxFileBytes int
 	ExpiresAt    time.Time
 	Members      map[string]*betterFilesCollabMember
+	Documents    map[string]*betterFilesCollabDocument
 }
 
 var (
@@ -185,10 +191,9 @@ var (
 // HandleBetterFilesCollaboration handles Better Files live collaboration socket messages.
 // Add this near the top of Handler.HandleInbound after TokenValid succeeds:
 //
-//     if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
-//         return err
-//     }
-//
+//	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+//	    return err
+//	}
 func (h *Handler) HandleBetterFilesCollaboration(ctx context.Context, m Message) (bool, error) {
 	switch m.Event {
 	case BetterFilesCollabJoinEvent:
@@ -319,6 +324,13 @@ func (h *Handler) betterFilesCollabSetFile(m Message, open bool) error {
 	session.Unlock()
 
 	betterFilesCollabBroadcastFileUsers(session)
+	if open {
+		document, err := h.betterFilesCollabDocumentFor(session, path)
+		if err != nil {
+			return h.betterFilesCollabError(err.Error())
+		}
+		return h.betterFilesCollabSendDocument(session, document, path)
+	}
 	return nil
 }
 
@@ -371,12 +383,12 @@ func (h *Handler) betterFilesCollabPresence(m Message) error {
 	}
 
 	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPresenceOut, map[string]any{
-		"code": payload.Code,
-		"path": payload.Path,
-		"line": payload.Line,
-		"column": payload.Column,
+		"code":      payload.Code,
+		"path":      payload.Path,
+		"line":      payload.Line,
+		"column":    payload.Column,
 		"selection": betterFilesCollabSafeText(payload.Selection, 120),
-		"user": member.User,
+		"user":      member.User,
 	})
 	return nil
 }
@@ -433,16 +445,47 @@ func (h *Handler) betterFilesCollabPatch(m Message) error {
 	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
 		betterFilesCollabBroadcastFileUsers(session)
 	}
+	document, err := h.betterFilesCollabDocumentFor(session, payload.Path)
+	if err != nil {
+		return h.betterFilesCollabError(err.Error())
+	}
+
+	current, _ := document.snapshot()
+	availableSessionBytes := betterFilesCollabMaxSessionBytes - (betterFilesCollabSessionDocumentBytes(session) - len(current))
+	if availableSessionBytes < maxPayloadBytes {
+		maxPayloadBytes = availableSessionBytes
+	}
+	if maxPayloadBytes <= 0 {
+		return h.betterFilesCollabError("collaboration session document memory limit reached")
+	}
+
+	result, err := document.applyMonacoChanges(payload.Changes, maxPayloadBytes)
+	if err != nil {
+		if errors.Is(err, errBetterFilesCollabBaseNotFound) {
+			return h.betterFilesCollabSendDocument(session, document, payload.Path)
+		}
+		if errors.Is(err, errBetterFilesCollabTooLarge) {
+			return h.betterFilesCollabError("collaboration document is too large")
+		}
+		return h.betterFilesCollabError("invalid collaboration patch")
+	}
+	if len(result.Changes) == 0 {
+		return h.betterFilesCollabSendDocument(session, document, payload.Path)
+	}
 
 	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPatchOut, map[string]any{
-		"code":    payload.Code,
-		"path":    payload.Path,
-		"changes": payload.Changes,
-		"version": payload.Version,
-		"line":    payload.Line,
-		"column":  payload.Column,
-		"user":    member.User,
+		"code":     payload.Code,
+		"path":     payload.Path,
+		"changes":  result.Changes,
+		"version":  payload.Version,
+		"revision": result.Revision,
+		"line":     payload.Line,
+		"column":   payload.Column,
+		"user":     member.User,
 	})
+	if result.Transformed {
+		return h.betterFilesCollabSendDocument(session, document, payload.Path)
+	}
 	return nil
 }
 
@@ -483,15 +526,29 @@ func (h *Handler) betterFilesCollabSnapshot(m Message) error {
 	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
 		betterFilesCollabBroadcastFileUsers(session)
 	}
+	document, err := h.betterFilesCollabDocumentFor(session, payload.Path)
+	if err != nil {
+		return h.betterFilesCollabError(err.Error())
+	}
+	current, revision := document.snapshot()
+	if current != payload.Content {
+		if revision == 0 && len(betterFilesCollabUsersForPath(session, payload.Path, h.Uuid().String())) == 0 {
+			document.replace(payload.Content)
+			current, revision = document.snapshot()
+		} else {
+			return h.betterFilesCollabSendDocument(session, document, payload.Path)
+		}
+	}
 
 	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabSnapshotOut, map[string]any{
-		"code": payload.Code,
-		"path": payload.Path,
-		"content": payload.Content,
-		"version": payload.Version,
-		"line": payload.Line,
-		"column": payload.Column,
-		"user": member.User,
+		"code":     payload.Code,
+		"path":     payload.Path,
+		"content":  current,
+		"version":  payload.Version,
+		"revision": revision,
+		"line":     payload.Line,
+		"column":   payload.Column,
+		"user":     member.User,
 	})
 	return nil
 }
@@ -533,13 +590,20 @@ func (h *Handler) betterFilesCollabFileSaved(m Message) error {
 	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
 		betterFilesCollabBroadcastFileUsers(session)
 	}
+	document, err := h.betterFilesCollabDocumentFor(session, payload.Path)
+	if err != nil {
+		return h.betterFilesCollabError(err.Error())
+	}
+	document.replace(payload.Content)
+	_, revision := document.snapshot()
 
 	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabFileSavedOut, map[string]any{
-		"code": payload.Code,
-		"path": payload.Path,
-		"content": payload.Content,
-		"version": payload.Version,
-		"user": member.User,
+		"code":     payload.Code,
+		"path":     payload.Path,
+		"content":  payload.Content,
+		"version":  payload.Version,
+		"revision": revision,
+		"user":     member.User,
 	})
 	return nil
 }
@@ -565,10 +629,10 @@ func (h *Handler) betterFilesCollabFileCheck(m Message) error {
 	}
 
 	return h.betterFilesCollabSend(betterFilesCollabFileCheckResultEvent, map[string]any{
-		"path": path,
+		"path":       path,
 		"request_id": betterFilesCollabSafeText(payload.RequestID, 80),
-		"conflicts": conflicts,
-		"users": users,
+		"conflicts":  conflicts,
+		"users":      users,
 	})
 }
 
@@ -614,9 +678,9 @@ func (h *Handler) betterFilesCollabExternalEdit(m Message) error {
 		}
 
 		betterFilesCollabBroadcast(session, "", betterFilesCollabExternalEditOut, map[string]any{
-			"code": session.Code,
-			"path": path,
-			"user": user,
+			"code":          session.Code,
+			"path":          path,
+			"user":          user,
 			"editing_users": users,
 		})
 	}
@@ -708,7 +772,7 @@ func betterFilesCollabVerifiedSession(info betterFilesCollabSessionInfo) (better
 	return betterFilesCollabSessionInfo{
 		Code:         code,
 		ServerUUID:   token.ServerUUID,
-		OwnerUUID:   token.OwnerUUID,
+		OwnerUUID:    token.OwnerUUID,
 		Mode:         mode,
 		MaxUsers:     maxUsers,
 		MaxFileBytes: maxFileBytes,
@@ -751,16 +815,97 @@ func betterFilesCollabGetOrCreateSession(info betterFilesCollabSessionInfo) *bet
 	session := &betterFilesCollabSession{
 		Code:         code,
 		ServerUUID:   info.ServerUUID,
-		OwnerUUID:   info.OwnerUUID,
+		OwnerUUID:    info.OwnerUUID,
 		Mode:         mode,
 		MaxUsers:     maxUsers,
 		MaxFileBytes: maxFileBytes,
 		ExpiresAt:    time.Unix(info.ExpiresAt, 0),
 		Members:      map[string]*betterFilesCollabMember{},
+		Documents:    map[string]*betterFilesCollabDocument{},
 	}
 	betterFilesCollabSessions[code] = session
 
 	return session
+}
+
+func (h *Handler) betterFilesCollabDocumentFor(session *betterFilesCollabSession, path string) (*betterFilesCollabDocument, error) {
+	session.RLock()
+	document := session.Documents[path]
+	session.RUnlock()
+	if document != nil {
+		return document, nil
+	}
+
+	file, stat, err := h.server.Filesystem().File(path)
+	if err != nil {
+		return nil, fmt.Errorf("could not open collaboration file")
+	}
+	defer file.Close()
+	if stat.IsDir() {
+		return nil, fmt.Errorf("collaboration path is not a file")
+	}
+
+	maxBytes := session.MaxFileBytes
+	if maxBytes <= 0 || maxBytes > betterFilesCollabMaxPayloadBytes {
+		maxBytes = betterFilesCollabMaxPayloadBytes
+	}
+	if stat.Size() > int64(maxBytes) {
+		return nil, fmt.Errorf("collaboration file is too large")
+	}
+	content, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
+	if err != nil {
+		return nil, fmt.Errorf("could not read collaboration file")
+	}
+	if len(content) > maxBytes || !utf8.Valid(content) {
+		return nil, fmt.Errorf("collaboration file is too large or is not UTF-8 text")
+	}
+
+	document = newBetterFilesCollabDocument(string(content))
+	session.Lock()
+	defer session.Unlock()
+	if existing := session.Documents[path]; existing != nil {
+		return existing, nil
+	}
+	if len(session.Documents) >= betterFilesCollabMaxDocuments {
+		return nil, fmt.Errorf("collaboration session has too many open documents")
+	}
+	currentBytes := 0
+	for _, existing := range session.Documents {
+		existingContent, _ := existing.snapshot()
+		currentBytes += len(existingContent)
+	}
+	if currentBytes+len(content) > betterFilesCollabMaxSessionBytes {
+		return nil, fmt.Errorf("collaboration session document memory limit reached")
+	}
+	session.Documents[path] = document
+	return document, nil
+}
+
+func (h *Handler) betterFilesCollabSendDocument(session *betterFilesCollabSession, document *betterFilesCollabDocument, path string) error {
+	content, revision := document.snapshot()
+	return h.betterFilesCollabSend(betterFilesCollabSnapshotOut, map[string]any{
+		"code":     session.Code,
+		"path":     path,
+		"content":  content,
+		"version":  revision + 1,
+		"revision": revision,
+	})
+}
+
+func betterFilesCollabSessionDocumentBytes(session *betterFilesCollabSession) int {
+	session.RLock()
+	documents := make([]*betterFilesCollabDocument, 0, len(session.Documents))
+	for _, document := range session.Documents {
+		documents = append(documents, document)
+	}
+	session.RUnlock()
+
+	total := 0
+	for _, document := range documents {
+		content, _ := document.snapshot()
+		total += len(content)
+	}
+	return total
 }
 
 func betterFilesCollabMemberFor(h *Handler, code string) (*betterFilesCollabSession, *betterFilesCollabMember) {
@@ -953,9 +1098,9 @@ func betterFilesCollabConflictsForPath(h *Handler, path string) []betterFilesCol
 func betterFilesCollabBroadcastMembers(session *betterFilesCollabSession) {
 	members := betterFilesCollabMembers(session)
 	betterFilesCollabBroadcast(session, "", betterFilesCollabMembersEvent, map[string]any{
-		"code": session.Code,
+		"code":    session.Code,
 		"members": members,
-		"mode": session.Mode,
+		"mode":    session.Mode,
 	})
 }
 
@@ -972,7 +1117,7 @@ func betterFilesCollabBroadcastFileUsers(session *betterFilesCollabSession) {
 	session.RUnlock()
 
 	betterFilesCollabBroadcast(session, "", betterFilesCollabFileUsersEvent, map[string]any{
-		"code": session.Code,
+		"code":  session.Code,
 		"files": fileUsers,
 	})
 }

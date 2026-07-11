@@ -177,6 +177,7 @@ fetch_file "server/betterconsole_pull_progress_test.go" "server/betterconsole_pu
 fetch_file "router/websocket/betterconsole_events.go" "router/websocket/betterconsole_events.go"
 fetch_file "router/websocket/listeners_test.go" "router/websocket/listeners_test.go"
 fetch_file "sftp/betterconsole_shell.go" "sftp/betterconsole_shell.go"
+fetch_file "sftp/server_security_test.go" "sftp/server_security_test.go"
 
 section "Applying anchor-based source edits"
 export BCON_COLOR_RESET="$RESET"
@@ -633,17 +634,51 @@ replace_once(
 insert_after(
     "sftp/server.go",
     '	"strings"\n',
-    '	"time"\n',
-    '"time"',
-    "SFTP shell timeout import",
+    '	"sync/atomic"\n	"time"\n	"unicode"\n	"unicode/utf8"\n',
+    '"sync/atomic"',
+    "SFTP security imports",
 )
-insert_after(
-    "sftp/server.go",
-    "var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\\.([a-z0-9]{8})$`)\n",
-    "\nconst sshHandshakeTimeout = 10 * time.Second\n",
-    "const sshHandshakeTimeout",
-    "SFTP handshake timeout constant",
+path, text = read_text("sftp/server.go")
+security_constants = '''\
+const (
+	sshHandshakeTimeout              = 10 * time.Second
+	sftpCredentialValidationTimeout = 8 * time.Second
+	maxSftpUsernameBytes             = 255
+	maxSSHSessionChannels            = 8
 )
+
+type sshSessionLimiter struct {
+	active atomic.Int32
+}
+
+func (l *sshSessionLimiter) acquire() bool {
+	for {
+		active := l.active.Load()
+		if active >= maxSSHSessionChannels {
+			return false
+		}
+		if l.active.CompareAndSwap(active, active+1) {
+			return true
+		}
+	}
+}
+
+func (l *sshSessionLimiter) release() {
+	l.active.Add(-1)
+}
+'''
+if "type sshSessionLimiter struct" in text:
+    ok("already patched sftp/server.go: SFTP security limits")
+else:
+    old_constant = "const sshHandshakeTimeout = 10 * time.Second\n"
+    if old_constant in text:
+        text2 = text.replace(old_constant, security_constants, 1)
+    else:
+        anchor = "var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\\.([a-z0-9]{8})$`)\n"
+        if anchor not in text:
+            fail("could not find username validator in sftp/server.go for SFTP security limits")
+        text2 = text.replace(anchor, anchor + "\n" + security_constants, 1)
+    write_text(path, text, text2, "SFTP security limits")
 insert_after(
     "sftp/server.go",
     '''\
@@ -735,6 +770,7 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 	_ = conn.SetDeadline(time.Time{})
 	defer sconn.Close()
 	go ssh.DiscardRequests(reqs)
+	var sessions sshSessionLimiter
 
 	for ch := range chans {
 		// If its not a session channel we just move on because its not something we
@@ -743,15 +779,24 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 			_ = ch.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
+		if !sessions.acquire() {
+			_ = ch.Reject(ssh.ResourceShortage, "too many active session channels")
+			continue
+		}
 
 		channel, requests, err := ch.Accept()
 		if err != nil {
+			sessions.release()
 			continue
 		}
 
 		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
-			go c.handleSession(sconn, srv, channel, requests)
+			go func() {
+				defer sessions.release()
+				c.handleSession(sconn, srv, channel, requests)
+			}()
 		} else {
+			sessions.release()
 			_ = channel.Close()
 		}
 	}
@@ -814,6 +859,90 @@ replace_once(
     "func (c *SFTPServer) handleSession",
     "Better Console SFTP shell session routing",
 )
+insert_after(
+    "sftp/server.go",
+    "\tgo ssh.DiscardRequests(reqs)\n",
+    "\tvar sessions sshSessionLimiter\n",
+    "var sessions sshSessionLimiter",
+    "SFTP session limiter",
+)
+insert_after(
+    "sftp/server.go",
+    '''\
+		if ch.ChannelType() != "session" {
+			_ = ch.Reject(ssh.UnknownChannelType, "unknown channel type")
+			continue
+		}
+''',
+    '''\
+		if !sessions.acquire() {
+			_ = ch.Reject(ssh.ResourceShortage, "too many active session channels")
+			continue
+		}
+''',
+    "too many active session channels",
+    "SFTP session channel limit",
+)
+replace_once(
+    "sftp/server.go",
+    '''\
+		channel, requests, err := ch.Accept()
+		if err != nil {
+			continue
+		}
+
+		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
+			go c.handleSession(sconn, srv, channel, requests)
+		} else {
+			_ = channel.Close()
+		}
+''',
+    '''\
+		channel, requests, err := ch.Accept()
+		if err != nil {
+			sessions.release()
+			continue
+		}
+
+		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
+			go func() {
+				defer sessions.release()
+				c.handleSession(sconn, srv, channel, requests)
+			}()
+		} else {
+			sessions.release()
+			_ = channel.Close()
+		}
+''',
+    "defer sessions.release()",
+    "SFTP session limiter cleanup",
+)
+replace_once(
+    "sftp/server.go",
+    '''\
+	ctx := srv.Sftp().Context(handler.User())
+	rs := sftp.NewRequestServer(channel, handler.Handlers())
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
+			_ = rs.Close()
+		}
+	}()
+''',
+    '''\
+	ctx := srv.Sftp().Context(handler.User())
+	rs := sftp.NewRequestServer(channel, handler.Handlers())
+	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
+		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
+		_ = rs.Close()
+	})
+	defer stopRevocation()
+''',
+    "stopRevocation := closeSftpSessionOnRevocation(ctx",
+    "leak-free SFTP session revocation",
+)
 insert_before(
     "sftp/server.go",
     "// Generates a new ED25519 private key that is used for host authentication when\n",
@@ -826,6 +955,12 @@ func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, chann
 		_, _ = io.WriteString(channel, "Permission denied: control.console\\r\\n")
 		return nil
 	}
+	ctx := srv.Sftp().Context(handler.User())
+	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
+		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active shell session")
+		_ = channel.Close()
+	})
+	defer stopRevocation()
 
 	go func() {
 		for req := range requests {
@@ -840,9 +975,82 @@ func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, chann
 	return nil
 }
 
+func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func() bool {
+	return context.AfterFunc(ctx, closeSession)
+}
+
 ''',
     "func (c *SFTPServer) HandleShell",
     "Better Console SFTP shell handler",
+)
+insert_after(
+    "sftp/server.go",
+    '''\
+	if !handler.can("control.console") {
+		_, _ = io.WriteString(channel, "Permission denied: control.console\\r\\n")
+		return nil
+	}
+''',
+    '''\
+	ctx := srv.Sftp().Context(handler.User())
+	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
+		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active shell session")
+		_ = channel.Close()
+	})
+	defer stopRevocation()
+''',
+    "terminating active shell session",
+    "SFTP shell session revocation",
+)
+insert_before(
+    "sftp/server.go",
+    "// Generates a new ED25519 private key that is used for host authentication when\n",
+    '''\
+func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func() bool {
+	return context.AfterFunc(ctx, closeSession)
+}
+
+''',
+    "func closeSftpSessionOnRevocation",
+    "SFTP session revocation helper",
+)
+replace_once(
+    "sftp/server.go",
+    "\tif !validUsernameRegexp.MatchString(request.User) {\n",
+    "\tif !validSftpUsername(request.User) {\n",
+    "if !validSftpUsername(request.User)",
+    "bounded SFTP username validation",
+)
+replace_once(
+    "sftp/server.go",
+    "\tresp, err := c.manager.Client().ValidateSftpCredentials(context.Background(), request)\n",
+    '''\
+	ctx, cancel := context.WithTimeout(context.Background(), sftpCredentialValidationTimeout)
+	defer cancel()
+	resp, err := c.manager.Client().ValidateSftpCredentials(ctx, request)
+''',
+    "ValidateSftpCredentials(ctx, request)",
+    "SFTP credential request timeout",
+)
+insert_before(
+    "sftp/server.go",
+    "// PrivateKeyPath returns the path the host private key for this server instance.\n",
+    '''\
+func validSftpUsername(username string) bool {
+	if username == "" || len(username) > maxSftpUsernameBytes || !utf8.ValidString(username) {
+		return false
+	}
+	for _, r := range username {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return validUsernameRegexp.MatchString(username)
+}
+
+''',
+    "func validSftpUsername",
+    "SFTP username validator",
 )
 replace_once(
     "sftp/server.go",
@@ -869,7 +1077,8 @@ run_with_spinner "format Go files" gofmt -w \
     server/install.go \
     server/listeners.go \
     sftp/betterconsole_shell.go \
-    sftp/server.go
+    sftp/server.go \
+    sftp/server_security_test.go
 run_with_spinner "build Wings" go build
 
 section "Done"

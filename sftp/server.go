@@ -12,7 +12,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
@@ -30,7 +33,32 @@ import (
 // server and sending a flood of usernames.
 var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
 
-const sshHandshakeTimeout = 10 * time.Second
+const (
+	sshHandshakeTimeout             = 10 * time.Second
+	sftpCredentialValidationTimeout = 8 * time.Second
+	maxSftpUsernameBytes            = 255
+	maxSSHSessionChannels           = 8
+)
+
+type sshSessionLimiter struct {
+	active atomic.Int32
+}
+
+func (l *sshSessionLimiter) acquire() bool {
+	for {
+		active := l.active.Load()
+		if active >= maxSSHSessionChannels {
+			return false
+		}
+		if l.active.CompareAndSwap(active, active+1) {
+			return true
+		}
+	}
+}
+
+func (l *sshSessionLimiter) release() {
+	l.active.Add(-1)
+}
 
 //goland:noinspection GoNameStartsWithPackageName
 type SFTPServer struct {
@@ -138,6 +166,7 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 	_ = conn.SetDeadline(time.Time{})
 	defer sconn.Close()
 	go ssh.DiscardRequests(reqs)
+	var sessions sshSessionLimiter
 
 	for ch := range chans {
 		// If its not a session channel we just move on because its not something we
@@ -146,15 +175,24 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 			_ = ch.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
+		if !sessions.acquire() {
+			_ = ch.Reject(ssh.ResourceShortage, "too many active session channels")
+			continue
+		}
 
 		channel, requests, err := ch.Accept()
 		if err != nil {
+			sessions.release()
 			continue
 		}
 
 		if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
-			go c.handleSession(sconn, srv, channel, requests)
+			go func() {
+				defer sessions.release()
+				c.handleSession(sconn, srv, channel, requests)
+			}()
 		} else {
+			sessions.release()
 			_ = channel.Close()
 		}
 	}
@@ -220,14 +258,11 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
 
 	ctx := srv.Sftp().Context(handler.User())
 	rs := sftp.NewRequestServer(channel, handler.Handlers())
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
-			_ = rs.Close()
-		}
-	}()
+	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
+		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
+		_ = rs.Close()
+	})
+	defer stopRevocation()
 
 	if err := rs.Serve(); err == io.EOF {
 		_ = rs.Close()
@@ -244,6 +279,12 @@ func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, chann
 		_, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
 		return nil
 	}
+	ctx := srv.Sftp().Context(handler.User())
+	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
+		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active shell session")
+		_ = channel.Close()
+	})
+	defer stopRevocation()
 
 	go func() {
 		for req := range requests {
@@ -256,6 +297,10 @@ func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, chann
 	c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
 
 	return nil
+}
+
+func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func() bool {
+	return context.AfterFunc(ctx, closeSession)
 }
 
 // Generates a new ED25519 private key that is used for host authentication when
@@ -297,12 +342,14 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
 	logger := log.WithFields(log.Fields{"subsystem": "sftp", "method": request.Type, "username": request.User, "ip": request.IP})
 	logger.Debug("validating credentials for SFTP connection")
 
-	if !validUsernameRegexp.MatchString(request.User) {
+	if !validSftpUsername(request.User) {
 		logger.Warn("failed to validate user credentials (invalid format)")
 		return nil, &remote.SftpInvalidCredentialsError{}
 	}
 
-	resp, err := c.manager.Client().ValidateSftpCredentials(context.Background(), request)
+	ctx, cancel := context.WithTimeout(context.Background(), sftpCredentialValidationTimeout)
+	defer cancel()
+	resp, err := c.manager.Client().ValidateSftpCredentials(ctx, request)
 	if err != nil {
 		if _, ok := err.(*remote.SftpInvalidCredentialsError); ok {
 			logger.Warn("failed to validate user credentials (invalid username or password)")
@@ -323,6 +370,18 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
 	}
 
 	return &permissions, nil
+}
+
+func validSftpUsername(username string) bool {
+	if username == "" || len(username) > maxSftpUsernameBytes || !utf8.ValidString(username) {
+		return false
+	}
+	for _, r := range username {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return validUsernameRegexp.MatchString(username)
 }
 
 // PrivateKeyPath returns the path the host private key for this server instance.

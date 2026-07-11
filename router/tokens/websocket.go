@@ -55,6 +55,8 @@ type WebsocketPayload struct {
 	Scoped
 
 	UserUUID    string   `json:"user_uuid"`
+	UserName    string   `json:"user_name,omitempty"`
+	UserAvatar  *string  `json:"user_avatar,omitempty"`
 	ServerUUID  string   `json:"server_uuid"`
 	Permissions []string `json:"permissions"`
 }

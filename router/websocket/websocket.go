@@ -40,13 +40,14 @@ const (
 )
 
 type Handler struct {
-	sync.RWMutex `json:"-"`
-	Connection   *websocket.Conn `json:"-"`
-	jwt          *tokens.WebsocketPayload
-	server       *server.Server
-	ra           server.RequestActivity
-	uuid         uuid.UUID
-	limiter      *LimiterBucket
+	sync.RWMutex      `json:"-"`
+	Connection        *websocket.Conn `json:"-"`
+	jwt               *tokens.WebsocketPayload
+	server            *server.Server
+	ra                server.RequestActivity
+	uuid              uuid.UUID
+	limiter           *LimiterBucket
+	fileCollabCleanup sync.Once
 }
 
 var (
@@ -112,7 +113,10 @@ func GetHandler(s *server.Server, w http.ResponseWriter, r *http.Request, c *gin
 		return nil, err
 	}
 
-	conn.SetReadLimit(4096)
+	// Collaboration updates are chunked, but their base64 and JSON framing can
+	// exceed the historical 4 KiB console-message limit. The router applies the
+	// same 32 KiB bound before dispatching a decoded message.
+	conn.SetReadLimit(32_768)
 	_ = conn.SetCompressionLevel(5)
 
 	return &Handler{
@@ -308,6 +312,9 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
 	}
 
 	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
+		return err
+	}
+	if handled, err := h.HandleNativeFileCollaboration(ctx, m); handled {
 		return err
 	}
 

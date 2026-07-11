@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index b133123..cb820ac 100644
+index b133123..c66b9c8 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -69,6 +69,13 @@ type SftpConfiguration struct {
@@ -813,31 +813,10 @@ index 0d31d50..e964c2f 100644
  // looks at the globally defined install container limits and attempts to use
  // the higher of the two (defined limits & server limits). This allows for servers
 diff --git a/server/listeners.go b/server/listeners.go
-index d39e664..5e186eb 100644
+index d39e664..639ef16 100644
 --- a/server/listeners.go
 +++ b/server/listeners.go
-@@ -9,19 +9,13 @@ import (
- 
- 	"github.com/apex/log"
- 
-+	"github.com/pterodactyl/wings/environment"
- 	"github.com/pterodactyl/wings/events"
- 	"github.com/pterodactyl/wings/system"
- 
--	"github.com/pterodactyl/wings/environment"
- 	"github.com/pterodactyl/wings/remote"
- )
- 
--var dockerEvents = []string{
--	environment.DockerImagePullStatus,
--	environment.DockerImagePullStarted,
--	environment.DockerImagePullCompleted,
--}
--
- type diskSpaceLimiter struct {
- 	o      sync.Once
- 	mu     sync.Mutex
-@@ -127,10 +121,17 @@ func (s *Server) StartEventListeners() {
+@@ -127,10 +127,17 @@ func (s *Server) StartEventListeners() {
  							s.OnStateChange()
  						}
  					case environment.DockerImagePullStatus:
@@ -858,10 +837,10 @@ index d39e664..5e186eb 100644
  					}
 diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
 new file mode 100644
-index 0000000..8530704
+index 0000000..249d77d
 --- /dev/null
 +++ b/sftp/betterconsole_shell.go
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,470 @@
 +package sftp
 +
 +import (
@@ -869,9 +848,10 @@ index 0000000..8530704
 +	"encoding/json"
 +	"fmt"
 +	"io"
-+	"regexp"
 +	"strings"
 +	"sync"
++	"unicode"
++	"unicode/utf8"
 +
 +	"golang.org/x/crypto/ssh"
 +
@@ -884,8 +864,6 @@ index 0000000..8530704
 +
 +const betterConsoleShellCliName = ".wings"
 +const betterConsoleShellMaxLineBytes = 4096
-+
-+var betterConsoleShellAnsiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 +
 +func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Server, handler *Handler, ip string) {
 +	logOutput := make(chan []byte, 128)
@@ -1226,38 +1204,163 @@ index 0000000..8530704
 +}
 +
 +func betterConsoleSanitizeTerminalLine(line string) string {
-+	line = betterConsoleShellAnsiRegex.ReplaceAllString(line, "")
++	var output strings.Builder
++	hasSgr := false
 +
-+	return strings.Map(func(r rune) rune {
-+		if r == '\t' || r >= 32 {
-+			return r
++	for i := 0; i < len(line); {
++		if line[i] == '\x1b' {
++			consumed, sgr := betterConsoleEscapeSequence(line[i:])
++			if consumed == 0 {
++				consumed = 1
++			}
++			if sgr != "" {
++				output.WriteString(sgr)
++				hasSgr = true
++			}
++			i += consumed
++			continue
 +		}
 +
-+		return -1
-+	}, line)
++		r, size := utf8.DecodeRuneInString(line[i:])
++		if r == '\u009b' {
++			consumed, sgr := betterConsoleCsiSequence(line[i+size:])
++			if sgr != "" {
++				output.WriteString(sgr)
++				hasSgr = true
++			}
++			i += size + consumed
++			continue
++		}
++		if betterConsoleIsControlStringStart(r) {
++			i += size + betterConsoleControlStringLength(line[i+size:])
++			continue
++		}
++		if r != utf8.RuneError || size != 1 {
++			if r == '\t' || !unicode.IsControl(r) {
++				output.WriteString(line[i : i+size])
++			}
++		}
++		i += size
++	}
++
++	if hasSgr {
++		output.WriteString("\x1b[0m")
++	}
++	return output.String()
++}
++
++func betterConsoleEscapeSequence(input string) (int, string) {
++	if len(input) < 2 {
++		return len(input), ""
++	}
++
++	switch input[1] {
++	case '[':
++		consumed, sgr := betterConsoleCsiSequence(input[2:])
++		return 2 + consumed, sgr
++	case ']', 'P', 'X', '^', '_':
++		return 2 + betterConsoleControlStringLength(input[2:]), ""
++	default:
++		return 2, ""
++	}
++}
++
++func betterConsoleCsiSequence(input string) (int, string) {
++	for i := 0; i < len(input); i++ {
++		b := input[i]
++		if b < 0x40 || b > 0x7e {
++			continue
++		}
++
++		params := input[:i]
++		if b != 'm' || len(params) > 64 || !betterConsoleValidSgrParams(params) {
++			return i + 1, ""
++		}
++		return i + 1, "\x1b[" + params + "m"
++	}
++
++	return len(input), ""
++}
++
++func betterConsoleValidSgrParams(params string) bool {
++	for i := 0; i < len(params); i++ {
++		if (params[i] < '0' || params[i] > '9') && params[i] != ';' && params[i] != ':' {
++			return false
++		}
++	}
++	return true
++}
++
++func betterConsoleIsControlStringStart(r rune) bool {
++	return r == '\u0090' || r == '\u0098' || r == '\u009d' || r == '\u009e' || r == '\u009f'
++}
++
++func betterConsoleControlStringLength(input string) int {
++	for i := 0; i < len(input); {
++		if input[i] == '\a' {
++			return i + 1
++		}
++		if input[i] == '\x1b' && i+1 < len(input) && input[i+1] == '\\' {
++			return i + 2
++		}
++		r, size := utf8.DecodeRuneInString(input[i:])
++		if r == '\u009c' {
++			return i + size
++		}
++		i += size
++	}
++	return len(input)
 +}
 diff --git a/sftp/server.go b/sftp/server.go
-index e2263a4..0965725 100644
+index e2263a4..c883abe 100644
 --- a/sftp/server.go
 +++ b/sftp/server.go
-@@ -12,6 +12,7 @@ import (
+@@ -12,6 +12,10 @@ import (
  	"regexp"
  	"strconv"
  	"strings"
++	"sync/atomic"
 +	"time"
++	"unicode"
++	"unicode/utf8"
  
  	"emperror.dev/errors"
  	"github.com/apex/log"
-@@ -29,6 +30,8 @@ import (
+@@ -29,6 +33,33 @@ import (
  // server and sending a flood of usernames.
  var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
  
-+const sshHandshakeTimeout = 10 * time.Second
++const (
++	sshHandshakeTimeout             = 10 * time.Second
++	sftpCredentialValidationTimeout = 8 * time.Second
++	maxSftpUsernameBytes            = 255
++	maxSSHSessionChannels           = 8
++)
++
++type sshSessionLimiter struct {
++	active atomic.Int32
++}
++
++func (l *sshSessionLimiter) acquire() bool {
++	for {
++		active := l.active.Load()
++		if active >= maxSSHSessionChannels {
++			return false
++		}
++		if l.active.CompareAndSwap(active, active+1) {
++			return true
++		}
++	}
++}
++
++func (l *sshSessionLimiter) release() {
++	l.active.Add(-1)
++}
 +
  //goland:noinspection GoNameStartsWithPackageName
  type SFTPServer struct {
  	manager  *server.Manager
-@@ -37,6 +40,14 @@ type SFTPServer struct {
+@@ -37,6 +68,14 @@ type SFTPServer struct {
  	Listen   string
  }
  
@@ -1272,7 +1375,7 @@ index e2263a4..0965725 100644
  func New(m *server.Manager) *SFTPServer {
  	cfg := config.Get().System
  	return &SFTPServer{
-@@ -81,6 +92,7 @@ func (c *SFTPServer) Run() error {
+@@ -70,6 +109,7 @@ func (c *SFTPServer) Run() error {
  	conf := &ssh.ServerConfig{
  		Config: ssh.Config{
  			KeyExchanges: []string{
@@ -1280,7 +1383,7 @@ index e2263a4..0965725 100644
  				"curve25519-sha256", "curve25519-sha256@libssh.org",
  				"ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
  				"diffie-hellman-group14-sha256",
-@@ -118,10 +129,12 @@ func (c *SFTPServer) Run() error {
+@@ -118,12 +158,15 @@ func (c *SFTPServer) Run() error {
  // serve the request or not.
  func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
  	// Before beginning a handshake must be performed on the incoming net.Conn
@@ -1292,8 +1395,22 @@ index e2263a4..0965725 100644
 +	_ = conn.SetDeadline(time.Time{})
  	defer sconn.Close()
  	go ssh.DiscardRequests(reqs)
++	var sessions sshSessionLimiter
  
-@@ -138,26 +151,64 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
+ 	for ch := range chans {
+ 		// If its not a session channel we just move on because its not something we
+@@ -132,32 +175,79 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
+ 			_ = ch.Reject(ssh.UnknownChannelType, "unknown channel type")
+ 			continue
+ 		}
++		if !sessions.acquire() {
++			_ = ch.Reject(ssh.ResourceShortage, "too many active session channels")
++			continue
++		}
+ 
+ 		channel, requests, err := ch.Accept()
+ 		if err != nil {
++			sessions.release()
  			continue
  		}
  
@@ -1311,8 +1428,12 @@ index e2263a4..0965725 100644
 -			if err := c.Handle(sconn, srv, channel); err != nil {
 -				return err
 -			}
-+			go c.handleSession(sconn, srv, channel, requests)
++			go func() {
++				defer sessions.release()
++				c.handleSession(sconn, srv, channel, requests)
++			}()
 +		} else {
++			sessions.release()
 +			_ = channel.Close()
  		}
  	}
@@ -1371,10 +1492,23 @@ index e2263a4..0965725 100644
  // Handle spins up a SFTP server instance for the authenticated user's server allowing
  // them access to the underlying filesystem.
  func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel) error {
-@@ -184,6 +235,28 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
- 	return nil
- }
+@@ -168,22 +258,51 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
  
+ 	ctx := srv.Sftp().Context(handler.User())
+ 	rs := sftp.NewRequestServer(channel, handler.Handlers())
++	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
++		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
++		_ = rs.Close()
++	})
++	defer stopRevocation()
++
++	if err := rs.Serve(); err == io.EOF {
++		_ = rs.Close()
++	}
++
++	return nil
++}
++
 +// HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
 +func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
 +	defer channel.Close()
@@ -1383,24 +1517,41 @@ index e2263a4..0965725 100644
 +		_, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
 +		return nil
 +	}
-+
-+	go func() {
++	ctx := srv.Sftp().Context(handler.User())
++	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
++		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active shell session")
++		_ = channel.Close()
++	})
++	defer stopRevocation()
+ 
+ 	go func() {
+-		select {
+-		case <-ctx.Done():
+-			srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
+-			_ = rs.Close()
 +		for req := range requests {
 +			if req.WantReply {
 +				_ = req.Reply(false, nil)
 +			}
-+		}
-+	}()
-+
+ 		}
+ 	}()
+ 
+-	if err := rs.Serve(); err == io.EOF {
+-		_ = rs.Close()
+-	}
 +	c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
-+
-+	return nil
+ 
+ 	return nil
+ }
+ 
++func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func() bool {
++	return context.AfterFunc(ctx, closeSession)
 +}
 +
  // Generates a new ED25519 private key that is used for host authentication when
  // a user connects to the SFTP server.
  func (c *SFTPServer) generateED25519PrivateKey() error {
-@@ -191,7 +264,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
+@@ -191,7 +310,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
  	if err != nil {
  		return errors.Wrap(err, "sftp: failed to generate ED25519 private key")
  	}
@@ -1409,3 +1560,110 @@ index e2263a4..0965725 100644
  		return errors.Wrap(err, "sftp: could not create internal sftp data directory")
  	}
  	o, err := os.OpenFile(c.PrivateKeyPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+@@ -223,12 +342,14 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
+ 	logger := log.WithFields(log.Fields{"subsystem": "sftp", "method": request.Type, "username": request.User, "ip": request.IP})
+ 	logger.Debug("validating credentials for SFTP connection")
+ 
+-	if !validUsernameRegexp.MatchString(request.User) {
++	if !validSftpUsername(request.User) {
+ 		logger.Warn("failed to validate user credentials (invalid format)")
+ 		return nil, &remote.SftpInvalidCredentialsError{}
+ 	}
+ 
+-	resp, err := c.manager.Client().ValidateSftpCredentials(context.Background(), request)
++	ctx, cancel := context.WithTimeout(context.Background(), sftpCredentialValidationTimeout)
++	defer cancel()
++	resp, err := c.manager.Client().ValidateSftpCredentials(ctx, request)
+ 	if err != nil {
+ 		if _, ok := err.(*remote.SftpInvalidCredentialsError); ok {
+ 			logger.Warn("failed to validate user credentials (invalid username or password)")
+@@ -251,6 +372,18 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
+ 	return &permissions, nil
+ }
+ 
++func validSftpUsername(username string) bool {
++	if username == "" || len(username) > maxSftpUsernameBytes || !utf8.ValidString(username) {
++		return false
++	}
++	for _, r := range username {
++		if unicode.IsControl(r) {
++			return false
++		}
++	}
++	return validUsernameRegexp.MatchString(username)
++}
++
+ // PrivateKeyPath returns the path the host private key for this server instance.
+ func (c *SFTPServer) PrivateKeyPath() string {
+ 	return path.Join(c.BasePath, ".sftp/id_ed25519")
+diff --git a/sftp/server_security_test.go b/sftp/server_security_test.go
+new file mode 100644
+index 0000000..a6a08ed
+--- /dev/null
++++ b/sftp/server_security_test.go
+@@ -0,0 +1,65 @@
++package sftp
++
++import (
++	"context"
++	"strings"
++	"testing"
++	"time"
++	"unicode"
++
++	"github.com/pterodactyl/wings/system"
++	"github.com/stretchr/testify/require"
++)
++
++func TestValidSftpUsername(t *testing.T) {
++	require.True(t, validSftpUsername("user.1234abcd"))
++	require.True(t, validSftpUsername("user-name_2.abcdef12"))
++	require.False(t, validSftpUsername("missing-server"))
++	require.False(t, validSftpUsername("user.1234567"))
++	require.False(t, validSftpUsername("user.123456789"))
++	require.False(t, validSftpUsername("user\nname.1234abcd"))
++	require.False(t, validSftpUsername(strings.Repeat("a", maxSftpUsernameBytes)+".1234abcd"))
++	require.False(t, validSftpUsername(string([]byte{'u', 0xff, '.', '1', '2', '3', '4', 'a', 'b', 'c', 'd'})))
++}
++
++func TestSSHSessionLimiter(t *testing.T) {
++	var limiter sshSessionLimiter
++	for range maxSSHSessionChannels {
++		require.True(t, limiter.acquire())
++	}
++	require.False(t, limiter.acquire())
++	limiter.release()
++	require.True(t, limiter.acquire())
++	require.Equal(t, int32(maxSSHSessionChannels), limiter.active.Load())
++}
++
++func TestSftpSessionClosesOnUserRevocation(t *testing.T) {
++	bag := system.NewContextBag(context.Background())
++	closed := make(chan struct{})
++	stop := closeSftpSessionOnRevocation(bag.Context("user-uuid"), func() { close(closed) })
++	defer stop()
++
++	bag.Cancel("user-uuid")
++	select {
++	case <-closed:
++	case <-time.After(time.Second):
++		t.Fatal("session was not closed after user revocation")
++	}
++}
++
++func TestBetterConsolePreservesAnsiColors(t *testing.T) {
++	input := "safe\x1b[31mred\x1b[38;2;10;20;30mtruecolor\x1b[0mtext"
++	require.Equal(t, input+"\x1b[0m", betterConsoleSanitizeTerminalLine(input))
++
++	c1Input := "\u009b38;5;42mcolor"
++	require.Equal(t, "\x1b[38;5;42mcolor\x1b[0m", betterConsoleSanitizeTerminalLine(c1Input))
++}
++
++func TestBetterConsoleStripsUnsafeTerminalControls(t *testing.T) {
++	input := "safe\x1b]52;c;Y2xpcGJvYXJk\aafter\u009d0;title\u009c\x1b[2Jdone\x7f"
++	output := betterConsoleSanitizeTerminalLine(input)
++	require.Equal(t, "safeafterdone", output)
++	for _, r := range output {
++		require.Falsef(t, unicode.IsControl(r), "terminal output contains control rune U+%04X", r)
++	}
++}

@@ -100,7 +100,7 @@ index f411c53..e02d61e 100644
  			}
  		}()
 diff --git a/config/config.go b/config/config.go
-index b133123..501388e 100644
+index b133123..cea2708 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -30,6 +30,8 @@ import (
@@ -605,7 +605,7 @@ index 5d5c872..b33ff4d 100644
 +	TxDropped uint64 `json:"tx_dropped"`
  }
 diff --git a/go.mod b/go.mod
-index 6ed6d60..701a5a9 100644
+index 6ed6d60..3794bdd 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -1,8 +1,6 @@
@@ -618,7 +618,7 @@ index 6ed6d60..701a5a9 100644
  
  require (
  	emperror.dev/errors v0.8.1
-@@ -13,7 +11,7 @@ require (
+@@ -13,9 +11,10 @@ require (
  	github.com/apex/log v1.9.0
  	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
  	github.com/beevik/etree v1.5.0
@@ -626,12 +626,18 @@ index 6ed6d60..701a5a9 100644
 +	github.com/buger/jsonparser v1.1.2
  	github.com/cenkalti/backoff/v4 v4.3.0
  	github.com/creasty/defaults v1.8.0
++	github.com/distribution/reference v0.6.0
  	github.com/docker/docker v28.3.3+incompatible
-@@ -40,11 +38,13 @@ require (
+ 	github.com/docker/go-connections v0.5.0
+ 	github.com/fatih/color v1.18.0
+@@ -39,12 +38,16 @@ require (
+ 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
  	github.com/patrickmn/go-cache v2.1.0+incompatible
  	github.com/pkg/sftp v1.13.10
++	github.com/reearth/ygo v1.31.0
  	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 +	github.com/secsy/goftp v0.0.0-20200609142545-aa2de14babf4
++	github.com/shiv248/operational-transformation-go v1.0.0
  	github.com/spf13/cobra v1.9.1
  	github.com/stretchr/testify v1.10.0
 -	golang.org/x/crypto v0.46.0
@@ -640,11 +646,19 @@ index 6ed6d60..701a5a9 100644
 +	golang.org/x/crypto v0.53.0
 +	golang.org/x/sync v0.21.0
 +	golang.org/x/sys v0.46.0
-+	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af
++	golang.org/x/time v0.10.0
  	gopkg.in/ini.v1 v1.67.0
  	gopkg.in/yaml.v2 v2.4.0
  	gopkg.in/yaml.v3 v3.0.1
-@@ -129,10 +129,9 @@ require (
+@@ -66,7 +69,6 @@ require (
+ 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
+ 	github.com/containerd/log v0.1.0 // indirect
+ 	github.com/davecgh/go-spew v1.1.1 // indirect
+-	github.com/distribution/reference v0.6.0 // indirect
+ 	github.com/docker/go-units v0.5.0 // indirect
+ 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
+ 	github.com/dustin/go-humanize v1.0.1 // indirect
+@@ -129,10 +131,9 @@ require (
  	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
  	golang.org/x/arch v0.15.0 // indirect
  	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
@@ -659,7 +673,7 @@ index 6ed6d60..701a5a9 100644
  	google.golang.org/protobuf v1.36.5 // indirect
  	gotest.tools/v3 v3.0.2 // indirect
 diff --git a/go.sum b/go.sum
-index 9e2465a..e778c3b 100644
+index 9e2465a..3a30f57 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -57,8 +57,8 @@ github.com/bodgit/sevenzip v1.6.1 h1:kikg2pUMYC9ljU7W9SaqHXhym5HyKm8/M/jd31fYan4
@@ -673,16 +687,28 @@ index 9e2465a..e778c3b 100644
  github.com/bytedance/sonic v1.13.1 h1:Jyd5CIvdFnkOWuKXr+wm4Nyk2h0yAFsr8ucJgEasO3g=
  github.com/bytedance/sonic v1.13.1/go.mod h1:o68xyaF9u2gvVBuGHPlUVCy+ZfmNNO5ETf1+KgkJhz4=
  github.com/bytedance/sonic/loader v0.1.1/go.mod h1:ncP89zfokxS5LZrJxl5z0UJcsk4M4yY2JpfqGeCtNLU=
-@@ -323,6 +323,8 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
+@@ -309,6 +309,8 @@ github.com/pkg/sftp v1.13.10/go.mod h1:bJ1a7uDhrX/4OII+agvy28lzRvQrmIQuaHrcI1Hbe
+ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+ github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
++github.com/reearth/ygo v1.31.0 h1:JkPDRZq69nFFIKV1FYZJ9/u86xYg65Bn4r4/YVqZZIU=
++github.com/reearth/ygo v1.31.0/go.mod h1:QN5MsM+QBk9cP6Sr/iaKlkJtnJ9Fo0fT+MJqSw2xPUA=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
+ github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
+@@ -323,7 +325,11 @@ github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQD
  github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd/go.mod h1:hPqNNc0+uJM6H+SuU8sEs5K5IQeKccPqeSjfgcKGgPk=
  github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDjyw0ULyrTYWeN0UNCCkmCWfjPnIA2W6oviI=
  github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
 +github.com/secsy/goftp v0.0.0-20200609142545-aa2de14babf4 h1:PT+ElG/UUFMfqy5HrxJxNzj3QBOf7dZwupeVC+mG1Lo=
 +github.com/secsy/goftp v0.0.0-20200609142545-aa2de14babf4/go.mod h1:MnkX001NG75g3p8bhFycnyIjeQoOjGL6CEIsdE/nKSY=
  github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
++github.com/shiv248/operational-transformation-go v1.0.0 h1:ahbdsqDStbvaOYX8Jhqx7zqpSuL00SoSrI9NC5EdeiE=
++github.com/shiv248/operational-transformation-go v1.0.0/go.mod h1:m9K4grcjjhDlIcXZlqnHVnfaysxUKOhuJ4qZiUPE1ME=
  github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
  github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
-@@ -418,8 +420,8 @@ golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad/go.mod h1:yigFU9vqHzYiE8U
+ github.com/smartystreets/assertions v1.0.0/go.mod h1:kHHU4qYBaI3q23Pp3VPrmWhuIUrLW/7eUrw0BU5VaoM=
+@@ -418,8 +424,8 @@ golang.org/x/crypto v0.0.0-20190927123631-a832865fa7ad/go.mod h1:yigFU9vqHzYiE8U
  golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550/go.mod h1:yigFU9vqHzYiE8UmvKecakEJjdnWj3jj499lnFckfCI=
  golang.org/x/crypto v0.0.0-20200622213623-75b288015ac9/go.mod h1:LzIPMQfyMNhhGPhUkYOs5KpL4U8rLKemX1yGLhDgUto=
  golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5ydBHafDWAxML/pGHZbMvKqRZ5+Abc=
@@ -693,7 +719,7 @@ index 9e2465a..e778c3b 100644
  golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
  golang.org/x/exp v0.0.0-20190306152737-a1d7652674e8/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
  golang.org/x/exp v0.0.0-20190510132918-efd6b22b2522/go.mod h1:ZjyILWgesfNpC6sMxTJOJm9Kp84zZh5NQWvqDGG3Qr8=
-@@ -449,8 +451,8 @@ golang.org/x/mod v0.1.1-0.20191105210325-c90efee705ee/go.mod h1:QqPTAvyqsEbceGzB
+@@ -449,8 +455,8 @@ golang.org/x/mod v0.1.1-0.20191105210325-c90efee705ee/go.mod h1:QqPTAvyqsEbceGzB
  golang.org/x/mod v0.2.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
  golang.org/x/mod v0.3.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
  golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
@@ -704,7 +730,7 @@ index 9e2465a..e778c3b 100644
  golang.org/x/net v0.0.0-20180724234803-3673e40ba225/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
  golang.org/x/net v0.0.0-20180826012351-8a410e7b638d/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
  golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
-@@ -470,8 +472,8 @@ golang.org/x/net v0.0.0-20201021035429-f5854403a974/go.mod h1:sp8m0HH+o8qH0wwXwY
+@@ -470,8 +476,8 @@ golang.org/x/net v0.0.0-20201021035429-f5854403a974/go.mod h1:sp8m0HH+o8qH0wwXwY
  golang.org/x/net v0.0.0-20210226172049-e18ecbb05110/go.mod h1:m0MpNAwzfU5UDzcl9v0D8zg8gWTRqZa9RBIspLL5mdg=
  golang.org/x/net v0.0.0-20220722155237-a158d28d115b/go.mod h1:XRhObCWvk6IyKnWLug+ECip1KBveYUHfp+8e9klMJ9c=
  golang.org/x/net v0.7.0/go.mod h1:2Tu9+aMcznHK/AK1HMvgo6xiTLG5rD5rZLDS+rp2Bjs=
@@ -715,7 +741,7 @@ index 9e2465a..e778c3b 100644
  golang.org/x/oauth2 v0.0.0-20180821212333-d2e6202438be/go.mod h1:N/0e6XlmueqKjAGxoOufVs8QHGRruUQn6yWY3a++T0U=
  golang.org/x/oauth2 v0.0.0-20190226205417-e64efc72b421/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
  golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45/go.mod h1:gOpvHmFTYa4IltrdGE7lF6nIHvwfUNPOp7c8zoXwtLw=
-@@ -485,8 +487,8 @@ golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJ
+@@ -485,8 +491,8 @@ golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJ
  golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
  golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
  golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
@@ -726,7 +752,7 @@ index 9e2465a..e778c3b 100644
  golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
  golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
  golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
-@@ -510,13 +512,13 @@ golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBc
+@@ -510,13 +516,13 @@ golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8/go.mod h1:oPkhp1MJrh7nUepCBc
  golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
  golang.org/x/sys v0.5.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
  golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
@@ -744,7 +770,7 @@ index 9e2465a..e778c3b 100644
  golang.org/x/text v0.0.0-20170915032832-14c0d48ead0c/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
  golang.org/x/text v0.3.0/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
  golang.org/x/text v0.3.1-0.20180807135948-17ff2d5776d2/go.mod h1:NqM8EUOU14njkJ3fqMW+pc6Ldnwhi/IjpwHt7yyuwOQ=
-@@ -525,8 +527,8 @@ golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+@@ -525,12 +531,12 @@ golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
  golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
  golang.org/x/text v0.4.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
  golang.org/x/text v0.7.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
@@ -754,8 +780,14 @@ index 9e2465a..e778c3b 100644
 +golang.org/x/text v0.38.0/go.mod h1:YXZt3QhHUKYT53r2lLKFIVi6Ao1jdzrTR/KQ09qyxF4=
  golang.org/x/time v0.0.0-20181108054448-85acf8d2951c/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
  golang.org/x/time v0.0.0-20190308202827-9d24e82272b4/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
- golang.org/x/time v0.0.0-20220922220347-f3bd1da661af h1:Yx9k8YCG3dvF87UAn2tu2HQLf2dt/eR1bXxpLMWeH+Y=
-@@ -560,8 +562,8 @@ golang.org/x/tools v0.0.0-20200212150539-ea181f53ac56/go.mod h1:TB2adYChydJhpapK
+-golang.org/x/time v0.0.0-20220922220347-f3bd1da661af h1:Yx9k8YCG3dvF87UAn2tu2HQLf2dt/eR1bXxpLMWeH+Y=
+-golang.org/x/time v0.0.0-20220922220347-f3bd1da661af/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
++golang.org/x/time v0.10.0 h1:3usCWA8tQn0L8+hFJQNgzpWbd89begxN66o1Ojdn5L4=
++golang.org/x/time v0.10.0/go.mod h1:3BpzKBy/shNhVucY/MWOyx10tF3SFh9QdLuxbVysPQM=
+ golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+ golang.org/x/tools v0.0.0-20190114222345-bf090417da8b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
+ golang.org/x/tools v0.0.0-20190226205152-f727befe758c/go.mod h1:9Yl7xja0Znq3iFh3HoIrodX9oNMXvdceNzlUR8zjMvY=
+@@ -560,8 +566,8 @@ golang.org/x/tools v0.0.0-20200212150539-ea181f53ac56/go.mod h1:TB2adYChydJhpapK
  golang.org/x/tools v0.0.0-20200619180055-7c47624df98f/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
  golang.org/x/tools v0.0.0-20210106214847-113979e3529a/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
  golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc=
@@ -1026,7 +1058,7 @@ index 0000000..fea5c8d
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac760..72f457b 100644
+index bdac760..82f4eea 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -1037,7 +1069,15 @@ index bdac760..72f457b 100644
  	router.POST("/upload/file", postServerUploadFiles)
  
  	// This route is special it sits above all the other requests because we are
-@@ -75,10 +76,18 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -63,6 +64,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 	protected := router.Use(middleware.RequireAuthorization())
+ 	protected.POST("/api/update", postUpdateConfiguration)
+ 	protected.GET("/api/system", getSystemInformation)
++	protected.GET("/api/system/config", getSystemConfiguration)
+ 	protected.GET("/api/servers", getAllServers)
+ 	protected.POST("/api/servers", postCreateServer)
+ 	protected.DELETE("/api/transfers/:server", deleteTransfer)
+@@ -75,10 +77,18 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  	{
  		server.GET("", getServer)
  		server.DELETE("", deleteServer)
@@ -1057,7 +1097,7 @@ index bdac760..72f457b 100644
  		server.POST("/install", postServerInstall)
  		server.POST("/reinstall", postServerReinstall)
  		server.POST("/sync", postServerSync)
-@@ -92,6 +101,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -92,6 +102,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  		files := server.Group("/files")
  		{
  			files.GET("/contents", getServerFileContents)
@@ -1070,7 +1110,7 @@ index bdac760..72f457b 100644
  			files.GET("/list-directory", getServerListDirectory)
  			files.PUT("/rename", putServerRenameFiles)
  			files.POST("/copy", postServerCopyFile)
-@@ -101,6 +116,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -101,6 +117,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  			files.POST("/compress", postServerCompressFiles)
  			files.POST("/decompress", postServerDecompressFiles)
  			files.POST("/chmod", postServerChmodFile)
@@ -4414,6 +4454,145 @@ index 0000000..cc79320
 +		ExitCode: inspect.ExitCode,
 +	}, nil
 +}
+diff --git a/router/router_server_ws.go b/router/router_server_ws.go
+index b0ba3a4..a5e3bb0 100644
+--- a/router/router_server_ws.go
++++ b/router/router_server_ws.go
+@@ -113,6 +113,15 @@ func getServerWebsocket(c *gin.Context) {
+ 	// 10 per 200ms).
+ 	var throttled bool
+ 	rl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)
++	handleMessage := func(msg websocket.Message) {
++		if err := handler.HandleInbound(ctx, msg); err != nil {
++			if errors.Is(err, server.ErrSuspended) {
++				cancel()
++			} else {
++				_ = handler.SendErrorJson(msg, err)
++			}
++		}
++	}
+ 
+ 	for {
+ 		t, p, err := handler.Connection.ReadMessage()
+@@ -149,14 +158,12 @@ func getServerWebsocket(c *gin.Context) {
+ 			continue
+ 		}
+ 
+-		go func(msg websocket.Message) {
+-			if err := handler.HandleInbound(ctx, msg); err != nil {
+-				if errors.Is(err, server.ErrSuspended) {
+-					cancel()
+-				} else {
+-					_ = handler.SendErrorJson(msg, err)
+-				}
+-			}
+-		}(j)
++		// Authentication and collaboration messages are stateful protocols. Keep
++		// their WebSocket wire order instead of racing them in separate goroutines.
++		if j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {
++			handleMessage(j)
++			continue
++		}
++		go handleMessage(j)
+ 	}
+ }
+diff --git a/router/router_system_config.go b/router/router_system_config.go
+new file mode 100644
+index 0000000..2453ef3
+--- /dev/null
++++ b/router/router_system_config.go
+@@ -0,0 +1,24 @@
++package router
++
++import (
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++	ws "github.com/pterodactyl/wings/router/websocket"
++)
++
++type systemConfigurationResponse struct {
++	System struct {
++		FileCollaboration struct {
++			Enabled bool `json:"enabled"`
++		} `json:"file_collaboration"`
++	} `json:"system"`
++}
++
++// getSystemConfiguration reports optional daemon capabilities to the Panel.
++// This route is protected by the same daemon-token middleware as /api/system.
++func getSystemConfiguration(c *gin.Context) {
++	var response systemConfigurationResponse
++	response.System.FileCollaboration.Enabled = ws.NativeFileCollaborationEnabled
++	c.JSON(http.StatusOK, response)
++}
+diff --git a/router/router_system_config_test.go b/router/router_system_config_test.go
+new file mode 100644
+index 0000000..e69f891
+--- /dev/null
++++ b/router/router_system_config_test.go
+@@ -0,0 +1,61 @@
++package router
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/gin-gonic/gin"
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/server"
++	"github.com/stretchr/testify/require"
++)
++
++func TestConfigureRegistersSystemConfigurationRoute(t *testing.T) {
++	r := Configure(server.NewEmptyManager(nil), nil)
++	for _, route := range r.Routes() {
++		if route.Method == http.MethodGet && route.Path == "/api/system/config" {
++			return
++		}
++	}
++	t.Fatal("GET /api/system/config is not registered")
++}
++
++func TestSystemConfigurationCapabilityRoute(t *testing.T) {
++	gin.SetMode(gin.TestMode)
++	previous := config.Get()
++	next := *previous
++	next.AuthenticationToken = "native-collaboration-test-token"
++	next.Token.Token = "native-collaboration-test-token"
++	config.Set(&next)
++	t.Cleanup(func() { config.Set(previous) })
++
++	r := gin.New()
++	protected := r.Group("/api", middleware.RequireAuthorization())
++	protected.GET("/system/config", getSystemConfiguration)
++
++	request := func(token string) *httptest.ResponseRecorder {
++		w := httptest.NewRecorder()
++		req := httptest.NewRequest(http.MethodGet, "/api/system/config", nil)
++		if token != "" {
++			req.Header.Set("Authorization", "Bearer "+token)
++		}
++		r.ServeHTTP(w, req)
++		return w
++	}
++
++	require.Equal(t, http.StatusUnauthorized, request("").Code)
++	require.Equal(t, http.StatusForbidden, request("wrong-token").Code)
++
++	w := request("native-collaboration-test-token")
++	require.Equal(t, http.StatusOK, w.Code)
++	var response map[string]any
++	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
++	require.Equal(t, map[string]any{
++		"system": map[string]any{
++			"file_collaboration": map[string]any{"enabled": true},
++		},
++	}, response)
++}
 diff --git a/router/router_transfer.go b/router/router_transfer.go
 index 0a635ef..7593a8c 100644
 --- a/router/router_transfer.go
@@ -4451,6 +4630,19 @@ index 6728efd..a441d6b 100644
  
  	return _tokens
  }
+diff --git a/router/tokens/websocket.go b/router/tokens/websocket.go
+index 8ad3fb5..8b5bad1 100644
+--- a/router/tokens/websocket.go
++++ b/router/tokens/websocket.go
+@@ -55,6 +55,8 @@ type WebsocketPayload struct {
+ 	Scoped
+ 
+ 	UserUUID    string   `json:"user_uuid"`
++	UserName    string   `json:"user_name,omitempty"`
++	UserAvatar  *string  `json:"user_avatar,omitempty"`
+ 	ServerUUID  string   `json:"server_uuid"`
+ 	Permissions []string `json:"permissions"`
+ }
 diff --git a/router/websocket/betterconsole_events.go b/router/websocket/betterconsole_events.go
 new file mode 100644
 index 0000000..3fa992f
@@ -4475,15 +4667,18 @@ index 0000000..3fa992f
 +}
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 0000000..f2c5845
+index 0000000..e74ea9c
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
-@@ -0,0 +1,1124 @@
+@@ -0,0 +1,1269 @@
 +package websocket
 +
 +import (
 +	"context"
 +	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
 +	pathpkg "path"
 +	"strings"
 +	"sync"
@@ -4528,6 +4723,8 @@ index 0000000..f2c5845
 +	betterFilesCollabMaxPatchChanges = 64
 +	betterFilesCollabMaxPathBytes    = 4096
 +	betterFilesCollabMaxCursorValue  = 1000000
++	betterFilesCollabMaxDocuments    = 32
++	betterFilesCollabMaxSessionBytes = 32 * 1024 * 1024
 +)
 +
 +type betterFilesCollabUser struct {
@@ -4540,7 +4737,7 @@ index 0000000..f2c5845
 +type betterFilesCollabSessionInfo struct {
 +	Code         string `json:"code"`
 +	ServerUUID   string `json:"server_uuid"`
-+	OwnerUUID   string `json:"owner_uuid"`
++	OwnerUUID    string `json:"owner_uuid"`
 +	Mode         string `json:"mode"`
 +	MaxUsers     int    `json:"max_users"`
 +	MaxFileBytes int    `json:"max_file_bytes"`
@@ -4650,12 +4847,13 @@ index 0000000..f2c5845
 +	sync.RWMutex
 +	Code         string
 +	ServerUUID   string
-+	OwnerUUID   string
++	OwnerUUID    string
 +	Mode         string
 +	MaxUsers     int
 +	MaxFileBytes int
 +	ExpiresAt    time.Time
 +	Members      map[string]*betterFilesCollabMember
++	Documents    map[string]*betterFilesCollabDocument
 +}
 +
 +var (
@@ -4666,10 +4864,9 @@ index 0000000..f2c5845
 +// HandleBetterFilesCollaboration handles Better Files live collaboration socket messages.
 +// Add this near the top of Handler.HandleInbound after TokenValid succeeds:
 +//
-+//     if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
-+//         return err
-+//     }
-+//
++//	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
++//	    return err
++//	}
 +func (h *Handler) HandleBetterFilesCollaboration(ctx context.Context, m Message) (bool, error) {
 +	switch m.Event {
 +	case BetterFilesCollabJoinEvent:
@@ -4800,6 +4997,13 @@ index 0000000..f2c5845
 +	session.Unlock()
 +
 +	betterFilesCollabBroadcastFileUsers(session)
++	if open {
++		document, err := h.betterFilesCollabDocumentFor(session, path)
++		if err != nil {
++			return h.betterFilesCollabError(err.Error())
++		}
++		return h.betterFilesCollabSendDocument(session, document, path)
++	}
 +	return nil
 +}
 +
@@ -4852,12 +5056,12 @@ index 0000000..f2c5845
 +	}
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPresenceOut, map[string]any{
-+		"code": payload.Code,
-+		"path": payload.Path,
-+		"line": payload.Line,
-+		"column": payload.Column,
++		"code":      payload.Code,
++		"path":      payload.Path,
++		"line":      payload.Line,
++		"column":    payload.Column,
 +		"selection": betterFilesCollabSafeText(payload.Selection, 120),
-+		"user": member.User,
++		"user":      member.User,
 +	})
 +	return nil
 +}
@@ -4914,16 +5118,47 @@ index 0000000..f2c5845
 +	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
 +		betterFilesCollabBroadcastFileUsers(session)
 +	}
++	document, err := h.betterFilesCollabDocumentFor(session, payload.Path)
++	if err != nil {
++		return h.betterFilesCollabError(err.Error())
++	}
++
++	current, _ := document.snapshot()
++	availableSessionBytes := betterFilesCollabMaxSessionBytes - (betterFilesCollabSessionDocumentBytes(session) - len(current))
++	if availableSessionBytes < maxPayloadBytes {
++		maxPayloadBytes = availableSessionBytes
++	}
++	if maxPayloadBytes <= 0 {
++		return h.betterFilesCollabError("collaboration session document memory limit reached")
++	}
++
++	result, err := document.applyMonacoChanges(payload.Changes, maxPayloadBytes)
++	if err != nil {
++		if errors.Is(err, errBetterFilesCollabBaseNotFound) {
++			return h.betterFilesCollabSendDocument(session, document, payload.Path)
++		}
++		if errors.Is(err, errBetterFilesCollabTooLarge) {
++			return h.betterFilesCollabError("collaboration document is too large")
++		}
++		return h.betterFilesCollabError("invalid collaboration patch")
++	}
++	if len(result.Changes) == 0 {
++		return h.betterFilesCollabSendDocument(session, document, payload.Path)
++	}
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabPatchOut, map[string]any{
-+		"code":    payload.Code,
-+		"path":    payload.Path,
-+		"changes": payload.Changes,
-+		"version": payload.Version,
-+		"line":    payload.Line,
-+		"column":  payload.Column,
-+		"user":    member.User,
++		"code":     payload.Code,
++		"path":     payload.Path,
++		"changes":  result.Changes,
++		"version":  payload.Version,
++		"revision": result.Revision,
++		"line":     payload.Line,
++		"column":   payload.Column,
++		"user":     member.User,
 +	})
++	if result.Transformed {
++		return h.betterFilesCollabSendDocument(session, document, payload.Path)
++	}
 +	return nil
 +}
 +
@@ -4964,15 +5199,29 @@ index 0000000..f2c5845
 +	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
 +		betterFilesCollabBroadcastFileUsers(session)
 +	}
++	document, err := h.betterFilesCollabDocumentFor(session, payload.Path)
++	if err != nil {
++		return h.betterFilesCollabError(err.Error())
++	}
++	current, revision := document.snapshot()
++	if current != payload.Content {
++		if revision == 0 && len(betterFilesCollabUsersForPath(session, payload.Path, h.Uuid().String())) == 0 {
++			document.replace(payload.Content)
++			current, revision = document.snapshot()
++		} else {
++			return h.betterFilesCollabSendDocument(session, document, payload.Path)
++		}
++	}
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabSnapshotOut, map[string]any{
-+		"code": payload.Code,
-+		"path": payload.Path,
-+		"content": payload.Content,
-+		"version": payload.Version,
-+		"line": payload.Line,
-+		"column": payload.Column,
-+		"user": member.User,
++		"code":     payload.Code,
++		"path":     payload.Path,
++		"content":  current,
++		"version":  payload.Version,
++		"revision": revision,
++		"line":     payload.Line,
++		"column":   payload.Column,
++		"user":     member.User,
 +	})
 +	return nil
 +}
@@ -5014,13 +5263,20 @@ index 0000000..f2c5845
 +	if betterFilesCollabSetMemberPath(session, member, payload.Path) {
 +		betterFilesCollabBroadcastFileUsers(session)
 +	}
++	document, err := h.betterFilesCollabDocumentFor(session, payload.Path)
++	if err != nil {
++		return h.betterFilesCollabError(err.Error())
++	}
++	document.replace(payload.Content)
++	_, revision := document.snapshot()
 +
 +	betterFilesCollabBroadcast(session, h.Uuid().String(), betterFilesCollabFileSavedOut, map[string]any{
-+		"code": payload.Code,
-+		"path": payload.Path,
-+		"content": payload.Content,
-+		"version": payload.Version,
-+		"user": member.User,
++		"code":     payload.Code,
++		"path":     payload.Path,
++		"content":  payload.Content,
++		"version":  payload.Version,
++		"revision": revision,
++		"user":     member.User,
 +	})
 +	return nil
 +}
@@ -5046,10 +5302,10 @@ index 0000000..f2c5845
 +	}
 +
 +	return h.betterFilesCollabSend(betterFilesCollabFileCheckResultEvent, map[string]any{
-+		"path": path,
++		"path":       path,
 +		"request_id": betterFilesCollabSafeText(payload.RequestID, 80),
-+		"conflicts": conflicts,
-+		"users": users,
++		"conflicts":  conflicts,
++		"users":      users,
 +	})
 +}
 +
@@ -5095,9 +5351,9 @@ index 0000000..f2c5845
 +		}
 +
 +		betterFilesCollabBroadcast(session, "", betterFilesCollabExternalEditOut, map[string]any{
-+			"code": session.Code,
-+			"path": path,
-+			"user": user,
++			"code":          session.Code,
++			"path":          path,
++			"user":          user,
 +			"editing_users": users,
 +		})
 +	}
@@ -5189,7 +5445,7 @@ index 0000000..f2c5845
 +	return betterFilesCollabSessionInfo{
 +		Code:         code,
 +		ServerUUID:   token.ServerUUID,
-+		OwnerUUID:   token.OwnerUUID,
++		OwnerUUID:    token.OwnerUUID,
 +		Mode:         mode,
 +		MaxUsers:     maxUsers,
 +		MaxFileBytes: maxFileBytes,
@@ -5232,16 +5488,97 @@ index 0000000..f2c5845
 +	session := &betterFilesCollabSession{
 +		Code:         code,
 +		ServerUUID:   info.ServerUUID,
-+		OwnerUUID:   info.OwnerUUID,
++		OwnerUUID:    info.OwnerUUID,
 +		Mode:         mode,
 +		MaxUsers:     maxUsers,
 +		MaxFileBytes: maxFileBytes,
 +		ExpiresAt:    time.Unix(info.ExpiresAt, 0),
 +		Members:      map[string]*betterFilesCollabMember{},
++		Documents:    map[string]*betterFilesCollabDocument{},
 +	}
 +	betterFilesCollabSessions[code] = session
 +
 +	return session
++}
++
++func (h *Handler) betterFilesCollabDocumentFor(session *betterFilesCollabSession, path string) (*betterFilesCollabDocument, error) {
++	session.RLock()
++	document := session.Documents[path]
++	session.RUnlock()
++	if document != nil {
++		return document, nil
++	}
++
++	file, stat, err := h.server.Filesystem().File(path)
++	if err != nil {
++		return nil, fmt.Errorf("could not open collaboration file")
++	}
++	defer file.Close()
++	if stat.IsDir() {
++		return nil, fmt.Errorf("collaboration path is not a file")
++	}
++
++	maxBytes := session.MaxFileBytes
++	if maxBytes <= 0 || maxBytes > betterFilesCollabMaxPayloadBytes {
++		maxBytes = betterFilesCollabMaxPayloadBytes
++	}
++	if stat.Size() > int64(maxBytes) {
++		return nil, fmt.Errorf("collaboration file is too large")
++	}
++	content, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
++	if err != nil {
++		return nil, fmt.Errorf("could not read collaboration file")
++	}
++	if len(content) > maxBytes || !utf8.Valid(content) {
++		return nil, fmt.Errorf("collaboration file is too large or is not UTF-8 text")
++	}
++
++	document = newBetterFilesCollabDocument(string(content))
++	session.Lock()
++	defer session.Unlock()
++	if existing := session.Documents[path]; existing != nil {
++		return existing, nil
++	}
++	if len(session.Documents) >= betterFilesCollabMaxDocuments {
++		return nil, fmt.Errorf("collaboration session has too many open documents")
++	}
++	currentBytes := 0
++	for _, existing := range session.Documents {
++		existingContent, _ := existing.snapshot()
++		currentBytes += len(existingContent)
++	}
++	if currentBytes+len(content) > betterFilesCollabMaxSessionBytes {
++		return nil, fmt.Errorf("collaboration session document memory limit reached")
++	}
++	session.Documents[path] = document
++	return document, nil
++}
++
++func (h *Handler) betterFilesCollabSendDocument(session *betterFilesCollabSession, document *betterFilesCollabDocument, path string) error {
++	content, revision := document.snapshot()
++	return h.betterFilesCollabSend(betterFilesCollabSnapshotOut, map[string]any{
++		"code":     session.Code,
++		"path":     path,
++		"content":  content,
++		"version":  revision + 1,
++		"revision": revision,
++	})
++}
++
++func betterFilesCollabSessionDocumentBytes(session *betterFilesCollabSession) int {
++	session.RLock()
++	documents := make([]*betterFilesCollabDocument, 0, len(session.Documents))
++	for _, document := range session.Documents {
++		documents = append(documents, document)
++	}
++	session.RUnlock()
++
++	total := 0
++	for _, document := range documents {
++		content, _ := document.snapshot()
++		total += len(content)
++	}
++	return total
 +}
 +
 +func betterFilesCollabMemberFor(h *Handler, code string) (*betterFilesCollabSession, *betterFilesCollabMember) {
@@ -5434,9 +5771,9 @@ index 0000000..f2c5845
 +func betterFilesCollabBroadcastMembers(session *betterFilesCollabSession) {
 +	members := betterFilesCollabMembers(session)
 +	betterFilesCollabBroadcast(session, "", betterFilesCollabMembersEvent, map[string]any{
-+		"code": session.Code,
++		"code":    session.Code,
 +		"members": members,
-+		"mode": session.Mode,
++		"mode":    session.Mode,
 +	})
 +}
 +
@@ -5453,7 +5790,7 @@ index 0000000..f2c5845
 +	session.RUnlock()
 +
 +	betterFilesCollabBroadcast(session, "", betterFilesCollabFileUsersEvent, map[string]any{
-+		"code": session.Code,
++		"code":  session.Code,
 +		"files": fileUsers,
 +	})
 +}
@@ -5603,8 +5940,1357 @@ index 0000000..f2c5845
 +	}
 +	return value
 +}
+diff --git a/router/websocket/betterfiles_collaboration_ot.go b/router/websocket/betterfiles_collaboration_ot.go
+new file mode 100644
+index 0000000..b9c6811
+--- /dev/null
++++ b/router/websocket/betterfiles_collaboration_ot.go
+@@ -0,0 +1,292 @@
++package websocket
++
++import (
++	"errors"
++	"fmt"
++	"sort"
++	"sync"
++	"unicode/utf16"
++	"unicode/utf8"
++
++	ot "github.com/shiv248/operational-transformation-go"
++)
++
++const betterFilesCollabHistoryLimit = 128
++
++var (
++	errBetterFilesCollabBaseNotFound = errors.New("collaboration patch base is no longer available")
++	errBetterFilesCollabInvalidEdit  = errors.New("invalid collaboration text edit")
++	errBetterFilesCollabTooLarge     = errors.New("collaboration document is too large")
++)
++
++type betterFilesCollabDocument struct {
++	sync.Mutex
++	Content  string
++	Revision int64
++	History  []betterFilesCollabOperation
++}
++
++type betterFilesCollabOperation struct {
++	Revision   int64
++	BaseHash   string
++	BaseLength int
++	TargetHash string
++	TargetLen  int
++	Forward    *ot.OperationSeq
++	Inverse    *ot.OperationSeq
++}
++
++type betterFilesCollabApplyResult struct {
++	Changes     []betterFilesCollabTextEdit
++	Revision    int64
++	Transformed bool
++}
++
++func newBetterFilesCollabDocument(content string) *betterFilesCollabDocument {
++	return &betterFilesCollabDocument{Content: content}
++}
++
++func (d *betterFilesCollabDocument) replace(content string) {
++	d.Lock()
++	d.Content = content
++	d.Revision++
++	d.History = nil
++	d.Unlock()
++}
++
++func (d *betterFilesCollabDocument) snapshot() (string, int64) {
++	d.Lock()
++	defer d.Unlock()
++	return d.Content, d.Revision
++}
++
++func (d *betterFilesCollabDocument) applyMonacoChanges(changes []betterFilesCollabTextEdit, maxBytes int) (betterFilesCollabApplyResult, error) {
++	d.Lock()
++	defer d.Unlock()
++
++	baseRevision, baseContent, err := d.resolveBase(changes)
++	if err != nil {
++		return betterFilesCollabApplyResult{}, err
++	}
++
++	incoming, err := betterFilesCollabChangesToOperation(baseContent, changes)
++	if err != nil {
++		return betterFilesCollabApplyResult{}, err
++	}
++
++	for _, historical := range d.History {
++		if historical.Revision <= baseRevision {
++			continue
++		}
++
++		transformed, _, transformErr := incoming.Transform(historical.Forward)
++		if transformErr != nil {
++			return betterFilesCollabApplyResult{}, fmt.Errorf("transform collaboration patch: %w", transformErr)
++		}
++		incoming = transformed
++	}
++
++	current := d.Content
++	normalized, err := betterFilesCollabOperationToChanges(current, incoming)
++	if err != nil {
++		return betterFilesCollabApplyResult{}, err
++	}
++	next, err := incoming.Apply(current)
++	if err != nil {
++		return betterFilesCollabApplyResult{}, fmt.Errorf("apply collaboration patch: %w", err)
++	}
++	if maxBytes > 0 && len(next) > maxBytes {
++		return betterFilesCollabApplyResult{}, errBetterFilesCollabTooLarge
++	}
++
++	d.Revision++
++	d.History = append(d.History, betterFilesCollabOperation{
++		Revision:   d.Revision,
++		BaseHash:   betterFilesCollabContentHash(current),
++		BaseLength: betterFilesCollabUTF16Len(current),
++		TargetHash: betterFilesCollabContentHash(next),
++		TargetLen:  betterFilesCollabUTF16Len(next),
++		Forward:    incoming,
++		Inverse:    incoming.Invert(current),
++	})
++	if len(d.History) > betterFilesCollabHistoryLimit {
++		d.History = append([]betterFilesCollabOperation(nil), d.History[len(d.History)-betterFilesCollabHistoryLimit:]...)
++	}
++	d.Content = next
++
++	return betterFilesCollabApplyResult{
++		Changes:     normalized,
++		Revision:    d.Revision,
++		Transformed: baseRevision != d.Revision-1,
++	}, nil
++}
++
++func (d *betterFilesCollabDocument) resolveBase(changes []betterFilesCollabTextEdit) (int64, string, error) {
++	if len(changes) == 0 {
++		return 0, "", errBetterFilesCollabInvalidEdit
++	}
++
++	baseHash := changes[0].BaseHash
++	baseLength := changes[0].BaseLength
++	for _, change := range changes[1:] {
++		if change.BaseHash != baseHash || change.BaseLength != baseLength {
++			return 0, "", errBetterFilesCollabInvalidEdit
++		}
++	}
++
++	// Older clients omit the base fingerprint for larger files. Those edits can
++	// only be applied to the current revision because a stale base is ambiguous.
++	if baseHash == "" {
++		return d.Revision, d.Content, nil
++	}
++	if baseLength < 0 {
++		return 0, "", errBetterFilesCollabInvalidEdit
++	}
++	if betterFilesCollabContentHash(d.Content) == baseHash && betterFilesCollabUTF16Len(d.Content) == baseLength {
++		return d.Revision, d.Content, nil
++	}
++
++	baseRevision := int64(-1)
++	for _, historical := range d.History {
++		if historical.BaseHash == baseHash && historical.BaseLength == baseLength {
++			baseRevision = historical.Revision - 1
++			break
++		}
++		if historical.TargetHash == baseHash && historical.TargetLen == baseLength {
++			baseRevision = historical.Revision
++			break
++		}
++	}
++	if baseRevision < 0 {
++		return 0, "", errBetterFilesCollabBaseNotFound
++	}
++
++	baseContent := d.Content
++	for i := len(d.History) - 1; i >= 0 && d.History[i].Revision > baseRevision; i-- {
++		var err error
++		baseContent, err = d.History[i].Inverse.Apply(baseContent)
++		if err != nil {
++			return 0, "", fmt.Errorf("reconstruct collaboration patch base: %w", err)
++		}
++	}
++	if betterFilesCollabContentHash(baseContent) != baseHash || betterFilesCollabUTF16Len(baseContent) != baseLength {
++		return 0, "", errBetterFilesCollabBaseNotFound
++	}
++
++	return baseRevision, baseContent, nil
++}
++
++func betterFilesCollabChangesToOperation(content string, changes []betterFilesCollabTextEdit) (*ot.OperationSeq, error) {
++	if !utf8.ValidString(content) || len(changes) == 0 {
++		return nil, errBetterFilesCollabInvalidEdit
++	}
++
++	sorted := append([]betterFilesCollabTextEdit(nil), changes...)
++	sort.SliceStable(sorted, func(i, j int) bool {
++		return sorted[i].RangeOffset < sorted[j].RangeOffset
++	})
++
++	runes := []rune(content)
++	prefix := betterFilesCollabUTF16Prefix(runes)
++	op := ot.WithCapacity(len(sorted)*3 + 1)
++	cursor := 0
++	for _, change := range sorted {
++		if change.RangeOffset < 0 || change.RangeLength < 0 || !utf8.ValidString(change.Text) {
++			return nil, errBetterFilesCollabInvalidEdit
++		}
++		start, ok := betterFilesCollabRuneOffset(prefix, change.RangeOffset)
++		if !ok {
++			return nil, errBetterFilesCollabInvalidEdit
++		}
++		end, ok := betterFilesCollabRuneOffset(prefix, change.RangeOffset+change.RangeLength)
++		if !ok || start < cursor || end < start {
++			return nil, errBetterFilesCollabInvalidEdit
++		}
++
++		op.Retain(uint64(start - cursor))
++		op.Delete(uint64(end - start))
++		op.Insert(change.Text)
++		cursor = end
++	}
++	op.Retain(uint64(len(runes) - cursor))
++	return op, nil
++}
++
++func betterFilesCollabOperationToChanges(content string, operation *ot.OperationSeq) ([]betterFilesCollabTextEdit, error) {
++	if operation == nil || operation.BaseLen() != utf8.RuneCountInString(content) {
++		return nil, errBetterFilesCollabInvalidEdit
++	}
++
++	runes := []rune(content)
++	prefix := betterFilesCollabUTF16Prefix(runes)
++	baseHash := betterFilesCollabContentHash(content)
++	baseLength := prefix[len(prefix)-1]
++	changes := make([]betterFilesCollabTextEdit, 0, len(operation.Ops()))
++	sourceRune := 0
++	var pending *betterFilesCollabTextEdit
++	flush := func() {
++		if pending != nil && (pending.RangeLength != 0 || pending.Text != "") {
++			changes = append(changes, *pending)
++		}
++		pending = nil
++	}
++
++	for _, raw := range operation.Ops() {
++		switch value := raw.(type) {
++		case ot.Retain:
++			flush()
++			sourceRune += int(value.N)
++		case ot.Insert:
++			if pending == nil {
++				pending = &betterFilesCollabTextEdit{RangeOffset: prefix[sourceRune], BaseHash: baseHash, BaseLength: baseLength}
++			}
++			pending.Text += value.Text
++		case ot.Delete:
++			end := sourceRune + int(value.N)
++			if end > len(runes) {
++				return nil, errBetterFilesCollabInvalidEdit
++			}
++			if pending == nil {
++				pending = &betterFilesCollabTextEdit{RangeOffset: prefix[sourceRune], BaseHash: baseHash, BaseLength: baseLength}
++			}
++			pending.RangeLength += prefix[end] - prefix[sourceRune]
++			sourceRune = end
++		default:
++			return nil, errBetterFilesCollabInvalidEdit
++		}
++	}
++	flush()
++	if sourceRune != len(runes) {
++		return nil, errBetterFilesCollabInvalidEdit
++	}
++	return changes, nil
++}
++
++func betterFilesCollabUTF16Prefix(runes []rune) []int {
++	prefix := make([]int, len(runes)+1)
++	for i, value := range runes {
++		prefix[i+1] = prefix[i] + 1
++		if value > 0xffff {
++			prefix[i+1]++
++		}
++	}
++	return prefix
++}
++
++func betterFilesCollabRuneOffset(prefix []int, utf16Offset int) (int, bool) {
++	index := sort.SearchInts(prefix, utf16Offset)
++	return index, index < len(prefix) && prefix[index] == utf16Offset
++}
++
++func betterFilesCollabUTF16Len(content string) int {
++	return len(utf16.Encode([]rune(content)))
++}
++
++// betterFilesCollabContentHash matches the panel's JavaScript charCodeAt hash.
++func betterFilesCollabContentHash(content string) string {
++	var hash uint32
++	for _, unit := range utf16.Encode([]rune(content)) {
++		hash = hash*31 + uint32(unit)
++	}
++	return fmt.Sprintf("%08x", hash)
++}
+diff --git a/router/websocket/betterfiles_collaboration_ot_test.go b/router/websocket/betterfiles_collaboration_ot_test.go
+new file mode 100644
+index 0000000..461c1ca
+--- /dev/null
++++ b/router/websocket/betterfiles_collaboration_ot_test.go
+@@ -0,0 +1,128 @@
++package websocket
++
++import (
++	"errors"
++	"fmt"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func betterFilesTestEdit(base string, offset int, length int, text string) betterFilesCollabTextEdit {
++	return betterFilesCollabTextEdit{
++		RangeOffset: offset,
++		RangeLength: length,
++		Text:        text,
++		BaseHash:    betterFilesCollabContentHash(base),
++		BaseLength:  betterFilesCollabUTF16Len(base),
++	}
++}
++
++func betterFilesTestContent(document *betterFilesCollabDocument) string {
++	content, _ := document.snapshot()
++	return content
++}
++
++func TestBetterFilesCollabAppliesMonacoReplacement(t *testing.T) {
++	document := newBetterFilesCollabDocument("first line\nold line\nlast line")
++	result, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{
++		betterFilesTestEdit(document.Content, 11, 8, "new line"),
++	}, 0)
++
++	require.NoError(t, err)
++	require.Equal(t, "first line\nnew line\nlast line", betterFilesTestContent(document))
++	require.False(t, result.Transformed)
++	require.Equal(t, int64(1), result.Revision)
++	require.Equal(t, []betterFilesCollabTextEdit{{
++		RangeOffset: 11,
++		RangeLength: 8,
++		Text:        "new line",
++		BaseHash:    betterFilesCollabContentHash("first line\nold line\nlast line"),
++		BaseLength:  betterFilesCollabUTF16Len("first line\nold line\nlast line"),
++	}}, result.Changes)
++}
++
++func TestBetterFilesCollabTransformsConcurrentInserts(t *testing.T) {
++	const base = "ab"
++	document := newBetterFilesCollabDocument(base)
++
++	_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 1, 0, "X")}, 0)
++	require.NoError(t, err)
++	require.Equal(t, "aXb", betterFilesTestContent(document))
++
++	second, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 1, 0, "Y")}, 0)
++	require.NoError(t, err)
++	require.True(t, second.Transformed)
++	require.Equal(t, "aXYb", betterFilesTestContent(document))
++	require.Equal(t, 2, second.Changes[0].RangeOffset)
++	require.Equal(t, betterFilesCollabContentHash("aXb"), second.Changes[0].BaseHash)
++}
++
++func TestBetterFilesCollabTransformsStaleEditAcrossSeveralRevisions(t *testing.T) {
++	const base = "hello world"
++	document := newBetterFilesCollabDocument(base)
++
++	_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 0, 0, "A ")}, 0)
++	require.NoError(t, err)
++	current := document.Content
++	_, err = document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(current, betterFilesCollabUTF16Len(current), 0, "!")}, 0)
++	require.NoError(t, err)
++
++	result, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 6, 5, "Wings")}, 0)
++	require.NoError(t, err)
++	require.True(t, result.Transformed)
++	require.Equal(t, "A hello Wings!", betterFilesTestContent(document))
++}
++
++func TestBetterFilesCollabConvertsMonacoUTF16Offsets(t *testing.T) {
++	const base = "a😀b"
++	document := newBetterFilesCollabDocument(base)
++
++	_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 3, 1, "c")}, 0)
++	require.NoError(t, err)
++	require.Equal(t, "a😀c", betterFilesTestContent(document))
++
++	document = newBetterFilesCollabDocument(base)
++	_, err = document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 2, 0, "x")}, 0)
++	require.ErrorIs(t, err, errBetterFilesCollabInvalidEdit)
++}
++
++func TestBetterFilesCollabRejectsOverlappingChanges(t *testing.T) {
++	const base = "abcdef"
++	document := newBetterFilesCollabDocument(base)
++
++	_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{
++		betterFilesTestEdit(base, 1, 3, "x"),
++		betterFilesTestEdit(base, 2, 1, "y"),
++	}, 0)
++	require.ErrorIs(t, err, errBetterFilesCollabInvalidEdit)
++}
++
++func TestBetterFilesCollabRejectsExpiredPatchBase(t *testing.T) {
++	const base = "x"
++	document := newBetterFilesCollabDocument(base)
++
++	for i := 0; i < betterFilesCollabHistoryLimit+1; i++ {
++		current := document.Content
++		_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{
++			betterFilesTestEdit(current, betterFilesCollabUTF16Len(current), 0, fmt.Sprint(i%10)),
++		}, 0)
++		require.NoError(t, err)
++	}
++
++	_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit(base, 0, 1, "y")}, 0)
++	require.True(t, errors.Is(err, errBetterFilesCollabBaseNotFound), "unexpected error: %v", err)
++}
++
++func TestBetterFilesCollabReplaceResetsOperationHistory(t *testing.T) {
++	document := newBetterFilesCollabDocument("before")
++	_, err := document.applyMonacoChanges([]betterFilesCollabTextEdit{betterFilesTestEdit("before", 0, 0, "x")}, 0)
++	require.NoError(t, err)
++	require.NotEmpty(t, document.History)
++
++	document.replace("saved")
++	content, revision := document.snapshot()
++	require.Equal(t, "saved", content)
++	require.Equal(t, int64(2), revision)
++	require.Empty(t, document.History)
++}
+diff --git a/router/websocket/file_collaboration_yjs.go b/router/websocket/file_collaboration_yjs.go
+new file mode 100644
+index 0000000..68ddf34
+--- /dev/null
++++ b/router/websocket/file_collaboration_yjs.go
+@@ -0,0 +1,578 @@
++package websocket
++
++import (
++	"bytes"
++	"context"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/json"
++	"errors"
++	"fmt"
++	"io"
++	"strings"
++	"sync"
++	"time"
++	"unicode/utf8"
++
++	"github.com/pterodactyl/wings/server"
++	"github.com/reearth/ygo/crdt"
++)
++
++const (
++	// NativeFileCollaborationEnabled is consumed by the authenticated system
++	// capability endpoint. Keep it coupled to this implementation so the daemon
++	// does not advertise a transport that was omitted from the build.
++	NativeFileCollaborationEnabled = true
++
++	FileCollabSubscribeEvent   = Event("file collab subscribe")
++	FileCollabUnsubscribeEvent = Event("file collab unsubscribe")
++	FileCollabUpdateEvent      = Event("file collab update")
++	FileCollabAwarenessEvent   = Event("file collab awareness")
++	FileCollabSaveEvent        = Event("file collab save")
++
++	fileCollabSyncEvent         = Event("file collab sync")
++	fileCollabParticipantsEvent = Event("file collab participants")
++	fileCollabSavedEvent        = Event("file collab saved")
++	fileCollabErrorEvent        = Event("file collab error")
++
++	fileCollabMaxFileBytes          = 10 * 1024 * 1024
++	fileCollabMaxAwarenessBytes     = 16 * 1024
++	fileCollabMaxSessionsPerServer  = 32
++	fileCollabMaxSessionsPerSocket  = 32
++	fileCollabSessionGracePeriod    = 30 * time.Second
++	fileCollabCompactionUpdateBytes = fileCollabMaxFileBytes * 8
++)
++
++var (
++	errFileCollabInvalidRequest = errors.New("invalid collaborative editing request")
++	errFileCollabNotSubscribed  = errors.New("not subscribed to this file")
++	errFileCollabTooLarge       = errors.New("file is too large for collaborative editing")
++)
++
++type nativeFileCollabParticipant struct {
++	User   string  `json:"user"`
++	Name   string  `json:"name"`
++	Avatar *string `json:"avatar"`
++}
++
++type nativeFileCollabMember struct {
++	handler *Handler
++	user    nativeFileCollabParticipant
++	pending []byte
++}
++
++type nativeFileCollabSession struct {
++	mu sync.Mutex
++
++	serverUUID         string
++	path               string
++	doc                *crdt.Doc
++	text               *crdt.YText
++	dirty              bool
++	diskHash           [sha256.Size]byte
++	appliedUpdateBytes int64
++	members            map[string]*nativeFileCollabMember
++	teardownGeneration uint64
++	saveMu             sync.Mutex
++}
++
++type nativeFileCollabSyncMeta struct {
++	Dirty bool `json:"dirty"`
++}
++
++type nativeFileCollabSaved struct {
++	User       string `json:"user"`
++	RevisionID *int64 `json:"revision_id"`
++}
++
++var nativeFileCollabRegistry = struct {
++	sync.Mutex
++	sessions map[string]*nativeFileCollabSession
++}{sessions: map[string]*nativeFileCollabSession{}}
++
++// IsNativeFileCollaborationEvent reports whether an event belongs to the
++// Wings-rs-compatible Yjs collaboration protocol.
++func IsNativeFileCollaborationEvent(event Event) bool {
++	switch event {
++	case FileCollabSubscribeEvent, FileCollabUnsubscribeEvent, FileCollabUpdateEvent, FileCollabAwarenessEvent, FileCollabSaveEvent:
++		return true
++	default:
++		return false
++	}
++}
++
++// HandleNativeFileCollaboration implements the native Wings-rs collaboration
++// wire protocol using Yjs V1 updates. It intentionally remains separate from
++// the legacy Better Files OT protocol while clients migrate.
++func (h *Handler) HandleNativeFileCollaboration(ctx context.Context, message Message) (bool, error) {
++	switch message.Event {
++	case FileCollabSubscribeEvent, FileCollabUnsubscribeEvent, FileCollabUpdateEvent, FileCollabAwarenessEvent, FileCollabSaveEvent:
++	default:
++		return false, nil
++	}
++
++	h.fileCollabCleanup.Do(func() {
++		go func() {
++			<-ctx.Done()
++			nativeFileCollabDisconnect(h)
++		}()
++	})
++
++	if !nativeFileCollabValidArgs(message) {
++		errorPath := ""
++		if len(message.Args) > 0 {
++			errorPath = message.Args[0]
++			if normalized, ok := betterFilesCollabPath(errorPath); ok {
++				errorPath = normalized
++			}
++		}
++		return true, h.nativeFileCollabError(errorPath, errFileCollabInvalidRequest.Error())
++	}
++	path, ok := betterFilesCollabPath(message.Args[0])
++	if !ok {
++		return true, h.nativeFileCollabError(message.Args[0], "file not found")
++	}
++
++	requiredPermission := betterFilesCollabReadPermission
++	if message.Event == FileCollabUpdateEvent || message.Event == FileCollabSaveEvent {
++		requiredPermission = betterFilesCollabWritePermission
++	}
++	jwt := h.GetJwt()
++	if jwt == nil || !jwt.HasPermission(requiredPermission) {
++		return true, h.nativeFileCollabError(path, "missing permission")
++	}
++
++	var err error
++	switch message.Event {
++	case FileCollabSubscribeEvent:
++		err = nativeFileCollabSubscribe(h, path)
++	case FileCollabUnsubscribeEvent:
++		err = nativeFileCollabUnsubscribe(h, path)
++	case FileCollabUpdateEvent:
++		err = nativeFileCollabApplyUpdate(h, path, message.Args[1] == "1", message.Args[2])
++	case FileCollabAwarenessEvent:
++		err = nativeFileCollabRelayAwareness(h, path, message.Args[1])
++	case FileCollabSaveEvent:
++		err = nativeFileCollabSave(h, path)
++	}
++	if err != nil {
++		return true, h.nativeFileCollabError(path, err.Error())
++	}
++	return true, nil
++}
++
++func nativeFileCollabValidArgs(message Message) bool {
++	switch message.Event {
++	case FileCollabSubscribeEvent, FileCollabUnsubscribeEvent, FileCollabSaveEvent:
++		return len(message.Args) == 1
++	case FileCollabUpdateEvent:
++		return len(message.Args) == 3 && (message.Args[1] == "0" || message.Args[1] == "1") && message.Args[2] != ""
++	case FileCollabAwarenessEvent:
++		return len(message.Args) == 2 && message.Args[1] != ""
++	default:
++		return false
++	}
++}
++
++func (h *Handler) nativeFileCollabError(path string, message string) error {
++	return h.SendJson(Message{Event: fileCollabErrorEvent, Args: []string{path, message}})
++}
++
++func nativeFileCollabSubscribe(h *Handler, path string) error {
++	key := nativeFileCollabKey(h.server.ID(), path)
++	if nativeFileCollabSubscriptionCount(h) >= fileCollabMaxSessionsPerSocket {
++		nativeFileCollabRegistry.Lock()
++		existing := nativeFileCollabRegistry.sessions[key]
++		nativeFileCollabRegistry.Unlock()
++		if existing == nil || !nativeFileCollabHasMember(existing, h) {
++			return errors.New("too many collaborative sessions open on this connection")
++		}
++	}
++
++	content, err := nativeFileCollabReadFile(h, path)
++	if err != nil {
++		return err
++	}
++
++	nativeFileCollabRegistry.Lock()
++	session := nativeFileCollabRegistry.sessions[key]
++	if session == nil {
++		count := 0
++		for _, existing := range nativeFileCollabRegistry.sessions {
++			if existing.serverUUID == h.server.ID() {
++				count++
++			}
++		}
++		if count >= fileCollabMaxSessionsPerServer {
++			nativeFileCollabRegistry.Unlock()
++			return errors.New("too many collaborative sessions open on this server")
++		}
++		session = nativeFileCollabNewSession(h.server.ID(), path, content)
++		nativeFileCollabRegistry.sessions[key] = session
++	}
++	nativeFileCollabRegistry.Unlock()
++
++	jwt := h.GetJwt()
++	name := strings.TrimSpace(jwt.UserName)
++	if name == "" {
++		name = jwt.UserUUID
++	}
++	name = betterFilesCollabSafeText(name, 80)
++	avatar := nativeFileCollabSafeAvatar(jwt.UserAvatar)
++
++	session.mu.Lock()
++	session.teardownGeneration++
++	if !session.dirty && session.diskHash != sha256.Sum256([]byte(content)) {
++		session.resetDocument(content)
++	}
++	session.members[h.Uuid().String()] = &nativeFileCollabMember{
++		handler: h,
++		user: nativeFileCollabParticipant{
++			User:   jwt.UserUUID,
++			Name:   name,
++			Avatar: avatar,
++		},
++	}
++	state := session.doc.EncodeStateAsUpdate()
++	dirty := session.dirty
++	session.mu.Unlock()
++
++	meta, _ := json.Marshal(nativeFileCollabSyncMeta{Dirty: dirty})
++	if err := h.SendJson(Message{Event: fileCollabSyncEvent, Args: []string{
++		path,
++		base64.StdEncoding.EncodeToString(state),
++		string(meta),
++	}}); err != nil {
++		return err
++	}
++	nativeFileCollabBroadcastParticipants(session)
++	return nil
++}
++
++func nativeFileCollabApplyUpdate(h *Handler, path string, finished bool, encoded string) error {
++	session, member := nativeFileCollabSubscribedSession(h, path)
++	if session == nil || member == nil {
++		return errFileCollabNotSubscribed
++	}
++	chunk, err := base64.StdEncoding.DecodeString(encoded)
++	if err != nil {
++		return errors.New("invalid update encoding")
++	}
++
++	session.mu.Lock()
++	member = session.members[h.Uuid().String()]
++	if member == nil {
++		session.mu.Unlock()
++		return errFileCollabNotSubscribed
++	}
++	if len(member.pending)+len(chunk) > fileCollabMaxFileBytes {
++		member.pending = nil
++		session.mu.Unlock()
++		return errors.New("update is too large")
++	}
++	member.pending = append(member.pending, chunk...)
++	if !finished {
++		session.mu.Unlock()
++		return nil
++	}
++	update := append([]byte(nil), member.pending...)
++	member.pending = nil
++	if len(update) == 0 {
++		session.mu.Unlock()
++		return errFileCollabInvalidRequest
++	}
++	session.mu.Unlock()
++	needsResync, err := session.applyUpdate(update, h.Uuid().String())
++	if err != nil {
++		return err
++	}
++
++	if needsResync {
++		nativeFileCollabBroadcast(session, "", Message{Event: fileCollabErrorEvent, Args: []string{path, "resync"}})
++		return nil
++	}
++	nativeFileCollabBroadcast(session, h.Uuid().String(), Message{Event: FileCollabUpdateEvent, Args: []string{
++		path,
++		base64.StdEncoding.EncodeToString(update),
++	}})
++	return nil
++}
++
++func nativeFileCollabRelayAwareness(h *Handler, path string, payload string) error {
++	session, member := nativeFileCollabSubscribedSession(h, path)
++	if session == nil || member == nil {
++		return errFileCollabNotSubscribed
++	}
++	decoded, err := base64.StdEncoding.DecodeString(payload)
++	if err != nil || len(decoded) > fileCollabMaxAwarenessBytes {
++		return errors.New("invalid awareness update")
++	}
++	nativeFileCollabBroadcast(session, h.Uuid().String(), Message{Event: FileCollabAwarenessEvent, Args: []string{path, payload}})
++	return nil
++}
++
++func nativeFileCollabSave(h *Handler, path string) error {
++	session, member := nativeFileCollabSubscribedSession(h, path)
++	if session == nil || member == nil {
++		return errFileCollabNotSubscribed
++	}
++	session.saveMu.Lock()
++	defer session.saveMu.Unlock()
++
++	session.mu.Lock()
++	content := session.text.ToString()
++	session.mu.Unlock()
++
++	before, err := nativeFileCollabReadFile(h, path)
++	if err != nil {
++		return err
++	}
++	if err := h.server.Filesystem().Write(path, bytes.NewReader([]byte(content)), int64(len(content)), 0o644); err != nil {
++		return fmt.Errorf("failed to write file: %w", err)
++	}
++
++	var revisionID *int64
++	if server.ShouldRecordFileHistory(path, uint64(len(content))) {
++		id, revisionErr := h.server.RecordFileRevision(path, []byte(before), []byte(content), member.user.User)
++		if revisionErr != nil {
++			h.server.Log().WithError(revisionErr).WithField("path", path).Warn("failed to record collaborative file revision")
++		} else if id > 0 {
++			revisionID = &id
++		}
++	}
++
++	session.mu.Lock()
++	session.diskHash = sha256.Sum256([]byte(content))
++	session.dirty = session.text.ToString() != content
++	session.mu.Unlock()
++
++	payload, _ := json.Marshal(nativeFileCollabSaved{User: member.user.User, RevisionID: revisionID})
++	nativeFileCollabBroadcast(session, "", Message{Event: fileCollabSavedEvent, Args: []string{path, string(payload)}})
++	return nil
++}
++
++func nativeFileCollabUnsubscribe(h *Handler, path string) error {
++	key := nativeFileCollabKey(h.server.ID(), path)
++	nativeFileCollabRegistry.Lock()
++	session := nativeFileCollabRegistry.sessions[key]
++	nativeFileCollabRegistry.Unlock()
++	if session == nil {
++		return nil
++	}
++	nativeFileCollabRemoveMember(session, h.Uuid().String())
++	return nil
++}
++
++func nativeFileCollabDisconnect(h *Handler) {
++	nativeFileCollabRegistry.Lock()
++	sessions := make([]*nativeFileCollabSession, 0)
++	for _, session := range nativeFileCollabRegistry.sessions {
++		if session.serverUUID == h.server.ID() {
++			sessions = append(sessions, session)
++		}
++	}
++	nativeFileCollabRegistry.Unlock()
++	for _, session := range sessions {
++		nativeFileCollabRemoveMember(session, h.Uuid().String())
++	}
++}
++
++func nativeFileCollabRemoveMember(session *nativeFileCollabSession, handlerID string) {
++	session.mu.Lock()
++	if session.members[handlerID] == nil {
++		session.mu.Unlock()
++		return
++	}
++	delete(session.members, handlerID)
++	empty := len(session.members) == 0
++	session.teardownGeneration++
++	generation := session.teardownGeneration
++	session.mu.Unlock()
++
++	if !empty {
++		nativeFileCollabBroadcastParticipants(session)
++		return
++	}
++	time.AfterFunc(fileCollabSessionGracePeriod, func() {
++		key := nativeFileCollabKey(session.serverUUID, session.path)
++		nativeFileCollabRegistry.Lock()
++		session.mu.Lock()
++		remove := len(session.members) == 0 && session.teardownGeneration == generation && nativeFileCollabRegistry.sessions[key] == session
++		if remove {
++			delete(nativeFileCollabRegistry.sessions, key)
++			session.doc.Destroy()
++		}
++		session.mu.Unlock()
++		nativeFileCollabRegistry.Unlock()
++	})
++}
++
++func nativeFileCollabSubscribedSession(h *Handler, path string) (*nativeFileCollabSession, *nativeFileCollabMember) {
++	key := nativeFileCollabKey(h.server.ID(), path)
++	nativeFileCollabRegistry.Lock()
++	session := nativeFileCollabRegistry.sessions[key]
++	nativeFileCollabRegistry.Unlock()
++	if session == nil {
++		return nil, nil
++	}
++	session.mu.Lock()
++	member := session.members[h.Uuid().String()]
++	session.mu.Unlock()
++	return session, member
++}
++
++func nativeFileCollabSubscriptionCount(h *Handler) int {
++	nativeFileCollabRegistry.Lock()
++	sessions := make([]*nativeFileCollabSession, 0, len(nativeFileCollabRegistry.sessions))
++	for _, session := range nativeFileCollabRegistry.sessions {
++		if session.serverUUID == h.server.ID() {
++			sessions = append(sessions, session)
++		}
++	}
++	nativeFileCollabRegistry.Unlock()
++	count := 0
++	for _, session := range sessions {
++		if nativeFileCollabHasMember(session, h) {
++			count++
++		}
++	}
++	return count
++}
++
++func nativeFileCollabHasMember(session *nativeFileCollabSession, h *Handler) bool {
++	session.mu.Lock()
++	defer session.mu.Unlock()
++	return session.members[h.Uuid().String()] != nil
++}
++
++func nativeFileCollabBroadcastParticipants(session *nativeFileCollabSession) {
++	session.mu.Lock()
++	participants := make([]nativeFileCollabParticipant, 0, len(session.members))
++	seen := map[string]struct{}{}
++	for _, member := range session.members {
++		if _, ok := seen[member.user.User]; ok {
++			continue
++		}
++		seen[member.user.User] = struct{}{}
++		participants = append(participants, member.user)
++	}
++	session.mu.Unlock()
++	payload, _ := json.Marshal(participants)
++	nativeFileCollabBroadcast(session, "", Message{Event: fileCollabParticipantsEvent, Args: []string{session.path, string(payload)}})
++}
++
++func nativeFileCollabBroadcast(session *nativeFileCollabSession, exceptHandlerID string, message Message) {
++	session.mu.Lock()
++	handlers := make([]*Handler, 0, len(session.members))
++	for id, member := range session.members {
++		if id != exceptHandlerID {
++			handlers = append(handlers, member.handler)
++		}
++	}
++	session.mu.Unlock()
++	for _, handler := range handlers {
++		_ = handler.SendJson(message)
++	}
++}
++
++func nativeFileCollabReadFile(h *Handler, path string) (string, error) {
++	if err := h.server.Filesystem().IsIgnored(path); err != nil {
++		return "", errors.New("file not found")
++	}
++	file, stat, err := h.server.Filesystem().File(path)
++	if err != nil {
++		return "", errors.New("file not found")
++	}
++	defer file.Close()
++	if stat.IsDir() {
++		return "", errors.New("file is not a file")
++	}
++	if stat.Size() > fileCollabMaxFileBytes {
++		return "", errFileCollabTooLarge
++	}
++	content, err := io.ReadAll(io.LimitReader(file, fileCollabMaxFileBytes+1))
++	if err != nil {
++		return "", errors.New("file not found")
++	}
++	if len(content) > fileCollabMaxFileBytes {
++		return "", errFileCollabTooLarge
++	}
++	if !utf8.Valid(content) {
++		return "", errors.New("file is not editable as text")
++	}
++	return string(content), nil
++}
++
++func nativeFileCollabNewSession(serverUUID string, path string, content string) *nativeFileCollabSession {
++	session := &nativeFileCollabSession{
++		serverUUID: serverUUID,
++		path:       path,
++		members:    map[string]*nativeFileCollabMember{},
++	}
++	session.resetDocument(content)
++	return session
++}
++
++func (session *nativeFileCollabSession) resetDocument(content string) {
++	if session.doc != nil {
++		session.doc.Destroy()
++	}
++	doc := crdt.New()
++	text := doc.GetText("content")
++	if content != "" {
++		doc.Transact(func(transaction *crdt.Transaction) {
++			text.Insert(transaction, 0, content, nil)
++		})
++	}
++	session.doc = doc
++	session.text = text
++	session.diskHash = sha256.Sum256([]byte(content))
++	session.appliedUpdateBytes = 0
++}
++
++func (session *nativeFileCollabSession) applyUpdate(update []byte, origin any) (bool, error) {
++	session.mu.Lock()
++	defer session.mu.Unlock()
++	if err := crdt.ApplyUpdateV1(session.doc, update, origin); err != nil {
++		return false, errors.New("invalid update")
++	}
++	content := session.text.ToString()
++	session.dirty = true
++	session.appliedUpdateBytes += int64(len(update))
++	needsResync := len(content) > fileCollabMaxFileBytes || session.appliedUpdateBytes > fileCollabCompactionUpdateBytes
++	if !needsResync {
++		return false, nil
++	}
++	if len(content) > fileCollabMaxFileBytes {
++		content = nativeFileCollabTruncateUTF8(content, fileCollabMaxFileBytes)
++	}
++	session.resetDocument(content)
++	session.dirty = true
++	return true, nil
++}
++
++func nativeFileCollabKey(serverUUID string, path string) string {
++	return serverUUID + "\x00" + path
++}
++
++func nativeFileCollabSafeAvatar(avatar *string) *string {
++	if avatar == nil {
++		return nil
++	}
++	value := betterFilesCollabSafeImage(*avatar)
++	if value == "" {
++		return nil
++	}
++	return &value
++}
++
++func nativeFileCollabTruncateUTF8(content string, maxBytes int) string {
++	if len(content) <= maxBytes {
++		return content
++	}
++	content = content[:maxBytes]
++	for !utf8.ValidString(content) {
++		content = content[:len(content)-1]
++	}
++	return content
++}
+diff --git a/router/websocket/file_collaboration_yjs_test.go b/router/websocket/file_collaboration_yjs_test.go
+new file mode 100644
+index 0000000..f82d631
+--- /dev/null
++++ b/router/websocket/file_collaboration_yjs_test.go
+@@ -0,0 +1,327 @@
++package websocket
++
++import (
++	"context"
++	"encoding/base64"
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"os"
++	"path/filepath"
++	"testing"
++	"time"
++
++	"github.com/gbrlsnchs/jwt/v3"
++	"github.com/google/uuid"
++	gws "github.com/gorilla/websocket"
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/remote"
++	"github.com/pterodactyl/wings/router/tokens"
++	"github.com/pterodactyl/wings/server"
++	"github.com/reearth/ygo/crdt"
++	"github.com/stretchr/testify/require"
++)
++
++// Generated by yjs@13.6.30 using Y.encodeStateAsUpdate on Y.Text("content").
++const nativeFileCollabYjsFixture = "AQHZqLZjAAQBB2NvbnRlbnQWYnJvd3NlciDwn5iACnNlbGVjdGlvbgA="
++
++func nativeFileCollabTestPeer(t *testing.T, state []byte) (*crdt.Doc, *crdt.YText) {
++	t.Helper()
++	doc := crdt.New()
++	text := doc.GetText("content")
++	require.NoError(t, crdt.ApplyUpdateV1(doc, state, "test-sync"))
++	return doc, text
++}
++
++func nativeFileCollabTestInsert(t *testing.T, doc *crdt.Doc, text *crdt.YText, stateVector crdt.StateVector, index int, value string) []byte {
++	t.Helper()
++	doc.Transact(func(transaction *crdt.Transaction) {
++		text.Insert(transaction, index, value, nil)
++	})
++	return crdt.EncodeStateAsUpdateV1(doc, stateVector)
++}
++
++func TestNativeFileCollabUsesWingsRsWireEvents(t *testing.T) {
++	require.True(t, NativeFileCollaborationEnabled)
++	require.True(t, IsNativeFileCollaborationEvent(FileCollabSubscribeEvent))
++	require.True(t, IsNativeFileCollaborationEvent(FileCollabUpdateEvent))
++	require.True(t, IsNativeFileCollaborationEvent(FileCollabAwarenessEvent))
++	require.False(t, IsNativeFileCollaborationEvent(fileCollabSyncEvent))
++	require.False(t, IsNativeFileCollaborationEvent(BetterFilesCollabPatchEvent))
++}
++
++func TestNativeFileCollabValidatesExactPositionalArguments(t *testing.T) {
++	require.True(t, nativeFileCollabValidArgs(Message{Event: FileCollabSubscribeEvent, Args: []string{"/file.txt"}}))
++	require.True(t, nativeFileCollabValidArgs(Message{Event: FileCollabUpdateEvent, Args: []string{"/file.txt", "1", "AQ=="}}))
++	require.True(t, nativeFileCollabValidArgs(Message{Event: FileCollabAwarenessEvent, Args: []string{"/file.txt", "AQ=="}}))
++	require.False(t, nativeFileCollabValidArgs(Message{Event: FileCollabSaveEvent, Args: []string{"/file.txt", "unexpected-content"}}))
++	require.False(t, nativeFileCollabValidArgs(Message{Event: FileCollabUpdateEvent, Args: []string{"/file.txt", "2", "AQ=="}}))
++	require.False(t, nativeFileCollabValidArgs(Message{Event: FileCollabAwarenessEvent, Args: []string{"/file.txt", ""}}))
++}
++
++func nativeFileCollabTestServer(t *testing.T, serverUUID string) *server.Server {
++	t.Helper()
++	root := t.TempDir()
++	next, err := config.NewAtPath(filepath.Join(root, "config.yml"))
++	require.NoError(t, err)
++	next.AuthenticationToken = "native-collaboration-test-token"
++	next.System.Data = filepath.Join(root, "volumes")
++	next.System.User.Uid = os.Getuid()
++	next.System.User.Gid = os.Getgid()
++	next.System.FileHistory.Enabled = false
++	config.Set(next)
++
++	settings, err := json.Marshal(map[string]any{
++		"uuid":      serverUUID,
++		"build":     map[string]any{"disk_space": 100},
++		"container": map[string]any{"image": "alpine:3.20"},
++	})
++	require.NoError(t, err)
++	manager := server.NewEmptyManager(nil)
++	s, err := manager.InitServer(remote.ServerConfigurationResponse{Settings: settings})
++	require.NoError(t, err)
++	t.Cleanup(s.CtxCancel)
++	return s
++}
++
++func nativeFileCollabTestSocket(t *testing.T) (*gws.Conn, *gws.Conn) {
++	t.Helper()
++	serverConn := make(chan *gws.Conn, 1)
++	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		conn, err := (&gws.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}).Upgrade(w, r, nil)
++		if err != nil {
++			return
++		}
++		serverConn <- conn
++	}))
++	t.Cleanup(httpServer.Close)
++
++	u, err := url.Parse(httpServer.URL)
++	require.NoError(t, err)
++	u.Scheme = "ws"
++	client, _, err := gws.DefaultDialer.Dial(u.String(), nil)
++	require.NoError(t, err)
++	serverSide := <-serverConn
++	t.Cleanup(func() {
++		_ = client.Close()
++		_ = serverSide.Close()
++	})
++	return serverSide, client
++}
++
++func nativeFileCollabTestHandler(t *testing.T, s *server.Server, user string) (*Handler, *gws.Conn, context.Context) {
++	t.Helper()
++	serverSide, client := nativeFileCollabTestSocket(t)
++	// NumericDate has second precision; move issuance to the next second so it
++	// cannot compare before the package boot timestamp due to truncation.
++	now := time.Now().Add(time.Second)
++	h := &Handler{
++		Connection: serverSide,
++		server:     s,
++		uuid:       uuid.New(),
++		limiter:    NewLimiter(),
++		jwt: &tokens.WebsocketPayload{
++			Payload: jwt.Payload{
++				IssuedAt:       jwt.NumericDate(now),
++				ExpirationTime: jwt.NumericDate(now.Add(time.Hour)),
++			},
++			Scoped:      tokens.Scoped{Scope: string(tokens.Websocket)},
++			UserUUID:    user,
++			UserName:    user,
++			ServerUUID:  s.ID(),
++			Permissions: []string{PermissionConnect, betterFilesCollabReadPermission, betterFilesCollabWritePermission},
++		},
++	}
++	ctx, cancel := context.WithCancel(context.Background())
++	t.Cleanup(cancel)
++	return h, client, ctx
++}
++
++func nativeFileCollabReadMessage(t *testing.T, conn *gws.Conn) Message {
++	t.Helper()
++	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
++	defer conn.SetReadDeadline(time.Time{})
++	var message Message
++	require.NoError(t, conn.ReadJSON(&message))
++	return message
++}
++
++func nativeFileCollabRequireEvent(t *testing.T, conn *gws.Conn, event Event, argCount int) Message {
++	t.Helper()
++	message := nativeFileCollabReadMessage(t, conn)
++	require.Equal(t, event, message.Event, "unexpected websocket message args: %v", message.Args)
++	require.Len(t, message.Args, argCount)
++	return message
++}
++
++func TestNativeFileCollabWebsocketFlow(t *testing.T) {
++	const (
++		serverUUID = "11111111-1111-1111-1111-111111111111"
++		path       = "/config.txt"
++		otherPath  = "/other.txt"
++	)
++	s := nativeFileCollabTestServer(t, serverUUID)
++	require.NoError(t, os.WriteFile(filepath.Join(s.Filesystem().Path(), "config.txt"), []byte("hello"), 0o644))
++	require.NoError(t, os.WriteFile(filepath.Join(s.Filesystem().Path(), "other.txt"), []byte("isolated"), 0o644))
++
++	sender, senderConn, senderCtx := nativeFileCollabTestHandler(t, s, "sender")
++	recipient, recipientConn, recipientCtx := nativeFileCollabTestHandler(t, s, "recipient")
++	isolated, isolatedConn, isolatedCtx := nativeFileCollabTestHandler(t, s, "isolated")
++
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabSubscribeEvent, Args: []string{path}}))
++	syncMessage := nativeFileCollabRequireEvent(t, senderConn, fileCollabSyncEvent, 3)
++	require.Equal(t, path, syncMessage.Args[0])
++	require.JSONEq(t, `{"dirty":false}`, syncMessage.Args[2])
++	nativeFileCollabRequireEvent(t, senderConn, fileCollabParticipantsEvent, 2)
++
++	require.NoError(t, recipient.HandleInbound(recipientCtx, Message{Event: FileCollabSubscribeEvent, Args: []string{path}}))
++	nativeFileCollabRequireEvent(t, recipientConn, fileCollabSyncEvent, 3)
++	nativeFileCollabRequireEvent(t, senderConn, fileCollabParticipantsEvent, 2)
++	participants := nativeFileCollabRequireEvent(t, recipientConn, fileCollabParticipantsEvent, 2)
++	var participantList []nativeFileCollabParticipant
++	require.NoError(t, json.Unmarshal([]byte(participants.Args[1]), &participantList))
++	require.Len(t, participantList, 2)
++
++	require.NoError(t, isolated.HandleInbound(isolatedCtx, Message{Event: FileCollabSubscribeEvent, Args: []string{otherPath}}))
++	nativeFileCollabRequireEvent(t, isolatedConn, fileCollabSyncEvent, 3)
++	nativeFileCollabRequireEvent(t, isolatedConn, fileCollabParticipantsEvent, 2)
++
++	initialState, err := base64.StdEncoding.DecodeString(syncMessage.Args[1])
++	require.NoError(t, err)
++	browser, browserText := nativeFileCollabTestPeer(t, initialState)
++	defer browser.Destroy()
++	vector := browser.StateVector()
++	update := nativeFileCollabTestInsert(t, browser, browserText, vector, browserText.Len(), " world")
++	split := len(update) / 2
++	require.Greater(t, split, 0)
++
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabUpdateEvent, Args: []string{
++		path, "0", base64.StdEncoding.EncodeToString(update[:split]),
++	}}))
++	session := nativeFileCollabRegistry.sessions[nativeFileCollabKey(serverUUID, path)]
++	require.NotNil(t, session)
++	require.Equal(t, "hello", session.text.ToString(), "an incomplete chunk must not mutate the document")
++
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabUpdateEvent, Args: []string{
++		path, "1", base64.StdEncoding.EncodeToString(update[split:]),
++	}}))
++	updateMessage := nativeFileCollabRequireEvent(t, recipientConn, FileCollabUpdateEvent, 2)
++	require.Equal(t, path, updateMessage.Args[0])
++	require.Equal(t, base64.StdEncoding.EncodeToString(update), updateMessage.Args[1])
++	require.Equal(t, "hello world", session.text.ToString())
++
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabAwarenessEvent, Args: []string{path, "not-base64"}}))
++	awarenessError := nativeFileCollabRequireEvent(t, senderConn, fileCollabErrorEvent, 2)
++	require.Equal(t, path, awarenessError.Args[0])
++	require.Equal(t, "invalid awareness update", awarenessError.Args[1])
++
++	awareness := base64.StdEncoding.EncodeToString([]byte{1, 2, 3, 4})
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabAwarenessEvent, Args: []string{path, awareness}}))
++	awarenessMessage := nativeFileCollabRequireEvent(t, recipientConn, FileCollabAwarenessEvent, 2)
++	require.Equal(t, []string{path, awareness}, awarenessMessage.Args)
++
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabSaveEvent, Args: []string{path}}))
++	senderSaved := nativeFileCollabRequireEvent(t, senderConn, fileCollabSavedEvent, 2)
++	recipientSaved := nativeFileCollabRequireEvent(t, recipientConn, fileCollabSavedEvent, 2)
++	require.Equal(t, senderSaved.Args, recipientSaved.Args)
++	require.Equal(t, path, senderSaved.Args[0])
++	savedContent, err := os.ReadFile(filepath.Join(s.Filesystem().Path(), "config.txt"))
++	require.NoError(t, err)
++	require.Equal(t, "hello world", string(savedContent))
++
++	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabUnsubscribeEvent, Args: []string{path}}))
++	remaining := nativeFileCollabRequireEvent(t, recipientConn, fileCollabParticipantsEvent, 2)
++	require.JSONEq(t, `[{"user":"recipient","name":"recipient","avatar":null}]`, remaining.Args[1])
++
++	require.NotEqual(t, nativeFileCollabKey(serverUUID, path), nativeFileCollabKey("other-server", path))
++	require.NotEqual(t, nativeFileCollabKey(serverUUID, path), nativeFileCollabKey(serverUUID, otherPath))
++	require.NoError(t, isolatedConn.SetReadDeadline(time.Now().Add(100*time.Millisecond)))
++	var unexpected Message
++	require.Error(t, isolatedConn.ReadJSON(&unexpected), "a different file session must receive no collaboration broadcasts")
++}
++
++func TestNativeFileCollabYjsFullStateRoundTrip(t *testing.T) {
++	session := nativeFileCollabNewSession("server", "/config.yml", "hello 😀\nworld")
++	state := session.doc.EncodeStateAsUpdate()
++	peer, peerText := nativeFileCollabTestPeer(t, state)
++	defer peer.Destroy()
++
++	require.Equal(t, "hello 😀\nworld", peerText.ToString())
++	require.Equal(t, "hello 😀\nworld", session.text.ToString())
++}
++
++func TestNativeFileCollabAppliesBrowserYjsV1Update(t *testing.T) {
++	session := nativeFileCollabNewSession("server", "/config.yml", "")
++	update, err := base64.StdEncoding.DecodeString(nativeFileCollabYjsFixture)
++	require.NoError(t, err)
++
++	resync, err := session.applyUpdate(update, "browser")
++	require.NoError(t, err)
++	require.False(t, resync)
++	require.Equal(t, "browser 😀\nselection", session.text.ToString())
++}
++
++func TestNativeFileCollabConcurrentYjsUpdatesConverge(t *testing.T) {
++	session := nativeFileCollabNewSession("server", "/config.yml", "ab")
++	initialState := session.doc.EncodeStateAsUpdate()
++	initialVector := session.doc.StateVector()
++
++	peerA, textA := nativeFileCollabTestPeer(t, initialState)
++	defer peerA.Destroy()
++	peerB, textB := nativeFileCollabTestPeer(t, initialState)
++	defer peerB.Destroy()
++
++	updateA := nativeFileCollabTestInsert(t, peerA, textA, initialVector, 1, "😀")
++	updateB := nativeFileCollabTestInsert(t, peerB, textB, initialVector, 1, "Y\nZ")
++
++	_, err := session.applyUpdate(updateA, "peer-a")
++	require.NoError(t, err)
++	_, err = session.applyUpdate(updateB, "peer-b")
++	require.NoError(t, err)
++	require.NoError(t, crdt.ApplyUpdateV1(peerA, updateB, "peer-b"))
++	require.NoError(t, crdt.ApplyUpdateV1(peerB, updateA, "peer-a"))
++
++	require.Equal(t, session.text.ToString(), textA.ToString())
++	require.Equal(t, session.text.ToString(), textB.ToString())
++}
++
++func TestNativeFileCollabCompactionRequestsResyncWithoutChangingContent(t *testing.T) {
++	session := nativeFileCollabNewSession("server", "/config.yml", "before")
++	peer, peerText := nativeFileCollabTestPeer(t, session.doc.EncodeStateAsUpdate())
++	defer peer.Destroy()
++	vector := session.doc.StateVector()
++	update := nativeFileCollabTestInsert(t, peer, peerText, vector, peerText.Len(), " after")
++
++	session.appliedUpdateBytes = fileCollabCompactionUpdateBytes
++	resync, err := session.applyUpdate(update, "peer")
++	require.NoError(t, err)
++	require.True(t, resync)
++	require.Equal(t, "before after", session.text.ToString())
++	require.Zero(t, session.appliedUpdateBytes)
++}
++
++func TestNativeFileCollabRejectsMalformedYjsUpdate(t *testing.T) {
++	session := nativeFileCollabNewSession("server", "/config.yml", "before")
++	resync, err := session.applyUpdate([]byte("not a yjs update"), "peer")
++	require.Error(t, err)
++	require.False(t, resync)
++	require.Equal(t, "before", session.text.ToString())
++}
++
++func TestNativeFileCollabParticipantMatchesWingsRsShape(t *testing.T) {
++	avatar := "https://panel.example/avatar.png"
++	payload, err := json.Marshal([]nativeFileCollabParticipant{{
++		User:   "user-uuid",
++		Name:   "Panel User",
++		Avatar: &avatar,
++	}})
++	require.NoError(t, err)
++	require.JSONEq(t, `[{"user":"user-uuid","name":"Panel User","avatar":"https://panel.example/avatar.png"}]`, string(payload))
++}
++
++func TestNativeFileCollabTruncateUTF8KeepsValidBoundary(t *testing.T) {
++	content := "ab😀cd"
++	truncated := nativeFileCollabTruncateUTF8(content, 5)
++	require.Equal(t, "ab", truncated)
++}
 diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
-index 57315a9..547d499 100644
+index 57315a9..11a3f9a 100644
 --- a/router/websocket/limiter.go
 +++ b/router/websocket/limiter.go
 @@ -1,6 +1,7 @@
@@ -5615,7 +7301,7 @@ index 57315a9..547d499 100644
  	"sync"
  	"time"
  
-@@ -68,6 +69,22 @@ func (l *LimiterBucket) For(e Event) *rate.Limiter {
+@@ -68,6 +69,31 @@ func (l *LimiterBucket) For(e Event) *rate.Limiter {
  
  // limitValuesFor returns the underlying limit and burst value for the given event.
  func limitValuesFor(e Event) (rate.Limit, int) {
@@ -5631,6 +7317,15 @@ index 57315a9..547d499 100644
 +	if e == Event("betterfiles:collab:presence") {
 +		return rate.Every(time.Millisecond * 250), 12
 +	}
++	if e == FileCollabUpdateEvent {
++		return rate.Every(time.Millisecond * 25), 80
++	}
++	if e == FileCollabAwarenessEvent {
++		return rate.Every(time.Millisecond * 100), 30
++	}
++	if IsNativeFileCollaborationEvent(e) {
++		return rate.Every(time.Millisecond * 200), 10
++	}
 +	if isBetterFilesCollaborationEvent(e) {
 +		return rate.Every(time.Millisecond * 200), 10
 +	}
@@ -5638,12 +7333,12 @@ index 57315a9..547d499 100644
  	// Twice every five seconds.
  	if e == AuthenticationEvent || e == SendServerLogsEvent {
  		return rate.Every(time.Second * 5), 2
-@@ -83,9 +100,13 @@ func limitValuesFor(e Event) (rate.Limit, int) {
+@@ -83,9 +109,19 @@ func limitValuesFor(e Event) (rate.Limit, int) {
  }
  
  func limiterName(e Event) Event {
 -	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {
-+	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {
++	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {
  		return e
  	}
  
@@ -5651,6 +7346,12 @@ index 57315a9..547d499 100644
  }
 +
 +func isBetterFilesCollaborationEvent(e Event) bool {
++	return IsBetterFilesCollaborationEvent(e)
++}
++
++// IsBetterFilesCollaborationEvent reports whether an event belongs to the
++// ordered Better Files collaboration protocol.
++func IsBetterFilesCollaborationEvent(e Event) bool {
 +	return strings.HasPrefix(string(e), "betterfiles:collab:")
 +}
 diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
@@ -5838,10 +7539,10 @@ index 0000000..45c0b55
 +	server.ServerImporterCompletedEvent,
 +}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667..e8070eb 100644
+index 4482667..7bb5d5a 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
-@@ -36,6 +36,7 @@ const (
+@@ -36,16 +36,18 @@ const (
  	PermissionReceiveInstall   = "admin.websocket.install"
  	PermissionReceiveTransfer  = "admin.websocket.transfer"
  	PermissionReceiveBackups   = "backup.read"
@@ -5849,7 +7550,37 @@ index 4482667..e8070eb 100644
  )
  
  type Handler struct {
-@@ -147,7 +148,7 @@ func (h *Handler) SendJson(v Message) error {
+-	sync.RWMutex `json:"-"`
+-	Connection   *websocket.Conn `json:"-"`
+-	jwt          *tokens.WebsocketPayload
+-	server       *server.Server
+-	ra           server.RequestActivity
+-	uuid         uuid.UUID
+-	limiter      *LimiterBucket
++	sync.RWMutex      `json:"-"`
++	Connection        *websocket.Conn `json:"-"`
++	jwt               *tokens.WebsocketPayload
++	server            *server.Server
++	ra                server.RequestActivity
++	uuid              uuid.UUID
++	limiter           *LimiterBucket
++	fileCollabCleanup sync.Once
+ }
+ 
+ var (
+@@ -111,7 +113,10 @@ func GetHandler(s *server.Server, w http.ResponseWriter, r *http.Request, c *gin
+ 		return nil, err
+ 	}
+ 
+-	conn.SetReadLimit(4096)
++	// Collaboration updates are chunked, but their base64 and JSON framing can
++	// exceed the historical 4 KiB console-message limit. The router applies the
++	// same 32 KiB bound before dispatching a decoded message.
++	conn.SetReadLimit(32_768)
+ 	_ = conn.SetCompressionLevel(5)
+ 
+ 	return &Handler{
+@@ -147,7 +152,7 @@ func (h *Handler) SendJson(v Message) error {
  	if j := h.GetJwt(); j != nil {
  		// If we're sending installation output but the user does not have the required
  		// permissions to see the output, don't send it down the line.
@@ -5858,7 +7589,7 @@ index 4482667..e8070eb 100644
  			if !j.HasPermission(PermissionReceiveInstall) {
  				return nil
  			}
-@@ -167,6 +168,12 @@ func (h *Handler) SendJson(v Message) error {
+@@ -167,6 +172,12 @@ func (h *Handler) SendJson(v Message) error {
  				return nil
  			}
  		}
@@ -5871,11 +7602,14 @@ index 4482667..e8070eb 100644
  	}
  
  	if err := h.unsafeSendJson(v); err != nil {
-@@ -300,6 +307,14 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
+@@ -300,6 +311,17 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
  		}
  	}
  
 +	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
++		return err
++	}
++	if handled, err := h.HandleNativeFileCollaboration(ctx, m); handled {
 +		return err
 +	}
 +
@@ -9747,10 +11481,10 @@ index 26cfddc..9f20db6 100644
  		t.archive = NewArchive(t, uint64(rawSize))
 diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
 new file mode 100644
-index 0000000..8530704
+index 0000000..249d77d
 --- /dev/null
 +++ b/sftp/betterconsole_shell.go
-@@ -0,0 +1,374 @@
+@@ -0,0 +1,470 @@
 +package sftp
 +
 +import (
@@ -9758,9 +11492,10 @@ index 0000000..8530704
 +	"encoding/json"
 +	"fmt"
 +	"io"
-+	"regexp"
 +	"strings"
 +	"sync"
++	"unicode"
++	"unicode/utf8"
 +
 +	"golang.org/x/crypto/ssh"
 +
@@ -9773,8 +11508,6 @@ index 0000000..8530704
 +
 +const betterConsoleShellCliName = ".wings"
 +const betterConsoleShellMaxLineBytes = 4096
-+
-+var betterConsoleShellAnsiRegex = regexp.MustCompile("[\u001B\u009B][[\\]()#;?]*(?:(?:(?:[a-zA-Z\\d]*(?:;[a-zA-Z\\d]*)*)?\u0007)|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PRZcf-ntqry=><~]))")
 +
 +func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Server, handler *Handler, ip string) {
 +	logOutput := make(chan []byte, 128)
@@ -10115,38 +11848,163 @@ index 0000000..8530704
 +}
 +
 +func betterConsoleSanitizeTerminalLine(line string) string {
-+	line = betterConsoleShellAnsiRegex.ReplaceAllString(line, "")
++	var output strings.Builder
++	hasSgr := false
 +
-+	return strings.Map(func(r rune) rune {
-+		if r == '\t' || r >= 32 {
-+			return r
++	for i := 0; i < len(line); {
++		if line[i] == '\x1b' {
++			consumed, sgr := betterConsoleEscapeSequence(line[i:])
++			if consumed == 0 {
++				consumed = 1
++			}
++			if sgr != "" {
++				output.WriteString(sgr)
++				hasSgr = true
++			}
++			i += consumed
++			continue
 +		}
 +
-+		return -1
-+	}, line)
++		r, size := utf8.DecodeRuneInString(line[i:])
++		if r == '\u009b' {
++			consumed, sgr := betterConsoleCsiSequence(line[i+size:])
++			if sgr != "" {
++				output.WriteString(sgr)
++				hasSgr = true
++			}
++			i += size + consumed
++			continue
++		}
++		if betterConsoleIsControlStringStart(r) {
++			i += size + betterConsoleControlStringLength(line[i+size:])
++			continue
++		}
++		if r != utf8.RuneError || size != 1 {
++			if r == '\t' || !unicode.IsControl(r) {
++				output.WriteString(line[i : i+size])
++			}
++		}
++		i += size
++	}
++
++	if hasSgr {
++		output.WriteString("\x1b[0m")
++	}
++	return output.String()
++}
++
++func betterConsoleEscapeSequence(input string) (int, string) {
++	if len(input) < 2 {
++		return len(input), ""
++	}
++
++	switch input[1] {
++	case '[':
++		consumed, sgr := betterConsoleCsiSequence(input[2:])
++		return 2 + consumed, sgr
++	case ']', 'P', 'X', '^', '_':
++		return 2 + betterConsoleControlStringLength(input[2:]), ""
++	default:
++		return 2, ""
++	}
++}
++
++func betterConsoleCsiSequence(input string) (int, string) {
++	for i := 0; i < len(input); i++ {
++		b := input[i]
++		if b < 0x40 || b > 0x7e {
++			continue
++		}
++
++		params := input[:i]
++		if b != 'm' || len(params) > 64 || !betterConsoleValidSgrParams(params) {
++			return i + 1, ""
++		}
++		return i + 1, "\x1b[" + params + "m"
++	}
++
++	return len(input), ""
++}
++
++func betterConsoleValidSgrParams(params string) bool {
++	for i := 0; i < len(params); i++ {
++		if (params[i] < '0' || params[i] > '9') && params[i] != ';' && params[i] != ':' {
++			return false
++		}
++	}
++	return true
++}
++
++func betterConsoleIsControlStringStart(r rune) bool {
++	return r == '\u0090' || r == '\u0098' || r == '\u009d' || r == '\u009e' || r == '\u009f'
++}
++
++func betterConsoleControlStringLength(input string) int {
++	for i := 0; i < len(input); {
++		if input[i] == '\a' {
++			return i + 1
++		}
++		if input[i] == '\x1b' && i+1 < len(input) && input[i+1] == '\\' {
++			return i + 2
++		}
++		r, size := utf8.DecodeRuneInString(input[i:])
++		if r == '\u009c' {
++			return i + size
++		}
++		i += size
++	}
++	return len(input)
 +}
 diff --git a/sftp/server.go b/sftp/server.go
-index e2263a4..0965725 100644
+index e2263a4..c883abe 100644
 --- a/sftp/server.go
 +++ b/sftp/server.go
-@@ -12,6 +12,7 @@ import (
+@@ -12,6 +12,10 @@ import (
  	"regexp"
  	"strconv"
  	"strings"
++	"sync/atomic"
 +	"time"
++	"unicode"
++	"unicode/utf8"
  
  	"emperror.dev/errors"
  	"github.com/apex/log"
-@@ -29,6 +30,8 @@ import (
+@@ -29,6 +33,33 @@ import (
  // server and sending a flood of usernames.
  var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
  
-+const sshHandshakeTimeout = 10 * time.Second
++const (
++	sshHandshakeTimeout             = 10 * time.Second
++	sftpCredentialValidationTimeout = 8 * time.Second
++	maxSftpUsernameBytes            = 255
++	maxSSHSessionChannels           = 8
++)
++
++type sshSessionLimiter struct {
++	active atomic.Int32
++}
++
++func (l *sshSessionLimiter) acquire() bool {
++	for {
++		active := l.active.Load()
++		if active >= maxSSHSessionChannels {
++			return false
++		}
++		if l.active.CompareAndSwap(active, active+1) {
++			return true
++		}
++	}
++}
++
++func (l *sshSessionLimiter) release() {
++	l.active.Add(-1)
++}
 +
  //goland:noinspection GoNameStartsWithPackageName
  type SFTPServer struct {
  	manager  *server.Manager
-@@ -37,6 +40,14 @@ type SFTPServer struct {
+@@ -37,6 +68,14 @@ type SFTPServer struct {
  	Listen   string
  }
  
@@ -10161,7 +12019,7 @@ index e2263a4..0965725 100644
  func New(m *server.Manager) *SFTPServer {
  	cfg := config.Get().System
  	return &SFTPServer{
-@@ -81,6 +92,7 @@ func (c *SFTPServer) Run() error {
+@@ -70,6 +109,7 @@ func (c *SFTPServer) Run() error {
  	conf := &ssh.ServerConfig{
  		Config: ssh.Config{
  			KeyExchanges: []string{
@@ -10169,7 +12027,7 @@ index e2263a4..0965725 100644
  				"curve25519-sha256", "curve25519-sha256@libssh.org",
  				"ecdh-sha2-nistp256", "ecdh-sha2-nistp384", "ecdh-sha2-nistp521",
  				"diffie-hellman-group14-sha256",
-@@ -118,10 +129,12 @@ func (c *SFTPServer) Run() error {
+@@ -118,12 +158,15 @@ func (c *SFTPServer) Run() error {
  // serve the request or not.
  func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
  	// Before beginning a handshake must be performed on the incoming net.Conn
@@ -10181,8 +12039,22 @@ index e2263a4..0965725 100644
 +	_ = conn.SetDeadline(time.Time{})
  	defer sconn.Close()
  	go ssh.DiscardRequests(reqs)
++	var sessions sshSessionLimiter
  
-@@ -138,26 +151,64 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
+ 	for ch := range chans {
+ 		// If its not a session channel we just move on because its not something we
+@@ -132,32 +175,79 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
+ 			_ = ch.Reject(ssh.UnknownChannelType, "unknown channel type")
+ 			continue
+ 		}
++		if !sessions.acquire() {
++			_ = ch.Reject(ssh.ResourceShortage, "too many active session channels")
++			continue
++		}
+ 
+ 		channel, requests, err := ch.Accept()
+ 		if err != nil {
++			sessions.release()
  			continue
  		}
  
@@ -10200,8 +12072,12 @@ index e2263a4..0965725 100644
 -			if err := c.Handle(sconn, srv, channel); err != nil {
 -				return err
 -			}
-+			go c.handleSession(sconn, srv, channel, requests)
++			go func() {
++				defer sessions.release()
++				c.handleSession(sconn, srv, channel, requests)
++			}()
 +		} else {
++			sessions.release()
 +			_ = channel.Close()
  		}
  	}
@@ -10260,10 +12136,23 @@ index e2263a4..0965725 100644
  // Handle spins up a SFTP server instance for the authenticated user's server allowing
  // them access to the underlying filesystem.
  func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel) error {
-@@ -184,6 +235,28 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
- 	return nil
- }
+@@ -168,22 +258,51 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
  
+ 	ctx := srv.Sftp().Context(handler.User())
+ 	rs := sftp.NewRequestServer(channel, handler.Handlers())
++	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
++		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
++		_ = rs.Close()
++	})
++	defer stopRevocation()
++
++	if err := rs.Serve(); err == io.EOF {
++		_ = rs.Close()
++	}
++
++	return nil
++}
++
 +// HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
 +func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
 +	defer channel.Close()
@@ -10272,24 +12161,41 @@ index e2263a4..0965725 100644
 +		_, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
 +		return nil
 +	}
-+
-+	go func() {
++	ctx := srv.Sftp().Context(handler.User())
++	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
++		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active shell session")
++		_ = channel.Close()
++	})
++	defer stopRevocation()
+ 
+ 	go func() {
+-		select {
+-		case <-ctx.Done():
+-			srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active session")
+-			_ = rs.Close()
 +		for req := range requests {
 +			if req.WantReply {
 +				_ = req.Reply(false, nil)
 +			}
-+		}
-+	}()
-+
+ 		}
+ 	}()
+ 
+-	if err := rs.Serve(); err == io.EOF {
+-		_ = rs.Close()
+-	}
 +	c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
-+
-+	return nil
+ 
+ 	return nil
+ }
+ 
++func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func() bool {
++	return context.AfterFunc(ctx, closeSession)
 +}
 +
  // Generates a new ED25519 private key that is used for host authentication when
  // a user connects to the SFTP server.
  func (c *SFTPServer) generateED25519PrivateKey() error {
-@@ -191,7 +264,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
+@@ -191,7 +310,7 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
  	if err != nil {
  		return errors.Wrap(err, "sftp: failed to generate ED25519 private key")
  	}
@@ -10298,6 +12204,113 @@ index e2263a4..0965725 100644
  		return errors.Wrap(err, "sftp: could not create internal sftp data directory")
  	}
  	o, err := os.OpenFile(c.PrivateKeyPath(), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0o600)
+@@ -223,12 +342,14 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
+ 	logger := log.WithFields(log.Fields{"subsystem": "sftp", "method": request.Type, "username": request.User, "ip": request.IP})
+ 	logger.Debug("validating credentials for SFTP connection")
+ 
+-	if !validUsernameRegexp.MatchString(request.User) {
++	if !validSftpUsername(request.User) {
+ 		logger.Warn("failed to validate user credentials (invalid format)")
+ 		return nil, &remote.SftpInvalidCredentialsError{}
+ 	}
+ 
+-	resp, err := c.manager.Client().ValidateSftpCredentials(context.Background(), request)
++	ctx, cancel := context.WithTimeout(context.Background(), sftpCredentialValidationTimeout)
++	defer cancel()
++	resp, err := c.manager.Client().ValidateSftpCredentials(ctx, request)
+ 	if err != nil {
+ 		if _, ok := err.(*remote.SftpInvalidCredentialsError); ok {
+ 			logger.Warn("failed to validate user credentials (invalid username or password)")
+@@ -251,6 +372,18 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
+ 	return &permissions, nil
+ }
+ 
++func validSftpUsername(username string) bool {
++	if username == "" || len(username) > maxSftpUsernameBytes || !utf8.ValidString(username) {
++		return false
++	}
++	for _, r := range username {
++		if unicode.IsControl(r) {
++			return false
++		}
++	}
++	return validUsernameRegexp.MatchString(username)
++}
++
+ // PrivateKeyPath returns the path the host private key for this server instance.
+ func (c *SFTPServer) PrivateKeyPath() string {
+ 	return path.Join(c.BasePath, ".sftp/id_ed25519")
+diff --git a/sftp/server_security_test.go b/sftp/server_security_test.go
+new file mode 100644
+index 0000000..a6a08ed
+--- /dev/null
++++ b/sftp/server_security_test.go
+@@ -0,0 +1,65 @@
++package sftp
++
++import (
++	"context"
++	"strings"
++	"testing"
++	"time"
++	"unicode"
++
++	"github.com/pterodactyl/wings/system"
++	"github.com/stretchr/testify/require"
++)
++
++func TestValidSftpUsername(t *testing.T) {
++	require.True(t, validSftpUsername("user.1234abcd"))
++	require.True(t, validSftpUsername("user-name_2.abcdef12"))
++	require.False(t, validSftpUsername("missing-server"))
++	require.False(t, validSftpUsername("user.1234567"))
++	require.False(t, validSftpUsername("user.123456789"))
++	require.False(t, validSftpUsername("user\nname.1234abcd"))
++	require.False(t, validSftpUsername(strings.Repeat("a", maxSftpUsernameBytes)+".1234abcd"))
++	require.False(t, validSftpUsername(string([]byte{'u', 0xff, '.', '1', '2', '3', '4', 'a', 'b', 'c', 'd'})))
++}
++
++func TestSSHSessionLimiter(t *testing.T) {
++	var limiter sshSessionLimiter
++	for range maxSSHSessionChannels {
++		require.True(t, limiter.acquire())
++	}
++	require.False(t, limiter.acquire())
++	limiter.release()
++	require.True(t, limiter.acquire())
++	require.Equal(t, int32(maxSSHSessionChannels), limiter.active.Load())
++}
++
++func TestSftpSessionClosesOnUserRevocation(t *testing.T) {
++	bag := system.NewContextBag(context.Background())
++	closed := make(chan struct{})
++	stop := closeSftpSessionOnRevocation(bag.Context("user-uuid"), func() { close(closed) })
++	defer stop()
++
++	bag.Cancel("user-uuid")
++	select {
++	case <-closed:
++	case <-time.After(time.Second):
++		t.Fatal("session was not closed after user revocation")
++	}
++}
++
++func TestBetterConsolePreservesAnsiColors(t *testing.T) {
++	input := "safe\x1b[31mred\x1b[38;2;10;20;30mtruecolor\x1b[0mtext"
++	require.Equal(t, input+"\x1b[0m", betterConsoleSanitizeTerminalLine(input))
++
++	c1Input := "\u009b38;5;42mcolor"
++	require.Equal(t, "\x1b[38;5;42mcolor\x1b[0m", betterConsoleSanitizeTerminalLine(c1Input))
++}
++
++func TestBetterConsoleStripsUnsafeTerminalControls(t *testing.T) {
++	input := "safe\x1b]52;c;Y2xpcGJvYXJk\aafter\u009d0;title\u009c\x1b[2Jdone\x7f"
++	output := betterConsoleSanitizeTerminalLine(input)
++	require.Equal(t, "safeafterdone", output)
++	for _, r := range output {
++		require.Falsef(t, unicode.IsControl(r), "terminal output contains control rune U+%04X", r)
++	}
++}
 diff --git a/system/const.go b/system/const.go
 index aebbc68..6e77301 100644
 --- a/system/const.go

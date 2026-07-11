@@ -113,6 +113,15 @@ func getServerWebsocket(c *gin.Context) {
 	// 10 per 200ms).
 	var throttled bool
 	rl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)
+	handleMessage := func(msg websocket.Message) {
+		if err := handler.HandleInbound(ctx, msg); err != nil {
+			if errors.Is(err, server.ErrSuspended) {
+				cancel()
+			} else {
+				_ = handler.SendErrorJson(msg, err)
+			}
+		}
+	}
 
 	for {
 		t, p, err := handler.Connection.ReadMessage()
@@ -149,14 +158,12 @@ func getServerWebsocket(c *gin.Context) {
 			continue
 		}
 
-		go func(msg websocket.Message) {
-			if err := handler.HandleInbound(ctx, msg); err != nil {
-				if errors.Is(err, server.ErrSuspended) {
-					cancel()
-				} else {
-					_ = handler.SendErrorJson(msg, err)
-				}
-			}
-		}(j)
+		// Authentication and collaboration messages are stateful protocols. Keep
+		// their WebSocket wire order instead of racing them in separate goroutines.
+		if j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {
+			handleMessage(j)
+			continue
+		}
+		go handleMessage(j)
 	}
 }
