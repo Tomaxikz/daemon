@@ -296,6 +296,20 @@ def remove_once(path_name, old, description):
     return write_text(path, text, text.replace(old, "", 1), description)
 
 
+def replace_if_present(path_name, old, new, description):
+    path, text = read_text(path_name)
+    if old not in text:
+        return False
+    return write_text(path, text, text.replace(old, new, 1), description)
+
+
+def require_contains(path_name, expected, description):
+    _, text = read_text(path_name)
+    if expected not in text:
+        fail(f"could not establish {description} in {path_name}")
+    ok(f"verified {path_name}: {description}")
+
+
 def route_conflict_guard(path_name, route, expected_handler):
     _, text = read_text(path_name)
     marker = f'"{route}"'
@@ -325,6 +339,19 @@ type FileHistoryConfiguration struct {
 
 '''
 
+file_collaboration_field = '''\
+	// FileCollaboration controls native Yjs collaborative editing limits.
+	FileCollaboration FileCollaborationConfiguration `json:"-" yaml:"file_collaboration"`
+'''
+
+file_collaboration_type = '''\
+type FileCollaborationConfiguration struct {
+	Enabled     bool   `default:"true" yaml:"enabled"`
+	FileSizeCap uint64 `default:"10485760" yaml:"file_size_cap"`
+}
+
+'''
+
 insert_after(
     "config/config.go",
     '	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`\n\n',
@@ -338,6 +365,20 @@ insert_before(
     file_history_type,
     "type FileHistoryConfiguration struct",
     "file history config type",
+)
+insert_after(
+    "config/config.go",
+    '\tFileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`\n',
+    file_collaboration_field,
+    "FileCollaboration FileCollaborationConfiguration",
+    "native collaboration config field",
+)
+insert_before(
+    "config/config.go",
+    "type CrashDetection struct {\n",
+    file_collaboration_type,
+    "type FileCollaborationConfiguration struct",
+    "native collaboration config type",
 )
 
 for route, handler in [
@@ -529,9 +570,8 @@ insert_after(
     '"strings"',
     "collaboration limiter string helper import",
 )
-insert_after(
+remove_once(
     "router/websocket/limiter.go",
-    "func limitValuesFor(e Event) (rate.Limit, int) {\n",
     '''\
 	// Better Files live collaboration snapshots need a small dedicated bucket.
 	// Sharing Wings' default 4/sec bucket makes editors drift a character or two
@@ -545,22 +585,6 @@ insert_after(
 	if e == Event("betterfiles:collab:presence") {
 		return rate.Every(time.Millisecond * 250), 12
 	}
-	if isBetterFilesCollaborationEvent(e) {
-		return rate.Every(time.Millisecond * 200), 10
-	}
-
-''',
-    'Event("betterfiles:collab:patch")',
-    "collaboration websocket rate limits",
-)
-insert_after(
-    "router/websocket/limiter.go",
-    '''\
-	if e == Event("betterfiles:collab:presence") {
-		return rate.Every(time.Millisecond * 250), 12
-	}
-''',
-    '''\
 	if e == FileCollabUpdateEvent {
 		return rate.Every(time.Millisecond * 25), 80
 	}
@@ -570,29 +594,40 @@ insert_after(
 	if IsNativeFileCollaborationEvent(e) {
 		return rate.Every(time.Millisecond * 200), 10
 	}
+	if isBetterFilesCollaborationEvent(e) {
+		return rate.Every(time.Millisecond * 200), 10
+	}
+
 ''',
-    "if e == FileCollabUpdateEvent",
-    "native collaboration websocket rate limits",
+    "obsolete collaboration rate buckets",
 )
-replace_once(
+replace_if_present(
     "router/websocket/limiter.go",
+    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {\n",
     "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {\n",
-    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n",
-    "SendCommandEvent || isBetterFilesCollaborationEvent(e)",
-    "collaboration dedicated limiter buckets",
+    "remove native collaboration limiter names",
 )
-replace_once(
+replace_if_present(
     "router/websocket/limiter.go",
-    "\tif e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n",
-    "\tif e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {\n",
-    "isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)",
-    "native collaboration dedicated limiter buckets",
+    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n",
+    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {\n",
+    "remove legacy collaboration limiter names",
+)
+remove_once(
+    "router/websocket/limiter.go",
+    '''\
+func isBetterFilesCollaborationEvent(e Event) bool {
+	return IsBetterFilesCollaborationEvent(e)
+}
+
+''',
+    "obsolete private collaboration classifier",
 )
 insert_after(
     "router/websocket/limiter.go",
     '''\
 func limiterName(e Event) Event {
-	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {
+	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {
 		return e
 	}
 
@@ -601,31 +636,6 @@ func limiterName(e Event) Event {
 ''',
     '''\
 
-func isBetterFilesCollaborationEvent(e Event) bool {
-	return IsBetterFilesCollaborationEvent(e)
-}
-
-// IsBetterFilesCollaborationEvent reports whether an event belongs to the
-// ordered Better Files collaboration protocol.
-func IsBetterFilesCollaborationEvent(e Event) bool {
-	return strings.HasPrefix(string(e), "betterfiles:collab:")
-}
-''',
-    "func isBetterFilesCollaborationEvent(e Event) bool",
-    "collaboration event classifier",
-)
-replace_once(
-    "router/websocket/limiter.go",
-    '''\
-func isBetterFilesCollaborationEvent(e Event) bool {
-	return strings.HasPrefix(string(e), "betterfiles:collab:")
-}
-''',
-    '''\
-func isBetterFilesCollaborationEvent(e Event) bool {
-	return IsBetterFilesCollaborationEvent(e)
-}
-
 // IsBetterFilesCollaborationEvent reports whether an event belongs to the
 // ordered Better Files collaboration protocol.
 func IsBetterFilesCollaborationEvent(e Event) bool {
@@ -633,12 +643,95 @@ func IsBetterFilesCollaborationEvent(e Event) bool {
 }
 ''',
     "func IsBetterFilesCollaborationEvent(e Event) bool",
-    "ordered collaboration event classifier",
+    "collaboration event classifier",
+)
+insert_after(
+    "router/websocket/limiter.go",
+    '''\
+func IsBetterFilesCollaborationEvent(e Event) bool {
+	return strings.HasPrefix(string(e), "betterfiles:collab:")
+}
+''',
+    '''\
+
+// IsFileCollaborationEvent reports whether an event is part of either file
+// collaboration protocol. These stateful events must never be individually
+// discarded by a rate limiter because doing so desynchronizes the document.
+func IsFileCollaborationEvent(e Event) bool {
+	return IsBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)
+}
+''',
+    "func IsFileCollaborationEvent(e Event) bool",
+    "lossless collaboration event classifier",
+)
+require_contains(
+    "router/websocket/limiter.go",
+    "func IsFileCollaborationEvent(e Event) bool",
+    "lossless collaboration event classifier",
+)
+
+replace_once(
+    "router/websocket/websocket.go",
+    '''\
+	if h.IsThrottled(m.Event) {
+		return nil
+	}
+''',
+    '''\
+	// Collaboration messages are bounded and processed synchronously by the
+	// router. Dropping one update or chunk here would corrupt protocol state.
+	if !IsFileCollaborationEvent(m.Event) && h.IsThrottled(m.Event) {
+		return nil
+	}
+''',
+    "!IsFileCollaborationEvent(m.Event) && h.IsThrottled(m.Event)",
+    "lossless collaboration event handling",
+)
+
+replace_once(
+    "router/router_server_ws.go",
+    '''\
+	// There is a separate rate limiter that applies to individual message types
+	// within the actual websocket logic handler. _This_ rate limiter just exists
+	// to avoid enormous floods of data through the socket since we need to parse
+	// JSON each time. This rate limit realistically should never be hit since this
+	// would require sending 50+ messages a second over the websocket (no more than
+	// 10 per 200ms).
+''',
+    '''\
+	// There is a separate rate limiter that applies to individual message types
+	// within the actual websocket logic handler. This limiter protects ordinary
+	// control traffic. Stateful collaboration events bypass both limiters and are
+	// processed synchronously below, matching Wings-rs behavior. Silently dropping
+	// one collaboration chunk would desynchronize the document.
+''',
+    "This limiter protects ordinary",
+    "accurate collaboration limiter documentation",
 )
 
 insert_after(
     "router/router_server_ws.go",
-    "\trl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)\n",
+    "\tvar throttled bool\n\trl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)\n",
+    '''\
+	allowOrdinaryMessage := func() bool {
+		if !rl.Allow() {
+			if !throttled {
+				throttled = true
+				_ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
+			}
+			return false
+		}
+
+		throttled = false
+		return true
+	}
+''',
+    "allowOrdinaryMessage := func() bool",
+    "lossless collaboration message admission",
+)
+insert_before(
+    "router/router_server_ws.go",
+    "\n\tfor {\n",
     '''\
 	handleMessage := func(msg websocket.Message) {
 		if err := handler.HandleInbound(ctx, msg); err != nil {
@@ -653,7 +746,45 @@ insert_after(
     "handleMessage := func(msg websocket.Message)",
     "ordered collaboration message handler",
 )
+remove_once(
+    "router/router_server_ws.go",
+    '''\
+		if !rl.Allow() {
+			if !throttled {
+				throttled = true
+				_ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
+			}
+			continue
+		}
+
+		throttled = false
+
+''',
+    "pre-decode global collaboration throttle",
+)
 replace_once(
+    "router/router_server_ws.go",
+    '''\
+		var j websocket.Message
+		if err := json.Unmarshal(p, &j); err != nil {
+			continue
+		}
+''',
+    '''\
+		var j websocket.Message
+		if err := json.Unmarshal(p, &j); err != nil {
+			allowOrdinaryMessage()
+			continue
+		}
+
+		if !websocket.IsFileCollaborationEvent(j.Event) && !allowOrdinaryMessage() {
+			continue
+		}
+''',
+    "!websocket.IsFileCollaborationEvent(j.Event) && !allowOrdinaryMessage()",
+    "collaboration bypass for global event limiter",
+)
+replace_if_present(
     "router/router_server_ws.go",
     '''\
 		go func(msg websocket.Message) {
@@ -669,21 +800,24 @@ replace_once(
     '''\
 		// Authentication and collaboration messages are stateful protocols. Keep
 		// their WebSocket wire order instead of racing them in separate goroutines.
-		if j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) {
+        if j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {
 			handleMessage(j)
 			continue
 		}
 		go handleMessage(j)
 ''',
-    "websocket.IsBetterFilesCollaborationEvent(j.Event)",
     "ordered collaboration message dispatch",
 )
-replace_once(
+replace_if_present(
     "router/router_server_ws.go",
-    "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) {\n",
     "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {\n",
-    "websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event)",
-    "ordered native collaboration message dispatch",
+    "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {\n",
+    "simplify ordered collaboration dispatch",
+)
+require_contains(
+    "router/router_server_ws.go",
+    "websocket.IsFileCollaborationEvent(j.Event)",
+    "ordered lossless collaboration dispatch",
 )
 
 remove_once(

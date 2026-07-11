@@ -29,6 +29,7 @@ func TestSystemConfigurationCapabilityRoute(t *testing.T) {
 	next := *previous
 	next.AuthenticationToken = "native-collaboration-test-token"
 	next.Token.Token = "native-collaboration-test-token"
+	next.System.FileCollaboration.Enabled = true
 	config.Set(&next)
 	t.Cleanup(func() { config.Set(previous) })
 
@@ -55,7 +56,7 @@ func TestSystemConfigurationCapabilityRoute(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 	require.Equal(t, map[string]any{
 		"system": map[string]any{
-			"file_collaboration": map[string]any{"enabled": true},
+			"file_collaboration": map[string]any{"enabled": true, "file_size_cap": float64(10 * 1024 * 1024)},
 		},
 	}, response)
 }

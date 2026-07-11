@@ -14,6 +14,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/pterodactyl/wings/config"
 	"github.com/pterodactyl/wings/server"
 	"github.com/reearth/ygo/crdt"
 )
@@ -35,13 +36,40 @@ const (
 	fileCollabSavedEvent        = Event("file collab saved")
 	fileCollabErrorEvent        = Event("file collab error")
 
-	fileCollabMaxFileBytes          = 10 * 1024 * 1024
-	fileCollabMaxAwarenessBytes     = 16 * 1024
-	fileCollabMaxSessionsPerServer  = 32
-	fileCollabMaxSessionsPerSocket  = 32
-	fileCollabSessionGracePeriod    = 30 * time.Second
-	fileCollabCompactionUpdateBytes = fileCollabMaxFileBytes * 8
+	fileCollabMaxAwarenessBytes    = 16 * 1024
+	fileCollabMaxSessionsPerServer = 32
+	fileCollabMaxSessionsPerSocket = 32
+	fileCollabSessionGracePeriod   = 30 * time.Second
+	fileCollabDefaultFileSizeCap   = 10 * 1024 * 1024
+	fileCollabMinimumFileSizeCap   = 1 * 1024 * 1024
+	fileCollabMaximumFileSizeCap   = 64 * 1024 * 1024
 )
+
+func NativeFileCollaborationFileSizeCap() int {
+	return normalizeNativeFileCollaborationFileSizeCap(config.Get().System.FileCollaboration.FileSizeCap)
+}
+
+func NativeFileCollaborationConfigured() bool {
+	return NativeFileCollaborationEnabled && config.Get().System.FileCollaboration.Enabled
+}
+
+func normalizeNativeFileCollaborationFileSizeCap(configured uint64) int {
+	if configured == 0 {
+		return fileCollabDefaultFileSizeCap
+	}
+	// Older panel settings commonly express this value as whole MiB. Preserve
+	// that intent instead of interpreting values such as 1 as one byte.
+	if configured <= 64 {
+		configured *= 1024 * 1024
+	}
+	if configured < fileCollabMinimumFileSizeCap {
+		return fileCollabMinimumFileSizeCap
+	}
+	if configured > fileCollabMaximumFileSizeCap {
+		return fileCollabMaximumFileSizeCap
+	}
+	return int(configured)
+}
 
 var (
 	errFileCollabInvalidRequest = errors.New("invalid collaborative editing request")
@@ -109,6 +137,9 @@ func (h *Handler) HandleNativeFileCollaboration(ctx context.Context, message Mes
 	case FileCollabSubscribeEvent, FileCollabUnsubscribeEvent, FileCollabUpdateEvent, FileCollabAwarenessEvent, FileCollabSaveEvent:
 	default:
 		return false, nil
+	}
+	if !NativeFileCollaborationConfigured() {
+		return true, h.nativeFileCollabError("", "collaborative editing is disabled")
 	}
 
 	h.fileCollabCleanup.Do(func() {
@@ -265,7 +296,7 @@ func nativeFileCollabApplyUpdate(h *Handler, path string, finished bool, encoded
 		session.mu.Unlock()
 		return errFileCollabNotSubscribed
 	}
-	if len(member.pending)+len(chunk) > fileCollabMaxFileBytes {
+	if len(member.pending)+len(chunk) > NativeFileCollaborationFileSizeCap() {
 		member.pending = nil
 		session.mu.Unlock()
 		return errors.New("update is too large")
@@ -476,6 +507,7 @@ func nativeFileCollabBroadcast(session *nativeFileCollabSession, exceptHandlerID
 }
 
 func nativeFileCollabReadFile(h *Handler, path string) (string, error) {
+	fileSizeCap := NativeFileCollaborationFileSizeCap()
 	if err := h.server.Filesystem().IsIgnored(path); err != nil {
 		return "", errors.New("file not found")
 	}
@@ -487,14 +519,14 @@ func nativeFileCollabReadFile(h *Handler, path string) (string, error) {
 	if stat.IsDir() {
 		return "", errors.New("file is not a file")
 	}
-	if stat.Size() > fileCollabMaxFileBytes {
+	if stat.Size() > int64(fileSizeCap) {
 		return "", errFileCollabTooLarge
 	}
-	content, err := io.ReadAll(io.LimitReader(file, fileCollabMaxFileBytes+1))
+	content, err := io.ReadAll(io.LimitReader(file, int64(fileSizeCap)+1))
 	if err != nil {
 		return "", errors.New("file not found")
 	}
-	if len(content) > fileCollabMaxFileBytes {
+	if len(content) > fileSizeCap {
 		return "", errFileCollabTooLarge
 	}
 	if !utf8.Valid(content) {
@@ -539,12 +571,13 @@ func (session *nativeFileCollabSession) applyUpdate(update []byte, origin any) (
 	content := session.text.ToString()
 	session.dirty = true
 	session.appliedUpdateBytes += int64(len(update))
-	needsResync := len(content) > fileCollabMaxFileBytes || session.appliedUpdateBytes > fileCollabCompactionUpdateBytes
+	fileSizeCap := NativeFileCollaborationFileSizeCap()
+	needsResync := len(content) > fileSizeCap || session.appliedUpdateBytes > int64(fileSizeCap)*8
 	if !needsResync {
 		return false, nil
 	}
-	if len(content) > fileCollabMaxFileBytes {
-		content = nativeFileCollabTruncateUTF8(content, fileCollabMaxFileBytes)
+	if len(content) > fileSizeCap {
+		content = nativeFileCollabTruncateUTF8(content, fileSizeCap)
 	}
 	session.resetDocument(content)
 	session.dirty = true

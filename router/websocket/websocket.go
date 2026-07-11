@@ -297,7 +297,9 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
 		return server.ErrSuspended
 	}
 
-	if h.IsThrottled(m.Event) {
+	// Collaboration messages are bounded and processed synchronously by the
+	// router. Dropping one update or chunk here would corrupt protocol state.
+	if !IsFileCollaborationEvent(m.Event) && h.IsThrottled(m.Event) {
 		return nil
 	}
 

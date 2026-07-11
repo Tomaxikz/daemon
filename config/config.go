@@ -149,6 +149,8 @@ type SystemConfiguration struct {
 
 	// FileHistory controls bounded per-file revision storage for panel file edits.
 	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
+	// FileCollaboration controls native Yjs collaborative editing limits.
+	FileCollaboration FileCollaborationConfiguration `json:"-" yaml:"file_collaboration"`
 
 	// TmpDirectory specifies where temporary files for Pterodactyl installation processes
 	// should be created. This supports environments running docker-in-docker.
@@ -275,6 +277,11 @@ type FileHistoryConfiguration struct {
 	FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
 	PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
 	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
+}
+
+type FileCollaborationConfiguration struct {
+	Enabled     bool   `default:"true" yaml:"enabled"`
+	FileSizeCap uint64 `default:"10485760" yaml:"file_size_cap"`
 }
 
 type CrashDetection struct {

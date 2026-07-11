@@ -1,18 +1,20 @@
 diff --git a/config/config.go b/config/config.go
-index b133123..547a88b 100644
+index b133123..eb4398e 100644
 --- a/config/config.go
 +++ b/config/config.go
-@@ -138,6 +138,9 @@ type SystemConfiguration struct {
+@@ -138,6 +138,11 @@ type SystemConfiguration struct {
  	// Directory where local backups will be stored on the machine.
  	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`
  
 +	// FileHistory controls bounded per-file revision storage for panel file edits.
 +	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
++	// FileCollaboration controls native Yjs collaborative editing limits.
++	FileCollaboration FileCollaborationConfiguration `json:"-" yaml:"file_collaboration"`
 +
  	// TmpDirectory specifies where temporary files for Pterodactyl installation processes
  	// should be created. This supports environments running docker-in-docker.
  	TmpDirectory string `default:"/tmp/pterodactyl" json:"-" yaml:"tmp_directory"`
-@@ -255,6 +258,16 @@ type SystemConfiguration struct {
+@@ -255,6 +260,21 @@ type SystemConfiguration struct {
  	OpenatMode string `default:"auto" yaml:"openat_mode"`
  }
  
@@ -24,6 +26,11 @@ index b133123..547a88b 100644
 +	FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
 +	PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
 +	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
++}
++
++type FileCollaborationConfiguration struct {
++	Enabled     bool   `default:"true" yaml:"enabled"`
++	FileSizeCap uint64 `default:"10485760" yaml:"file_size_cap"`
 +}
 +
  type CrashDetection struct {
@@ -3633,13 +3640,36 @@ index 0000000..cc79320
 +	}, nil
 +}
 diff --git a/router/router_server_ws.go b/router/router_server_ws.go
-index b0ba3a4..a5e3bb0 100644
+index b0ba3a4..15d0a31 100644
 --- a/router/router_server_ws.go
 +++ b/router/router_server_ws.go
-@@ -113,6 +113,15 @@ func getServerWebsocket(c *gin.Context) {
- 	// 10 per 200ms).
+@@ -106,13 +106,33 @@ func getServerWebsocket(c *gin.Context) {
+ 	}
+ 
+ 	// There is a separate rate limiter that applies to individual message types
+-	// within the actual websocket logic handler. _This_ rate limiter just exists
+-	// to avoid enormous floods of data through the socket since we need to parse
+-	// JSON each time. This rate limit realistically should never be hit since this
+-	// would require sending 50+ messages a second over the websocket (no more than
+-	// 10 per 200ms).
++	// within the actual websocket logic handler. This limiter protects ordinary
++	// control traffic. Stateful collaboration events bypass both limiters and are
++	// processed synchronously below, matching Wings-rs behavior. Silently dropping
++	// one collaboration chunk would desynchronize the document.
  	var throttled bool
  	rl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)
++	allowOrdinaryMessage := func() bool {
++		if !rl.Allow() {
++			if !throttled {
++				throttled = true
++				_ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
++			}
++			return false
++		}
++
++		throttled = false
++		return true
++	}
 +	handleMessage := func(msg websocket.Message) {
 +		if err := handler.HandleInbound(ctx, msg); err != nil {
 +			if errors.Is(err, server.ErrSuspended) {
@@ -3652,7 +3682,28 @@ index b0ba3a4..a5e3bb0 100644
  
  	for {
  		t, p, err := handler.Connection.ReadMessage()
-@@ -149,14 +158,12 @@ func getServerWebsocket(c *gin.Context) {
+@@ -123,16 +143,6 @@ func getServerWebsocket(c *gin.Context) {
+ 			break
+ 		}
+ 
+-		if !rl.Allow() {
+-			if !throttled {
+-				throttled = true
+-				_ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
+-			}
+-			continue
+-		}
+-
+-		throttled = false
+-
+ 		// If the message isn't a format we expect, or the length of the message is far larger
+ 		// than we'd ever expect, drop it. The websocket upgrader logic does enforce a maximum
+ 		// _compressed_ message size of 4Kb but that could decompress to a much larger amount
+@@ -146,17 +156,20 @@ func getServerWebsocket(c *gin.Context) {
+ 		// from the socket, which is NOT what we want to do.
+ 		var j websocket.Message
+ 		if err := json.Unmarshal(p, &j); err != nil {
++			allowOrdinaryMessage()
  			continue
  		}
  
@@ -3665,9 +3716,13 @@ index b0ba3a4..a5e3bb0 100644
 -				}
 -			}
 -		}(j)
++		if !websocket.IsFileCollaborationEvent(j.Event) && !allowOrdinaryMessage() {
++			continue
++		}
++
 +		// Authentication and collaboration messages are stateful protocols. Keep
 +		// their WebSocket wire order instead of racing them in separate goroutines.
-+		if j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {
++		if j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {
 +			handleMessage(j)
 +			continue
 +		}
@@ -3676,10 +3731,10 @@ index b0ba3a4..a5e3bb0 100644
  }
 diff --git a/router/router_system_config.go b/router/router_system_config.go
 new file mode 100644
-index 0000000..2453ef3
+index 0000000..430efcc
 --- /dev/null
 +++ b/router/router_system_config.go
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,26 @@
 +package router
 +
 +import (
@@ -3692,7 +3747,8 @@ index 0000000..2453ef3
 +type systemConfigurationResponse struct {
 +	System struct {
 +		FileCollaboration struct {
-+			Enabled bool `json:"enabled"`
++			Enabled     bool `json:"enabled"`
++			FileSizeCap int  `json:"file_size_cap"`
 +		} `json:"file_collaboration"`
 +	} `json:"system"`
 +}
@@ -3701,15 +3757,16 @@ index 0000000..2453ef3
 +// This route is protected by the same daemon-token middleware as /api/system.
 +func getSystemConfiguration(c *gin.Context) {
 +	var response systemConfigurationResponse
-+	response.System.FileCollaboration.Enabled = ws.NativeFileCollaborationEnabled
++	response.System.FileCollaboration.Enabled = ws.NativeFileCollaborationConfigured()
++	response.System.FileCollaboration.FileSizeCap = ws.NativeFileCollaborationFileSizeCap()
 +	c.JSON(http.StatusOK, response)
 +}
 diff --git a/router/router_system_config_test.go b/router/router_system_config_test.go
 new file mode 100644
-index 0000000..e69f891
+index 0000000..7143a8b
 --- /dev/null
 +++ b/router/router_system_config_test.go
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,62 @@
 +package router
 +
 +import (
@@ -3741,6 +3798,7 @@ index 0000000..e69f891
 +	next := *previous
 +	next.AuthenticationToken = "native-collaboration-test-token"
 +	next.Token.Token = "native-collaboration-test-token"
++	next.System.FileCollaboration.Enabled = true
 +	config.Set(&next)
 +	t.Cleanup(func() { config.Set(previous) })
 +
@@ -3767,7 +3825,7 @@ index 0000000..e69f891
 +	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
 +	require.Equal(t, map[string]any{
 +		"system": map[string]any{
-+			"file_collaboration": map[string]any{"enabled": true},
++			"file_collaboration": map[string]any{"enabled": true, "file_size_cap": float64(10 * 1024 * 1024)},
 +		},
 +	}, response)
 +}
@@ -5493,10 +5551,10 @@ index 0000000..461c1ca
 +}
 diff --git a/router/websocket/file_collaboration_yjs.go b/router/websocket/file_collaboration_yjs.go
 new file mode 100644
-index 0000000..68ddf34
+index 0000000..622fd79
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs.go
-@@ -0,0 +1,578 @@
+@@ -0,0 +1,611 @@
 +package websocket
 +
 +import (
@@ -5513,6 +5571,7 @@ index 0000000..68ddf34
 +	"time"
 +	"unicode/utf8"
 +
++	"github.com/pterodactyl/wings/config"
 +	"github.com/pterodactyl/wings/server"
 +	"github.com/reearth/ygo/crdt"
 +)
@@ -5534,13 +5593,40 @@ index 0000000..68ddf34
 +	fileCollabSavedEvent        = Event("file collab saved")
 +	fileCollabErrorEvent        = Event("file collab error")
 +
-+	fileCollabMaxFileBytes          = 10 * 1024 * 1024
-+	fileCollabMaxAwarenessBytes     = 16 * 1024
-+	fileCollabMaxSessionsPerServer  = 32
-+	fileCollabMaxSessionsPerSocket  = 32
-+	fileCollabSessionGracePeriod    = 30 * time.Second
-+	fileCollabCompactionUpdateBytes = fileCollabMaxFileBytes * 8
++	fileCollabMaxAwarenessBytes    = 16 * 1024
++	fileCollabMaxSessionsPerServer = 32
++	fileCollabMaxSessionsPerSocket = 32
++	fileCollabSessionGracePeriod   = 30 * time.Second
++	fileCollabDefaultFileSizeCap   = 10 * 1024 * 1024
++	fileCollabMinimumFileSizeCap   = 1 * 1024 * 1024
++	fileCollabMaximumFileSizeCap   = 64 * 1024 * 1024
 +)
++
++func NativeFileCollaborationFileSizeCap() int {
++	return normalizeNativeFileCollaborationFileSizeCap(config.Get().System.FileCollaboration.FileSizeCap)
++}
++
++func NativeFileCollaborationConfigured() bool {
++	return NativeFileCollaborationEnabled && config.Get().System.FileCollaboration.Enabled
++}
++
++func normalizeNativeFileCollaborationFileSizeCap(configured uint64) int {
++	if configured == 0 {
++		return fileCollabDefaultFileSizeCap
++	}
++	// Older panel settings commonly express this value as whole MiB. Preserve
++	// that intent instead of interpreting values such as 1 as one byte.
++	if configured <= 64 {
++		configured *= 1024 * 1024
++	}
++	if configured < fileCollabMinimumFileSizeCap {
++		return fileCollabMinimumFileSizeCap
++	}
++	if configured > fileCollabMaximumFileSizeCap {
++		return fileCollabMaximumFileSizeCap
++	}
++	return int(configured)
++}
 +
 +var (
 +	errFileCollabInvalidRequest = errors.New("invalid collaborative editing request")
@@ -5608,6 +5694,9 @@ index 0000000..68ddf34
 +	case FileCollabSubscribeEvent, FileCollabUnsubscribeEvent, FileCollabUpdateEvent, FileCollabAwarenessEvent, FileCollabSaveEvent:
 +	default:
 +		return false, nil
++	}
++	if !NativeFileCollaborationConfigured() {
++		return true, h.nativeFileCollabError("", "collaborative editing is disabled")
 +	}
 +
 +	h.fileCollabCleanup.Do(func() {
@@ -5764,7 +5853,7 @@ index 0000000..68ddf34
 +		session.mu.Unlock()
 +		return errFileCollabNotSubscribed
 +	}
-+	if len(member.pending)+len(chunk) > fileCollabMaxFileBytes {
++	if len(member.pending)+len(chunk) > NativeFileCollaborationFileSizeCap() {
 +		member.pending = nil
 +		session.mu.Unlock()
 +		return errors.New("update is too large")
@@ -5975,6 +6064,7 @@ index 0000000..68ddf34
 +}
 +
 +func nativeFileCollabReadFile(h *Handler, path string) (string, error) {
++	fileSizeCap := NativeFileCollaborationFileSizeCap()
 +	if err := h.server.Filesystem().IsIgnored(path); err != nil {
 +		return "", errors.New("file not found")
 +	}
@@ -5986,14 +6076,14 @@ index 0000000..68ddf34
 +	if stat.IsDir() {
 +		return "", errors.New("file is not a file")
 +	}
-+	if stat.Size() > fileCollabMaxFileBytes {
++	if stat.Size() > int64(fileSizeCap) {
 +		return "", errFileCollabTooLarge
 +	}
-+	content, err := io.ReadAll(io.LimitReader(file, fileCollabMaxFileBytes+1))
++	content, err := io.ReadAll(io.LimitReader(file, int64(fileSizeCap)+1))
 +	if err != nil {
 +		return "", errors.New("file not found")
 +	}
-+	if len(content) > fileCollabMaxFileBytes {
++	if len(content) > fileSizeCap {
 +		return "", errFileCollabTooLarge
 +	}
 +	if !utf8.Valid(content) {
@@ -6038,12 +6128,13 @@ index 0000000..68ddf34
 +	content := session.text.ToString()
 +	session.dirty = true
 +	session.appliedUpdateBytes += int64(len(update))
-+	needsResync := len(content) > fileCollabMaxFileBytes || session.appliedUpdateBytes > fileCollabCompactionUpdateBytes
++	fileSizeCap := NativeFileCollaborationFileSizeCap()
++	needsResync := len(content) > fileSizeCap || session.appliedUpdateBytes > int64(fileSizeCap)*8
 +	if !needsResync {
 +		return false, nil
 +	}
-+	if len(content) > fileCollabMaxFileBytes {
-+		content = nativeFileCollabTruncateUTF8(content, fileCollabMaxFileBytes)
++	if len(content) > fileSizeCap {
++		content = nativeFileCollabTruncateUTF8(content, fileSizeCap)
 +	}
 +	session.resetDocument(content)
 +	session.dirty = true
@@ -6077,10 +6168,10 @@ index 0000000..68ddf34
 +}
 diff --git a/router/websocket/file_collaboration_yjs_test.go b/router/websocket/file_collaboration_yjs_test.go
 new file mode 100644
-index 0000000..f82d631
+index 0000000..b370dd1
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs_test.go
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,339 @@
 +package websocket
 +
 +import (
@@ -6132,6 +6223,18 @@ index 0000000..f82d631
 +	require.True(t, IsNativeFileCollaborationEvent(FileCollabAwarenessEvent))
 +	require.False(t, IsNativeFileCollaborationEvent(fileCollabSyncEvent))
 +	require.False(t, IsNativeFileCollaborationEvent(BetterFilesCollabPatchEvent))
++	require.True(t, IsFileCollaborationEvent(FileCollabUpdateEvent))
++	require.True(t, IsFileCollaborationEvent(BetterFilesCollabPatchEvent))
++	require.False(t, IsFileCollaborationEvent(SendCommandEvent))
++}
++
++func TestNativeFileCollaborationFileSizeCap(t *testing.T) {
++	require.Equal(t, 10*1024*1024, normalizeNativeFileCollaborationFileSizeCap(0))
++	require.Equal(t, 1*1024*1024, normalizeNativeFileCollaborationFileSizeCap(1))
++	require.Equal(t, 8*1024*1024, normalizeNativeFileCollaborationFileSizeCap(8))
++	require.Equal(t, 1*1024*1024, normalizeNativeFileCollaborationFileSizeCap(1024))
++	require.Equal(t, 12*1024*1024, normalizeNativeFileCollaborationFileSizeCap(12*1024*1024))
++	require.Equal(t, 64*1024*1024, normalizeNativeFileCollaborationFileSizeCap(128*1024*1024))
 +}
 +
 +func TestNativeFileCollabValidatesExactPositionalArguments(t *testing.T) {
@@ -6376,7 +6479,7 @@ index 0000000..f82d631
 +	vector := session.doc.StateVector()
 +	update := nativeFileCollabTestInsert(t, peer, peerText, vector, peerText.Len(), " after")
 +
-+	session.appliedUpdateBytes = fileCollabCompactionUpdateBytes
++	session.appliedUpdateBytes = int64(NativeFileCollaborationFileSizeCap()) * 8
 +	resync, err := session.applyUpdate(update, "peer")
 +	require.NoError(t, err)
 +	require.True(t, resync)
@@ -6409,7 +6512,7 @@ index 0000000..f82d631
 +	require.Equal(t, "ab", truncated)
 +}
 diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
-index 57315a9..11a3f9a 100644
+index 57315a9..436ca49 100644
 --- a/router/websocket/limiter.go
 +++ b/router/websocket/limiter.go
 @@ -1,6 +1,7 @@
@@ -6420,61 +6523,25 @@ index 57315a9..11a3f9a 100644
  	"sync"
  	"time"
  
-@@ -68,6 +69,31 @@ func (l *LimiterBucket) For(e Event) *rate.Limiter {
- 
- // limitValuesFor returns the underlying limit and burst value for the given event.
- func limitValuesFor(e Event) (rate.Limit, int) {
-+	// Better Files live collaboration snapshots need a small dedicated bucket.
-+	// Sharing Wings' default 4/sec bucket makes editors drift a character or two
-+	// behind during normal typing.
-+	if e == Event("betterfiles:collab:patch") {
-+		return rate.Every(time.Millisecond * 50), 40
-+	}
-+	if e == Event("betterfiles:collab:snapshot") {
-+		return rate.Every(time.Millisecond * 250), 12
-+	}
-+	if e == Event("betterfiles:collab:presence") {
-+		return rate.Every(time.Millisecond * 250), 12
-+	}
-+	if e == FileCollabUpdateEvent {
-+		return rate.Every(time.Millisecond * 25), 80
-+	}
-+	if e == FileCollabAwarenessEvent {
-+		return rate.Every(time.Millisecond * 100), 30
-+	}
-+	if IsNativeFileCollaborationEvent(e) {
-+		return rate.Every(time.Millisecond * 200), 10
-+	}
-+	if isBetterFilesCollaborationEvent(e) {
-+		return rate.Every(time.Millisecond * 200), 10
-+	}
-+
- 	// Twice every five seconds.
- 	if e == AuthenticationEvent || e == SendServerLogsEvent {
- 		return rate.Every(time.Second * 5), 2
-@@ -83,9 +109,19 @@ func limitValuesFor(e Event) (rate.Limit, int) {
- }
- 
- func limiterName(e Event) Event {
--	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {
-+	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {
- 		return e
- 	}
+@@ -89,3 +90,16 @@ func limiterName(e Event) Event {
  
  	return "_default"
  }
-+
-+func isBetterFilesCollaborationEvent(e Event) bool {
-+	return IsBetterFilesCollaborationEvent(e)
-+}
 +
 +// IsBetterFilesCollaborationEvent reports whether an event belongs to the
 +// ordered Better Files collaboration protocol.
 +func IsBetterFilesCollaborationEvent(e Event) bool {
 +	return strings.HasPrefix(string(e), "betterfiles:collab:")
 +}
++
++// IsFileCollaborationEvent reports whether an event is part of either file
++// collaboration protocol. These stateful events must never be individually
++// discarded by a rate limiter because doing so desynchronizes the document.
++func IsFileCollaborationEvent(e Event) bool {
++	return IsBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)
++}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667..5f68741 100644
+index 4482667..e08e07a 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
 @@ -39,13 +39,14 @@ const (
@@ -6511,7 +6578,18 @@ index 4482667..5f68741 100644
  	_ = conn.SetCompressionLevel(5)
  
  	return &Handler{
-@@ -300,6 +304,13 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
+@@ -286,7 +290,9 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
+ 		return server.ErrSuspended
+ 	}
+ 
+-	if h.IsThrottled(m.Event) {
++	// Collaboration messages are bounded and processed synchronously by the
++	// router. Dropping one update or chunk here would corrupt protocol state.
++	if !IsFileCollaborationEvent(m.Event) && h.IsThrottled(m.Event) {
+ 		return nil
+ 	}
+ 
+@@ -300,6 +306,13 @@ func (h *Handler) HandleInbound(ctx context.Context, m Message) error {
  		}
  	}
  

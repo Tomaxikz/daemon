@@ -49,6 +49,18 @@ func TestNativeFileCollabUsesWingsRsWireEvents(t *testing.T) {
 	require.True(t, IsNativeFileCollaborationEvent(FileCollabAwarenessEvent))
 	require.False(t, IsNativeFileCollaborationEvent(fileCollabSyncEvent))
 	require.False(t, IsNativeFileCollaborationEvent(BetterFilesCollabPatchEvent))
+	require.True(t, IsFileCollaborationEvent(FileCollabUpdateEvent))
+	require.True(t, IsFileCollaborationEvent(BetterFilesCollabPatchEvent))
+	require.False(t, IsFileCollaborationEvent(SendCommandEvent))
+}
+
+func TestNativeFileCollaborationFileSizeCap(t *testing.T) {
+	require.Equal(t, 10*1024*1024, normalizeNativeFileCollaborationFileSizeCap(0))
+	require.Equal(t, 1*1024*1024, normalizeNativeFileCollaborationFileSizeCap(1))
+	require.Equal(t, 8*1024*1024, normalizeNativeFileCollaborationFileSizeCap(8))
+	require.Equal(t, 1*1024*1024, normalizeNativeFileCollaborationFileSizeCap(1024))
+	require.Equal(t, 12*1024*1024, normalizeNativeFileCollaborationFileSizeCap(12*1024*1024))
+	require.Equal(t, 64*1024*1024, normalizeNativeFileCollaborationFileSizeCap(128*1024*1024))
 }
 
 func TestNativeFileCollabValidatesExactPositionalArguments(t *testing.T) {
@@ -293,7 +305,7 @@ func TestNativeFileCollabCompactionRequestsResyncWithoutChangingContent(t *testi
 	vector := session.doc.StateVector()
 	update := nativeFileCollabTestInsert(t, peer, peerText, vector, peerText.Len(), " after")
 
-	session.appliedUpdateBytes = fileCollabCompactionUpdateBytes
+	session.appliedUpdateBytes = int64(NativeFileCollaborationFileSizeCap()) * 8
 	resync, err := session.applyUpdate(update, "peer")
 	require.NoError(t, err)
 	require.True(t, resync)

@@ -106,13 +106,24 @@ func getServerWebsocket(c *gin.Context) {
 	}
 
 	// There is a separate rate limiter that applies to individual message types
-	// within the actual websocket logic handler. _This_ rate limiter just exists
-	// to avoid enormous floods of data through the socket since we need to parse
-	// JSON each time. This rate limit realistically should never be hit since this
-	// would require sending 50+ messages a second over the websocket (no more than
-	// 10 per 200ms).
+	// within the actual websocket logic handler. This limiter protects ordinary
+	// control traffic. Stateful collaboration events bypass both limiters and are
+	// processed synchronously below, matching Wings-rs behavior. Silently dropping
+	// one collaboration chunk would desynchronize the document.
 	var throttled bool
 	rl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)
+	allowOrdinaryMessage := func() bool {
+		if !rl.Allow() {
+			if !throttled {
+				throttled = true
+				_ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
+			}
+			return false
+		}
+
+		throttled = false
+		return true
+	}
 	handleMessage := func(msg websocket.Message) {
 		if err := handler.HandleInbound(ctx, msg); err != nil {
 			if errors.Is(err, server.ErrSuspended) {
@@ -132,16 +143,6 @@ func getServerWebsocket(c *gin.Context) {
 			break
 		}
 
-		if !rl.Allow() {
-			if !throttled {
-				throttled = true
-				_ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
-			}
-			continue
-		}
-
-		throttled = false
-
 		// If the message isn't a format we expect, or the length of the message is far larger
 		// than we'd ever expect, drop it. The websocket upgrader logic does enforce a maximum
 		// _compressed_ message size of 4Kb but that could decompress to a much larger amount
@@ -155,12 +156,17 @@ func getServerWebsocket(c *gin.Context) {
 		// from the socket, which is NOT what we want to do.
 		var j websocket.Message
 		if err := json.Unmarshal(p, &j); err != nil {
+			allowOrdinaryMessage()
+			continue
+		}
+
+		if !websocket.IsFileCollaborationEvent(j.Event) && !allowOrdinaryMessage() {
 			continue
 		}
 
 		// Authentication and collaboration messages are stateful protocols. Keep
 		// their WebSocket wire order instead of racing them in separate goroutines.
-		if j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {
+		if j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {
 			handleMessage(j)
 			continue
 		}
