@@ -119,10 +119,7 @@ fetch_file() {
     local tmp
 
     mkdir -p "$(dirname "$local_path")"
-    case "$local_path" in
-        *.go) tmp="$(mktemp --suffix=.go)" ;;
-        *) tmp="$(mktemp)" ;;
-    esac
+    tmp="$(mktemp)"
     start_spinner "download ${remote_path}"
     curl -fsSL --retry 3 --retry-delay 1 -o "$tmp" "$url" || {
         rm -f "$tmp"
@@ -175,30 +172,58 @@ ok "required commands are available"
 
 section "Downloading Better Files files"
 fetch_file "environment/docker/client_accessor.go" "environment/docker/client_accessor.go"
+fetch_file "router/betterfiles_entry.go" "router/betterfiles_entry.go"
+fetch_file "router/betterfiles_paths.go" "router/betterfiles_paths.go"
+fetch_file "router/betterfiles_paths_test.go" "router/betterfiles_paths_test.go"
+fetch_file "router/betterfiles_test_helpers_test.go" "router/betterfiles_test_helpers_test.go"
+fetch_file "router/betterfiles_http_test.go" "router/betterfiles_http_test.go"
 fetch_file "router/middleware/middleware_test.go" "router/middleware/middleware_test.go"
 fetch_file "router/router_cdn_stream.go" "router/router_cdn_stream.go"
+fetch_file "router/router_download_directory.go" "router/router_download_directory.go"
+fetch_file "router/router_download_directory_test.go" "router/router_download_directory_test.go"
+fetch_file "router/router_download_directory_http_test.go" "router/router_download_directory_http_test.go"
 fetch_file "router/router_download_helpers.go" "router/router_download_helpers.go"
 fetch_file "router/router_download_helpers_test.go" "router/router_download_helpers_test.go"
+fetch_file "router/router_file_operations.go" "router/router_file_operations.go"
+fetch_file "router/router_file_operations_test.go" "router/router_file_operations_test.go"
+fetch_file "router/router_openapi.go" "router/router_openapi.go"
+fetch_file "router/router_openapi_test.go" "router/router_openapi_test.go"
+fetch_file "router/router_resumable_upload.go" "router/router_resumable_upload.go"
+fetch_file "router/router_resumable_upload_test.go" "router/router_resumable_upload_test.go"
 fetch_file "router/router_system_config.go" "router/router_system_config.go"
 fetch_file "router/router_system_config_test.go" "router/router_system_config_test.go"
 fetch_file "router/router_server_archive_nbt.go" "router/router_server_archive_nbt.go"
 fetch_file "router/router_server_betterfiles_collaboration.go" "router/router_server_betterfiles_collaboration.go"
 fetch_file "router/router_server_files_revisions.go" "router/router_server_files_revisions.go"
+fetch_file "router/router_server_files_copy_many.go" "router/router_server_files_copy_many.go"
+fetch_file "router/router_server_files_copy_many_test.go" "router/router_server_files_copy_many_test.go"
+fetch_file "router/router_server_files_fingerprints.go" "router/router_server_files_fingerprints.go"
+fetch_file "router/router_server_files_fingerprints_test.go" "router/router_server_files_fingerprints_test.go"
+fetch_file "router/router_server_files_largest.go" "router/router_server_files_largest.go"
+fetch_file "router/router_server_files_largest_test.go" "router/router_server_files_largest_test.go"
+fetch_file "router/router_server_files_rename.go" "router/router_server_files_rename.go"
 fetch_file "router/router_server_files_search.go" "router/router_server_files_search.go"
+fetch_file "router/router_server_files_search_v2.go" "router/router_server_files_search_v2.go"
+fetch_file "router/router_server_files_search_v2_test.go" "router/router_server_files_search_v2_test.go"
 fetch_file "router/router_server_git.go" "router/router_server_git.go"
 fetch_file "router/websocket/betterfiles_collaboration.go" "router/websocket/betterfiles_collaboration.go"
 fetch_file "router/websocket/betterfiles_collaboration_ot.go" "router/websocket/betterfiles_collaboration_ot.go"
 fetch_file "router/websocket/betterfiles_collaboration_ot_test.go" "router/websocket/betterfiles_collaboration_ot_test.go"
 fetch_file "router/websocket/file_collaboration_yjs.go" "router/websocket/file_collaboration_yjs.go"
 fetch_file "router/websocket/file_collaboration_yjs_test.go" "router/websocket/file_collaboration_yjs_test.go"
+fetch_file "router/websocket/listeners_operation_test.go" "router/websocket/listeners_operation_test.go"
+fetch_file "server/file_operations.go" "server/file_operations.go"
+fetch_file "server/file_operations_test.go" "server/file_operations_test.go"
 fetch_file "server/file_history.go" "server/file_history.go"
 fetch_file "server/file_history_test.go" "server/file_history_test.go"
+fetch_file "server/filesystem/replace.go" "server/filesystem/replace.go"
 
 section "Installing collaboration dependency"
 backup_local_file "go.mod"
 backup_local_file "go.sum"
 run_with_spinner "pin operational transformation library" go get github.com/shiv248/operational-transformation-go@v1.0.0
 run_with_spinner "pin Yjs-compatible CRDT library" go get github.com/reearth/ygo@v1.31.0
+run_with_spinner "pin Better Files glob library" go get github.com/bmatcuk/doublestar/v4@v4.9.1
 run_with_spinner "normalize Go dependencies" go mod tidy
 
 section "Applying anchor-based source edits"
@@ -389,6 +414,12 @@ for route, handler in [
     ("/search", "getServerFilesSearch"),
     ("/archive/list", "getServerArchiveList"),
     ("/collaboration/revoke", "postServerBetterFilesCollaborationRevoke"),
+    ("/openapi.json", "getOpenAPI"),
+    ("/download/directory", "getDownloadDirectory"),
+    ("/copy-many", "postServerCopyMany"),
+    ("/largest-directories", "getServerLargestDirectories"),
+    ("/fingerprints", "getServerFileFingerprints"),
+    ("/operations/:operation", "deleteServerFileOperation"),
 ]:
     route_conflict_guard("router/router.go", route, handler)
 
@@ -398,6 +429,34 @@ insert_after(
     '	router.GET("/download/stream", getDownloadStream)\n',
     'router.GET("/download/stream", getDownloadStream)',
     "stream download route",
+)
+insert_after(
+    "router/router.go",
+    '\trouter.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))\n',
+    '\trouter.GET("/openapi.json", getOpenAPI)\n',
+    'router.GET("/openapi.json", getOpenAPI)',
+    "OpenAPI capability route",
+)
+insert_after(
+    "router/router.go",
+    '\trouter.GET("/download/file", getDownloadFile)\n',
+    '\trouter.GET("/download/directory", getDownloadDirectory)\n',
+    'router.GET("/download/directory", getDownloadDirectory)',
+    "directory download route",
+)
+insert_after(
+    "router/router.go",
+    '\trouter.POST("/upload/file", postServerUploadFiles)\n',
+    '\trouter.HEAD("/upload/file", headServerUploadFile)\n',
+    'router.HEAD("/upload/file", headServerUploadFile)',
+    "resumable upload HEAD route",
+)
+insert_after(
+    "router/router.go",
+    '\trouter.POST("/upload/file", postServerUploadFiles)\n',
+    '\trouter.PATCH("/upload/file", patchServerUploadFile)\n',
+    'router.PATCH("/upload/file", patchServerUploadFile)',
+    "resumable upload PATCH route",
 )
 
 insert_after(
@@ -443,6 +502,48 @@ insert_after(
 )
 insert_after(
     "router/router.go",
+    '\t\t\tfiles.GET("/search", getServerFilesSearch)\n',
+    '\t\t\tfiles.POST("/search", postServerFilesSearch)\n',
+    'files.POST("/search", postServerFilesSearch)',
+    "Better Files V2 search route",
+)
+replace_once(
+    "router/router.go",
+    '\t\t\tfiles.PUT("/rename", putServerRenameFiles)\n',
+    '\t\t\tfiles.PUT("/rename", putServerRenameFilesSafe)\n',
+    'files.PUT("/rename", putServerRenameFilesSafe)',
+    "hardened mass rename handler",
+)
+insert_after(
+    "router/router.go",
+    '\t\t\tfiles.POST("/copy", postServerCopyFile)\n',
+    '\t\t\tfiles.POST("/copy-many", postServerCopyMany)\n',
+    'files.POST("/copy-many", postServerCopyMany)',
+    "native bulk copy route",
+)
+insert_after(
+    "router/router.go",
+    '\t\t\tfiles.POST("/copy", postServerCopyFile)\n',
+    '\t\t\tfiles.GET("/largest-directories", getServerLargestDirectories)\n',
+    'files.GET("/largest-directories", getServerLargestDirectories)',
+    "largest directories route",
+)
+insert_after(
+    "router/router.go",
+    '\t\t\tfiles.POST("/copy", postServerCopyFile)\n',
+    '\t\t\tfiles.GET("/fingerprints", getServerFileFingerprints)\n',
+    'files.GET("/fingerprints", getServerFileFingerprints)',
+    "file fingerprints route",
+)
+insert_after(
+    "router/router.go",
+    '\t\t\tfiles.POST("/copy", postServerCopyFile)\n',
+    '\t\t\tfiles.DELETE("/operations/:operation", deleteServerFileOperation)\n',
+    'files.DELETE("/operations/:operation", deleteServerFileOperation)',
+    "file operation cancellation route",
+)
+insert_after(
+    "router/router.go",
     '			files.POST("/chmod", postServerChmodFile)\n',
     '			files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)\n',
     'files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)',
@@ -457,11 +558,30 @@ stream_cors = '''\
 			c.Header("Vary", "Origin, Access-Control-Request-Headers")
 		}
 '''
+replace_once(
+    "router/middleware/middleware.go",
+    '\t\tc.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")\n',
+    '\t\tc.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS")\n',
+    '"GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS"',
+    "resumable upload HEAD CORS method",
+)
+replace_once(
+    "router/middleware/middleware.go",
+    '\t\tc.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")\n',
+    '''\
+		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
+		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
+			c.Header("Access-Control-Expose-Headers", "Upload-Offset, X-Request-Id")
+		}
+''',
+    "Upload-Complete, Upload-Length, Upload-Offset",
+    "resumable upload CORS headers",
+)
 insert_after(
     "router/middleware/middleware.go",
-    '		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")\n',
+    '		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")\n',
     stream_cors,
-    "Access-Control-Expose-Headers",
+    "If-Match, If-Modified-Since",
     "stream CORS headers",
 )
 replace_once(
@@ -483,17 +603,137 @@ replace_once(
     "Access-Control-Allow-Private-Network",
     "stream private-network CORS header",
 )
+replace_if_present(
+    "router/middleware/middleware.go",
+    '''\
+func isStreamDownloadRequest(c *gin.Context) bool {
+	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
+}
+''',
+    '''\
+func isStreamDownloadRequest(c *gin.Context) bool {
+	if c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
+}
+''',
+    "directory download CORS helper",
+)
 insert_before(
     "router/middleware/middleware.go",
     "// ServerExists will ensure that the requested server exists in this setup.\n",
     '''\
 func isStreamDownloadRequest(c *gin.Context) bool {
-	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
+	if c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
 }
 
 ''',
-    "func isStreamDownloadRequest",
+    'Path == "/download/directory"',
     "stream CORS helper",
+)
+
+insert_before(
+    "server/events.go",
+    ")\n\n// Events returns the server's emitter instance.\n",
+    '''\
+	OperationProgressEvent  = "operation progress"
+	OperationErrorEvent     = "operation error"
+	OperationCompletedEvent = "operation completed"
+''',
+    "OperationProgressEvent",
+    "file operation websocket events",
+)
+insert_after(
+    "server/server.go",
+    "\tfs *filesystem.Filesystem\n",
+    "\tfileOperations *FileOperationManager\n",
+    "fileOperations *FileOperationManager",
+    "server file operation manager field",
+)
+insert_after(
+    "server/server.go",
+    "\ts.resources.State = system.NewAtomicString(environment.ProcessOfflineState)\n",
+    "\ts.fileOperations = NewFileOperationManager(&s)\n",
+    "s.fileOperations = NewFileOperationManager(&s)",
+    "server file operation manager initialization",
+)
+insert_after(
+    "server/server.go",
+    "\ts.CtxCancel()\n",
+    '''\
+	if s.fileOperations != nil {
+		s.fileOperations.CancelAll()
+	}
+''',
+    "s.fileOperations.CancelAll()",
+    "server file operation cancellation cleanup",
+)
+insert_before(
+    "server/server.go",
+    "// ID returns the UUID for the server instance.\n",
+    '''\
+// FileOperations returns the server-isolated manager for cancellable filesystem work.
+func (s *Server) FileOperations() *FileOperationManager {
+	return s.fileOperations
+}
+
+''',
+    "func (s *Server) FileOperations()",
+    "server file operation manager accessor",
+)
+insert_after(
+    "router/websocket/listeners.go",
+    "\tserver.TransferStatusEvent,\n",
+    '''\
+	server.OperationProgressEvent,
+	server.OperationErrorEvent,
+	server.OperationCompletedEvent,
+''',
+    "server.OperationProgressEvent",
+    "file operation websocket listener allowlist",
+)
+replace_once(
+    "router/websocket/listeners.go",
+    '''\
+			if str, ok := e.Data.(string); ok {
+				message.Args = []string{str}
+''',
+    '''\
+			if args, ok := websocketEventArgs(e.Data); ok {
+				message.Args = args
+			} else if str, ok := e.Data.(string); ok {
+				message.Args = []string{str}
+''',
+    "if args, ok := websocketEventArgs(e.Data)",
+    "multi-argument websocket event forwarding",
+)
+insert_before(
+    "router/websocket/listeners.go",
+    "// ListenForServerEvents will listen for different events happening on a server\n",
+    '''\
+func websocketEventArgs(data interface{}) ([]string, bool) {
+	values, ok := data.([]interface{})
+	if !ok {
+		return nil, false
+	}
+	args := make([]string, len(values))
+	for i, value := range values {
+		arg, ok := value.(string)
+		if !ok {
+			return nil, false
+		}
+		args[i] = arg
+	}
+	return args, true
+}
+
+''',
+    "func websocketEventArgs",
+    "multi-argument websocket event helper",
 )
 
 insert_after(
@@ -1034,19 +1274,42 @@ section "Formatting and building"
 run_with_spinner "format Go files" gofmt -w \
     config/config.go \
     environment/docker/client_accessor.go \
+    router/betterfiles_entry.go \
+    router/betterfiles_paths.go \
+    router/betterfiles_paths_test.go \
+    router/betterfiles_test_helpers_test.go \
+    router/betterfiles_http_test.go \
     router/middleware/middleware.go \
     router/middleware/middleware_test.go \
     router/router.go \
     router/router_cdn_stream.go \
+    router/router_download_directory.go \
+    router/router_download_directory_test.go \
+    router/router_download_directory_http_test.go \
     router/router_download_helpers.go \
     router/router_download_helpers_test.go \
+    router/router_file_operations.go \
+    router/router_file_operations_test.go \
+    router/router_openapi.go \
+    router/router_openapi_test.go \
+    router/router_resumable_upload.go \
+    router/router_resumable_upload_test.go \
     router/router_system_config.go \
     router/router_system_config_test.go \
     router/router_server_archive_nbt.go \
     router/router_server_betterfiles_collaboration.go \
     router/router_server_files.go \
+    router/router_server_files_copy_many.go \
+    router/router_server_files_copy_many_test.go \
+    router/router_server_files_fingerprints.go \
+    router/router_server_files_fingerprints_test.go \
+    router/router_server_files_largest.go \
+    router/router_server_files_largest_test.go \
+    router/router_server_files_rename.go \
     router/router_server_files_revisions.go \
     router/router_server_files_search.go \
+    router/router_server_files_search_v2.go \
+    router/router_server_files_search_v2_test.go \
     router/router_server_git.go \
     router/router_server_ws.go \
     router/tokens/websocket.go \
@@ -1055,14 +1318,26 @@ run_with_spinner "format Go files" gofmt -w \
     router/websocket/betterfiles_collaboration_ot_test.go \
     router/websocket/file_collaboration_yjs.go \
     router/websocket/file_collaboration_yjs_test.go \
+    router/websocket/listeners.go \
+    router/websocket/listeners_operation_test.go \
     router/websocket/limiter.go \
     router/websocket/websocket.go \
+    server/events.go \
+    server/file_operations.go \
+    server/file_operations_test.go \
     server/file_history.go \
-    server/file_history_test.go
-run_with_spinner "build Wings" go build
+    server/file_history_test.go \
+    server/filesystem/replace.go \
+    server/server.go
+run_with_spinner "test Better Files packages" go test ./router ./router/middleware ./router/websocket ./server ./server/filesystem
+if [ "${BETTERFILES_RACE:-0}" = "1" ]; then
+    run_with_spinner "race-test Better Files packages" go test -race ./router ./router/middleware ./router/websocket ./server ./server/filesystem
+fi
+run_with_spinner "vet Wings packages" go vet ./...
+run_with_spinner "compile Wings packages" go build ./...
 
 section "Done"
-ok "Better Files Wings edits are installed and the build succeeded."
+ok "Better Files Wings edits are installed and validation succeeded."
 if [ -d "$BACKUP_DIR" ]; then
     log "backups, if any, are in: ${BACKUP_DIR}"
 fi

@@ -99,8 +99,11 @@ func SetAccessControlHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", location)
 		c.Header("Access-Control-Allow-Credentials", "true")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")
+		c.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
+		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
+			c.Header("Access-Control-Expose-Headers", "Upload-Offset, X-Request-Id")
+		}
 
 		if isStreamDownloadRequest(c) {
 			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
@@ -147,7 +150,10 @@ func SetAccessControlHeaders() gin.HandlerFunc {
 }
 
 func isStreamDownloadRequest(c *gin.Context) bool {
-	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
+	if c.Request == nil || c.Request.URL == nil {
+		return false
+	}
+	return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
 }
 
 // ServerExists will ensure that the requested server exists in this setup.

@@ -79,6 +79,9 @@ var e = append([]string{
 	server.BackupRestoreCompletedEvent,
 	server.TransferLogsEvent,
 	server.TransferStatusEvent,
+	server.OperationProgressEvent,
+	server.OperationErrorEvent,
+	server.OperationCompletedEvent,
 }, append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)
 
 var allowedServerEvents = func() map[string]struct{} {
@@ -150,7 +153,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
 			}
 			var sendErr error
 			message := Message{Event: Event(e.Topic)}
-			if str, ok := e.Data.(string); ok {
+			if args, ok := websocketEventArgs(e.Data); ok {
+				message.Args = args
+			} else if str, ok := e.Data.(string); ok {
 				message.Args = []string{str}
 			} else if b, ok := e.Data.([]byte); ok {
 				message.Args = []string{string(b)}
@@ -187,4 +192,20 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func websocketEventArgs(data interface{}) ([]string, bool) {
+	values, ok := data.([]interface{})
+	if !ok {
+		return nil, false
+	}
+	args := make([]string, len(values))
+	for i, value := range values {
+		arg, ok := value.(string)
+		if !ok {
+			return nil, false
+		}
+		args[i] = arg
+	}
+	return args, true
 }

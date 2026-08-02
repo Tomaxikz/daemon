@@ -27,6 +27,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 	}
 	router.Use(middleware.AttachRequestID(), middleware.CaptureErrors(), middleware.SetAccessControlHeaders())
 	router.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))
+	router.GET("/openapi.json", getOpenAPI)
 	// @todo log this into a different file so you can setup IP blocking for abusive requests and such.
 	// This should still dump requests in debug mode since it does help with understanding the request
 	// lifecycle and quickly seeing what was called leading to the logs. However, it isn't feasible to mix
@@ -48,6 +49,9 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 	router.GET("/download/file", getDownloadFile)
 	router.GET("/download/stream", getDownloadStream)
 	router.POST("/upload/file", postServerUploadFiles)
+	router.HEAD("/upload/file", headServerUploadFile)
+	router.PATCH("/upload/file", patchServerUploadFile)
+	router.GET("/download/directory", getDownloadDirectory)
 
 	// This route is special it sits above all the other requests because we are
 	// using a JWT to authorize access to it, therefore it needs to be publicly
@@ -106,11 +110,16 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 			files.GET("/revisions/:revision", getServerFileRevision)
 			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
 			files.GET("/search", getServerFilesSearch)
+			files.POST("/search", postServerFilesSearch)
 			files.GET("/archive/list", getServerArchiveList)
 			files.POST("/archive/extract", postServerArchiveExtract)
 			files.GET("/list-directory", getServerListDirectory)
-			files.PUT("/rename", putServerRenameFiles)
+			files.PUT("/rename", putServerRenameFilesSafe)
 			files.POST("/copy", postServerCopyFile)
+			files.POST("/copy-many", postServerCopyMany)
+			files.GET("/largest-directories", getServerLargestDirectories)
+			files.GET("/fingerprints", getServerFileFingerprints)
+			files.DELETE("/operations/:operation", deleteServerFileOperation)
 			files.POST("/write", postServerWriteFile)
 			files.POST("/create-directory", postServerCreateDirectory)
 			files.POST("/delete", postServerDeleteFiles)

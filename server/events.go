@@ -21,6 +21,9 @@ const (
 	DeletedEvent                 = "deleted"
 	ServerImporterProgressEvent  = "serverimporter:progress"
 	ServerImporterCompletedEvent = "serverimporter:completed"
+	OperationProgressEvent       = "operation progress"
+	OperationErrorEvent          = "operation error"
+	OperationCompletedEvent      = "operation completed"
 )
 
 // Events returns the server's emitter instance.

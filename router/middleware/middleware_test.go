@@ -29,6 +29,12 @@ func TestSetAccessControlHeadersAllowsRangeStreaming(t *testing.T) {
 	router.GET("/download/file", func(c *gin.Context) {
 		c.Status(http.StatusNoContent)
 	})
+	router.GET("/download/directory", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
+	router.PATCH("/upload/file", func(c *gin.Context) {
+		c.Status(http.StatusNoContent)
+	})
 
 	t.Run("stream route exposes range headers", func(t *testing.T) {
 		request := httptest.NewRequest(http.MethodOptions, "/download/stream", nil)
@@ -58,6 +64,30 @@ func TestSetAccessControlHeadersAllowsRangeStreaming(t *testing.T) {
 		}
 		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
 			t.Fatalf("expected private network CORS header, got %q", got)
+		}
+	})
+
+	t.Run("directory archive route exposes download headers", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodOptions, "/download/directory", nil)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Content-Disposition") {
+			t.Fatalf("expected Content-Disposition in exposed headers, got %q", got)
+		}
+	})
+
+	t.Run("resumable upload route allows and exposes offset headers", func(t *testing.T) {
+		request := httptest.NewRequest(http.MethodOptions, "/upload/file", nil)
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, request)
+		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Upload-Offset") || !strings.Contains(got, "Upload-Length") {
+			t.Fatalf("expected resumable upload headers, got %q", got)
+		}
+		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Upload-Offset") {
+			t.Fatalf("expected Upload-Offset in exposed headers, got %q", got)
+		}
+		if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "HEAD") || !strings.Contains(got, "PATCH") {
+			t.Fatalf("expected resumable upload methods, got %q", got)
 		}
 	})
 

@@ -46,7 +46,8 @@ type Server struct {
 	resources   ResourceUsage
 	Environment environment.ProcessEnvironment `json:"-"`
 
-	fs *filesystem.Filesystem
+	fs             *filesystem.Filesystem
+	fileOperations *FileOperationManager
 
 	// Events emitted by the server instance.
 	emitter *events.Bus
@@ -100,6 +101,7 @@ func New(client remote.Client) (*Server, error) {
 		return nil, errors.Wrap(err, "server: could not set defaults for server configuration")
 	}
 	s.resources.State = system.NewAtomicString(environment.ProcessOfflineState)
+	s.fileOperations = NewFileOperationManager(&s)
 	return &s, nil
 }
 
@@ -108,10 +110,18 @@ func New(client remote.Client) (*Server, error) {
 // processes for the server as well.
 func (s *Server) CleanupForDestroy() {
 	s.CtxCancel()
+	if s.fileOperations != nil {
+		s.fileOperations.CancelAll()
+	}
 	s.Events().Destroy()
 	s.DestroyAllSinks()
 	s.Websockets().CancelAll()
 	s.powerLock.Destroy()
+}
+
+// FileOperations returns the server-isolated manager for cancellable filesystem work.
+func (s *Server) FileOperations() *FileOperationManager {
+	return s.fileOperations
 }
 
 // ID returns the UUID for the server instance.

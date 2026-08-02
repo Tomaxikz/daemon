@@ -11,12 +11,14 @@ require (
 	github.com/apex/log v1.9.0
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/beevik/etree v1.5.0
+	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/buger/jsonparser v1.1.2
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/creasty/defaults v1.8.0
 	github.com/distribution/reference v0.6.0
 	github.com/docker/docker v28.3.3+incompatible
 	github.com/docker/go-connections v0.5.0
+	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707
 	github.com/fatih/color v1.18.0
 	github.com/franela/goblin v0.0.0-20211003143422-0a4f594942bf
 	github.com/gabriel-vasile/mimetype v1.4.8
@@ -44,6 +46,7 @@ require (
 	github.com/shiv248/operational-transformation-go v1.0.0
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
+	github.com/ulikunitz/xz v0.5.15
 	golang.org/x/crypto v0.53.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.46.0
@@ -70,7 +73,6 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/gammazero/deque v1.0.0 // indirect
@@ -119,7 +121,6 @@ require (
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.12 // indirect
-	github.com/ulikunitz/xz v0.5.15 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect

@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index b133123..eb4398e 100644
+index b1331236f8f10eea37caa06e7a99a818cf159749..eb4398e2a3069eff9dd015a464721042cbd41d50 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -138,6 +138,11 @@ type SystemConfiguration struct {
@@ -38,7 +38,7 @@ index b133123..eb4398e 100644
  	CrashDetectionEnabled bool `default:"true" yaml:"enabled"`
 diff --git a/environment/docker/client_accessor.go b/environment/docker/client_accessor.go
 new file mode 100644
-index 0000000..f8eea15
+index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f543654187eee676
 --- /dev/null
 +++ b/environment/docker/client_accessor.go
 @@ -0,0 +1,7 @@
@@ -50,18 +50,25 @@ index 0000000..f8eea15
 +	return e.client
 +}
 diff --git a/go.mod b/go.mod
-index 6ed6d60..e55b2ef 100644
+index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..b85113ce0c9a2c8e0b6413540c7f98980a2ba85e 100644
 --- a/go.mod
 +++ b/go.mod
-@@ -16,6 +16,7 @@ require (
+@@ -13,11 +13,14 @@ require (
+ 	github.com/apex/log v1.9.0
+ 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
+ 	github.com/beevik/etree v1.5.0
++	github.com/bmatcuk/doublestar/v4 v4.9.1
  	github.com/buger/jsonparser v1.1.1
  	github.com/cenkalti/backoff/v4 v4.3.0
  	github.com/creasty/defaults v1.8.0
 +	github.com/distribution/reference v0.6.0
  	github.com/docker/docker v28.3.3+incompatible
  	github.com/docker/go-connections v0.5.0
++	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707
  	github.com/fatih/color v1.18.0
-@@ -39,12 +40,15 @@ require (
+ 	github.com/franela/goblin v0.0.0-20211003143422-0a4f594942bf
+ 	github.com/gabriel-vasile/mimetype v1.4.8
+@@ -39,12 +42,16 @@ require (
  	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
  	github.com/patrickmn/go-cache v2.1.0+incompatible
  	github.com/pkg/sftp v1.13.10
@@ -70,6 +77,7 @@ index 6ed6d60..e55b2ef 100644
 +	github.com/shiv248/operational-transformation-go v1.0.0
  	github.com/spf13/cobra v1.9.1
  	github.com/stretchr/testify v1.10.0
++	github.com/ulikunitz/xz v0.5.15
  	golang.org/x/crypto v0.46.0
  	golang.org/x/sync v0.19.0
  	golang.org/x/sys v0.39.0
@@ -77,15 +85,25 @@ index 6ed6d60..e55b2ef 100644
  	gopkg.in/ini.v1 v1.67.0
  	gopkg.in/yaml.v2 v2.4.0
  	gopkg.in/yaml.v3 v3.0.1
-@@ -66,7 +70,6 @@ require (
+@@ -66,9 +73,7 @@ require (
  	github.com/containerd/errdefs/pkg v0.3.0 // indirect
  	github.com/containerd/log v0.1.0 // indirect
  	github.com/davecgh/go-spew v1.1.1 // indirect
 -	github.com/distribution/reference v0.6.0 // indirect
  	github.com/docker/go-units v0.5.0 // indirect
- 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
+-	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
  	github.com/dustin/go-humanize v1.0.1 // indirect
-@@ -132,7 +135,6 @@ require (
+ 	github.com/felixge/httpsnoop v1.0.4 // indirect
+ 	github.com/gammazero/deque v1.0.0 // indirect
+@@ -117,7 +122,6 @@ require (
+ 	github.com/spf13/pflag v1.0.6 // indirect
+ 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+ 	github.com/ugorji/go/codec v1.2.12 // indirect
+-	github.com/ulikunitz/xz v0.5.15 // indirect
+ 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+ 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
+ 	go.opentelemetry.io/otel v1.35.0 // indirect
+@@ -132,7 +136,6 @@ require (
  	golang.org/x/net v0.47.0 // indirect
  	golang.org/x/term v0.38.0 // indirect
  	golang.org/x/text v0.32.0 // indirect
@@ -94,10 +112,19 @@ index 6ed6d60..e55b2ef 100644
  	google.golang.org/protobuf v1.36.5 // indirect
  	gotest.tools/v3 v3.0.2 // indirect
 diff --git a/go.sum b/go.sum
-index 9e2465a..c79dd88 100644
+index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..427f1bc25d2c237e2f98a02deddc4d41be2d920b 100644
 --- a/go.sum
 +++ b/go.sum
-@@ -309,6 +309,8 @@ github.com/pkg/sftp v1.13.10/go.mod h1:bJ1a7uDhrX/4OII+agvy28lzRvQrmIQuaHrcI1Hbe
+@@ -51,6 +51,8 @@ github.com/aws/aws-sdk-go v1.20.6/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN
+ github.com/aybabtme/rgbterm v0.0.0-20170906152045-cc83f3b3ce59/go.mod h1:q/89r3U2H7sSsE2t6Kca0lfwTK8JdoNGS/yzM/4iH5I=
+ github.com/beevik/etree v1.5.0 h1:iaQZFSDS+3kYZiGoc9uKeOkUY3nYMXOKLl6KIJxiJWs=
+ github.com/beevik/etree v1.5.0/go.mod h1:gPNJNaBGVZ9AwsidazFZyygnd+0pAU38N4D+WemwKNs=
++github.com/bmatcuk/doublestar/v4 v4.9.1 h1:X8jg9rRZmJd4yRy7ZeNDRnM+T3ZfHv15JiBJ/avrEXE=
++github.com/bmatcuk/doublestar/v4 v4.9.1/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=
+ github.com/bodgit/plumbing v1.3.0 h1:pf9Itz1JOQgn7vEOE7v7nlEfBykYqvUYioC61TwWCFU=
+ github.com/bodgit/plumbing v1.3.0/go.mod h1:JOTb4XiRu5xfnmdnDJo6GmSbSbtSyufrsyZFByMtKEs=
+ github.com/bodgit/sevenzip v1.6.1 h1:kikg2pUMYC9ljU7W9SaqHXhym5HyKm8/M/jd31fYan4=
+@@ -309,6 +311,8 @@ github.com/pkg/sftp v1.13.10/go.mod h1:bJ1a7uDhrX/4OII+agvy28lzRvQrmIQuaHrcI1Hbe
  github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
  github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
  github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
@@ -106,7 +133,7 @@ index 9e2465a..c79dd88 100644
  github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
  github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
  github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
-@@ -324,6 +326,8 @@ github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd/go.mod h1:hPqNNc0
+@@ -324,6 +328,8 @@ github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd/go.mod h1:hPqNNc0
  github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 h1:OkMGxebDjyw0ULyrTYWeN0UNCCkmCWfjPnIA2W6oviI=
  github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06/go.mod h1:+ePHsJ1keEjQtpvf9HHw0f4ZeJ0TLRsxhunSI2hYJSs=
  github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
@@ -115,7 +142,7 @@ index 9e2465a..c79dd88 100644
  github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
  github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
  github.com/smartystreets/assertions v1.0.0/go.mod h1:kHHU4qYBaI3q23Pp3VPrmWhuIUrLW/7eUrw0BU5VaoM=
-@@ -529,8 +533,8 @@ golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=
+@@ -529,8 +535,8 @@ golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=
  golang.org/x/text v0.32.0/go.mod h1:o/rUWzghvpD5TXrTIBuJU77MTaN0ljMWE47kxGJQ7jY=
  golang.org/x/time v0.0.0-20181108054448-85acf8d2951c/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
  golang.org/x/time v0.0.0-20190308202827-9d24e82272b4/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
@@ -126,20 +153,487 @@ index 9e2465a..c79dd88 100644
  golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
  golang.org/x/tools v0.0.0-20190114222345-bf090417da8b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
  golang.org/x/tools v0.0.0-20190226205152-f727befe758c/go.mod h1:9Yl7xja0Znq3iFh3HoIrodX9oNMXvdceNzlUR8zjMvY=
+diff --git a/router/betterfiles_entry.go b/router/betterfiles_entry.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..74ccb8f6a9f9008898e5c1fee74019001c669c28
+--- /dev/null
++++ b/router/betterfiles_entry.go
+@@ -0,0 +1,70 @@
++package router
++
++import (
++	"time"
++
++	"github.com/gabriel-vasile/mimetype"
++	"golang.org/x/sys/unix"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++type betterFilesEntry struct {
++	Name         string `json:"name"`
++	Size         int64  `json:"size"`
++	SizePhysical int64  `json:"size_physical"`
++	Directory    bool   `json:"directory"`
++	File         bool   `json:"file"`
++	Symlink      bool   `json:"symlink"`
++	Mime         string `json:"mime"`
++	Created      string `json:"created"`
++	Modified     string `json:"modified"`
++}
++
++func newBetterFilesEntry(name string, info ufs.FileInfo, mime string) betterFilesEntry {
++	if mime == "" {
++		if info.IsDir() {
++			mime = "inode/directory"
++		} else {
++			mime = "application/octet-stream"
++		}
++	}
++	return betterFilesEntry{
++		Name:         name,
++		Size:         info.Size(),
++		SizePhysical: betterFilesPhysicalSize(info),
++		Directory:    info.IsDir(),
++		File:         info.Mode().IsRegular(),
++		Symlink:      info.Mode()&ufs.ModeSymlink != 0,
++		Mime:         mime,
++		Created:      betterFilesCreatedTime(info).UTC().Format(time.RFC3339),
++		Modified:     info.ModTime().UTC().Format(time.RFC3339),
++	}
++}
++
++func betterFilesCreatedTime(info ufs.FileInfo) time.Time {
++	if stat, ok := info.Sys().(*unix.Stat_t); ok {
++		return time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec)
++	}
++	return info.ModTime()
++}
++
++func betterFilesMime(fs *serverfs.Filesystem, value string, info ufs.FileInfo) string {
++	if info.IsDir() {
++		return "inode/directory"
++	}
++	if !info.Mode().IsRegular() {
++		return "application/octet-stream"
++	}
++	file, err := fs.UnixFS().OpenFile(value, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++	if err != nil {
++		return "application/octet-stream"
++	}
++	defer file.Close()
++	detected, err := mimetype.DetectReader(file)
++	if err != nil || detected == nil {
++		return "application/octet-stream"
++	}
++	return detected.String()
++}
+diff --git a/router/betterfiles_http_test.go b/router/betterfiles_http_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..ca3dabad4f5ba836d83b58a56f57bfbc2fd8368c
+--- /dev/null
++++ b/router/betterfiles_http_test.go
+@@ -0,0 +1,116 @@
++package router
++
++import (
++	"encoding/json"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"os"
++	"path/filepath"
++	"strconv"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/gbrlsnchs/jwt/v3"
++	"github.com/google/uuid"
++	"github.com/stretchr/testify/require"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/remote"
++	"github.com/pterodactyl/wings/router/tokens"
++	"github.com/pterodactyl/wings/server"
++)
++
++func newBetterFilesHTTPServer(t *testing.T, uploadLimitMB, diskMB int64, ignored ...string) (*server.Manager, *server.Server, http.Handler) {
++	t.Helper()
++	root := t.TempDir()
++	next, err := config.NewAtPath(filepath.Join(root, "config.yml"))
++	require.NoError(t, err)
++	next.AuthenticationToken = "better-files-http-test-token"
++	next.Api.UploadLimit = uploadLimitMB
++	next.System.Data = filepath.Join(root, "volumes")
++	next.System.RootDirectory = root
++	next.System.User.Uid = os.Getuid()
++	next.System.User.Gid = os.Getgid()
++	next.System.FileHistory.Enabled = false
++	config.Set(next)
++
++	serverUUID := uuid.NewString()
++	settings, err := json.Marshal(map[string]interface{}{
++		"uuid":      serverUUID,
++		"build":     map[string]interface{}{"disk_space": diskMB},
++		"container": map[string]interface{}{"image": "alpine:3.20"},
++		"egg":       map[string]interface{}{"file_denylist": ignored},
++	})
++	require.NoError(t, err)
++	manager := server.NewEmptyManager(nil)
++	s, err := manager.InitServer(remote.ServerConfigurationResponse{Settings: settings})
++	require.NoError(t, err)
++	manager.Add(s)
++	t.Cleanup(s.CtxCancel)
++	return manager, s, Configure(manager, nil)
++}
++
++func signBetterFilesUploadToken(t *testing.T, serverUUID string) string {
++	t.Helper()
++	now := time.Now().Add(time.Second)
++	payload := tokens.UploadPayload{
++		Payload: jwt.Payload{
++			IssuedAt:       jwt.NumericDate(now),
++			ExpirationTime: jwt.NumericDate(now.Add(time.Hour)),
++		},
++		Scoped:     tokens.Scoped{Scope: string(tokens.FileUpload)},
++		ServerUuid: serverUUID,
++		UserUuid:   uuid.NewString(),
++		UniqueId:   uuid.NewString(),
++	}
++	signed, err := jwt.Sign(payload, config.GetJwtAlgorithm())
++	require.NoError(t, err)
++	return string(signed)
++}
++
++func signBetterFilesDownloadToken(t *testing.T, serverUUID, filePath string) string {
++	t.Helper()
++	now := time.Now().Add(time.Second)
++	payload := tokens.FilePayload{
++		Payload: jwt.Payload{
++			IssuedAt:       jwt.NumericDate(now),
++			ExpirationTime: jwt.NumericDate(now.Add(time.Hour)),
++		},
++		Scoped:     tokens.Scoped{Scope: string(tokens.FileDownload)},
++		FilePath:   filePath,
++		ServerUuid: serverUUID,
++		UserUuid:   uuid.NewString(),
++		UniqueId:   uuid.NewString(),
++	}
++	signed, err := jwt.Sign(payload, config.GetJwtAlgorithm())
++	require.NoError(t, err)
++	return string(signed)
++}
++
++func performResumableRequest(handler http.Handler, method, token, directory, filename string, offset int64, length *int64, complete bool, body io.Reader) *httptest.ResponseRecorder {
++	query := url.Values{"token": {token}, "directory": {directory}, "file": {filename}}
++	request := httptest.NewRequest(method, "/upload/file?"+query.Encode(), body)
++	if method == http.MethodPatch {
++		request.Header.Set("Content-Type", "application/offset+octet-stream")
++		request.Header.Set("Upload-Offset", strconv.FormatInt(offset, 10))
++		if length != nil {
++			request.Header.Set("Upload-Length", strconv.FormatInt(*length, 10))
++		}
++		if complete {
++			request.Header.Set("Upload-Complete", "?1")
++		}
++	}
++	recorder := httptest.NewRecorder()
++	handler.ServeHTTP(recorder, request)
++	return recorder
++}
++
++func readServerHTTPFixture(t *testing.T, s *server.Server, name string) []byte {
++	t.Helper()
++	data, err := os.ReadFile(filepath.Join(s.Filesystem().Path(), filepath.FromSlash(strings.TrimPrefix(name, "/"))))
++	require.NoError(t, err)
++	return data
++}
+diff --git a/router/betterfiles_paths.go b/router/betterfiles_paths.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..81085fefcbe8eadc71371eb80c2f0f7e58835532
+--- /dev/null
++++ b/router/betterfiles_paths.go
+@@ -0,0 +1,170 @@
++package router
++
++import (
++	"errors"
++	"net/http"
++	pathpkg "path"
++	"strings"
++	"unicode/utf8"
++
++	"github.com/gin-gonic/gin"
++	"golang.org/x/sys/unix"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const (
++	betterFilesMaxPathLength = 4096
++	betterFilesMaxNameLength = 255
++)
++
++var errBetterFilesInvalidPath = errors.New("invalid file path")
++
++// normalizeBetterFilesRoot converts a user supplied server path to one canonical,
++// slash-prefixed path. Parent components are rejected before cleaning so that a
++// traversal attempt can never be silently reinterpreted as a different path.
++func normalizeBetterFilesRoot(value string) (string, error) {
++	if value == "" {
++		return "/", nil
++	}
++	if !validBetterFilesPathText(value) {
++		return "", errBetterFilesInvalidPath
++	}
++	if strings.Contains(value, "\\") || hasParentPathComponent(value) {
++		return "", errBetterFilesInvalidPath
++	}
++
++	cleaned := pathpkg.Clean("/" + strings.TrimLeft(value, "/"))
++	if cleaned == "." {
++		cleaned = "/"
++	}
++	if !strings.HasPrefix(cleaned, "/") || len(cleaned) > betterFilesMaxPathLength {
++		return "", errBetterFilesInvalidPath
++	}
++	if !validBetterFilesComponents(cleaned) {
++		return "", errBetterFilesInvalidPath
++	}
++	return cleaned, nil
++}
++
++// joinBetterFilesPath resolves a relative request path below root. Absolute
++// values and values resolving to root itself are deliberately rejected.
++func joinBetterFilesPath(root, value string) (string, error) {
++	if value == "" || pathpkg.IsAbs(value) || !validBetterFilesPathText(value) {
++		return "", errBetterFilesInvalidPath
++	}
++	if strings.Contains(value, "\\") || hasParentPathComponent(value) {
++		return "", errBetterFilesInvalidPath
++	}
++
++	relative := pathpkg.Clean(value)
++	if relative == "." || relative == "/" || strings.HasPrefix(relative, "../") {
++		return "", errBetterFilesInvalidPath
++	}
++	if !validBetterFilesComponents(relative) {
++		return "", errBetterFilesInvalidPath
++	}
++
++	joined := pathpkg.Join(root, relative)
++	if joined == root || joined == "/" || len(joined) > betterFilesMaxPathLength {
++		return "", errBetterFilesInvalidPath
++	}
++	if root != "/" && !strings.HasPrefix(joined, root+"/") {
++		return "", errBetterFilesInvalidPath
++	}
++	return joined, nil
++}
++
++func normalizeBetterFilesUploadPath(directory, filename string) (string, string, error) {
++	root, err := normalizeBetterFilesRoot(directory)
++	if err != nil {
++		return "", "", err
++	}
++	if filename == "" || filename == "." || filename == ".." || !validBetterFilesPathText(filename) {
++		return "", "", errBetterFilesInvalidPath
++	}
++	if strings.ContainsAny(filename, `/\\`) || len(filename) > betterFilesMaxNameLength {
++		return "", "", errBetterFilesInvalidPath
++	}
++	target, err := joinBetterFilesPath(root, filename)
++	if err != nil {
++		return "", "", err
++	}
++	return root, target, nil
++}
++
++func validBetterFilesPathText(value string) bool {
++	return value != "" && len(value) <= betterFilesMaxPathLength && utf8.ValidString(value) && !strings.ContainsRune(value, '\x00')
++}
++
++func validBetterFilesComponents(value string) bool {
++	for _, component := range strings.Split(strings.Trim(value, "/"), "/") {
++		if component == "" {
++			continue
++		}
++		if component == "." || component == ".." || len(component) > betterFilesMaxNameLength {
++			return false
++		}
++	}
++	return true
++}
++
++func hasParentPathComponent(value string) bool {
++	for _, component := range strings.Split(value, "/") {
++		if component == ".." {
++			return true
++		}
++	}
++	return false
++}
++
++// ensureBetterFilesAllowed checks both canonical and relative spellings of a
++// path, including its ancestors. This keeps gitignore-style directory rules
++// effective without changing the behavior of Filesystem.IsIgnored globally.
++func ensureBetterFilesAllowed(fs *serverfs.Filesystem, paths ...string) error {
++	for _, value := range paths {
++		cleaned, err := normalizeBetterFilesRoot(value)
++		if err != nil {
++			return err
++		}
++		if cleaned == "/" {
++			continue
++		}
++
++		parts := strings.Split(strings.TrimPrefix(cleaned, "/"), "/")
++		for i := 1; i <= len(parts); i++ {
++			relative := strings.Join(parts[:i], "/")
++			if err := fs.IsIgnored(relative, "/"+relative); err != nil {
++				return err
++			}
++		}
++	}
++	return nil
++}
++
++func betterFilesLstat(fs *serverfs.Filesystem, value string) (ufs.FileInfo, error) {
++	info, err := fs.UnixFS().Lstat(value)
++	if err != nil {
++		return nil, err
++	}
++	if info.Mode()&ufs.ModeSymlink != 0 {
++		return nil, errBetterFilesInvalidPath
++	}
++	return info, nil
++}
++
++func betterFilesPhysicalSize(info ufs.FileInfo) int64 {
++	if stat, ok := info.Sys().(*unix.Stat_t); ok {
++		return stat.Blocks * 512
++	}
++	return info.Size()
++}
++
++func abortBetterFilesPath(c *gin.Context, err error) {
++	status := http.StatusUnprocessableEntity
++	if errors.Is(err, ufs.ErrNotExist) {
++		status = http.StatusNotFound
++	}
++	c.AbortWithStatusJSON(status, gin.H{"error": "The requested file path is invalid or unavailable."})
++}
+diff --git a/router/betterfiles_paths_test.go b/router/betterfiles_paths_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..5742f97a8236dd531f6f0e380c902198b514caa5
+--- /dev/null
++++ b/router/betterfiles_paths_test.go
+@@ -0,0 +1,32 @@
++package router
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++func TestNormalizeBetterFilesPaths(t *testing.T) {
++	root, err := normalizeBetterFilesRoot("/plugins/./config")
++	require.NoError(t, err)
++	require.Equal(t, "/plugins/config", root)
++
++	joined, err := joinBetterFilesPath(root, "emoji-😀/paper.yml")
++	require.NoError(t, err)
++	require.Equal(t, "/plugins/config/emoji-😀/paper.yml", joined)
++
++	for _, invalid := range []string{"../escape", "folder/../escape", "/absolute", "nul\x00file", `windows\path`} {
++		_, err := joinBetterFilesPath(root, invalid)
++		require.Error(t, err, invalid)
++	}
++}
++
++func TestEnsureBetterFilesAllowedChecksAncestors(t *testing.T) {
++	fs, err := serverfs.New(t.TempDir(), 0, []string{"private/**", "*.secret"})
++	require.NoError(t, err)
++	require.Error(t, ensureBetterFilesAllowed(fs, "/private/nested/file.txt"))
++	require.Error(t, ensureBetterFilesAllowed(fs, "/config/password.secret"))
++	require.NoError(t, ensureBetterFilesAllowed(fs, "/config/paper.yml"))
++}
+diff --git a/router/betterfiles_test_helpers_test.go b/router/betterfiles_test_helpers_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..25a8e740984614a4a4c5dfb1a5766320b7efb010
+--- /dev/null
++++ b/router/betterfiles_test_helpers_test.go
+@@ -0,0 +1,41 @@
++package router
++
++import (
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	"github.com/pterodactyl/wings/config"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++func newBetterFilesTestFilesystem(t *testing.T, disk int64, ignored ...string) *serverfs.Filesystem {
++	t.Helper()
++	configuration, err := config.NewAtPath(filepath.Join(t.TempDir(), "config.yml"))
++	require.NoError(t, err)
++	configuration.AuthenticationToken = "better-files-filesystem-test-token"
++	configuration.System.User.Uid = os.Getuid()
++	configuration.System.User.Gid = os.Getgid()
++	config.Set(configuration)
++	fs, err := serverfs.New(t.TempDir(), disk, ignored)
++	require.NoError(t, err)
++	return fs
++}
++
++func writeBetterFilesFixture(t *testing.T, fs *serverfs.Filesystem, name string, data []byte) {
++	t.Helper()
++	hostPath := filepath.Join(fs.Path(), filepath.FromSlash(strings.TrimPrefix(name, "/")))
++	require.NoError(t, os.MkdirAll(filepath.Dir(hostPath), 0o755))
++	require.NoError(t, os.WriteFile(hostPath, data, 0o644))
++}
++
++func readBetterFilesFixture(t *testing.T, fs *serverfs.Filesystem, name string) []byte {
++	t.Helper()
++	hostPath := filepath.Join(fs.Path(), filepath.FromSlash(strings.TrimPrefix(name, "/")))
++	data, err := os.ReadFile(hostPath)
++	require.NoError(t, err)
++	return data
++}
 diff --git a/router/middleware/middleware.go b/router/middleware/middleware.go
-index 1908711..d999eb2 100644
+index 190871149a34778f688b62a62f2ca093614809c7..c8b5f385a08f8b6f7d68633a3e7b9a6cb3d202cc 100644
 --- a/router/middleware/middleware.go
 +++ b/router/middleware/middleware.go
-@@ -102,10 +102,20 @@ func SetAccessControlHeaders() gin.HandlerFunc {
- 		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
- 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")
- 
+@@ -99,13 +99,26 @@ func SetAccessControlHeaders() gin.HandlerFunc {
+ 	return func(c *gin.Context) {
+ 		c.Header("Access-Control-Allow-Origin", location)
+ 		c.Header("Access-Control-Allow-Credentials", "true")
+-		c.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+-		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")
++		c.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS")
++		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
++
 +		if isStreamDownloadRequest(c) {
 +			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
 +			c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
 +			c.Header("Vary", "Origin, Access-Control-Request-Headers")
 +		}
-+
++		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
++			c.Header("Access-Control-Expose-Headers", "Upload-Offset, X-Request-Id")
++		}
+ 
  		// CORS for Private Networks (RFC1918)
  		// @see https://developer.chrome.com/blog/private-network-access-update/?utm_source=devtools
  		if allowPrivateNetwork {
@@ -152,12 +646,15 @@ index 1908711..d999eb2 100644
  		}
  
  		// Maximum age allowable under Chromium v76 is 2 hours, so just use that since
-@@ -136,6 +146,10 @@ func SetAccessControlHeaders() gin.HandlerFunc {
+@@ -136,6 +149,13 @@ func SetAccessControlHeaders() gin.HandlerFunc {
  	}
  }
  
 +func isStreamDownloadRequest(c *gin.Context) bool {
-+	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
++	if c.Request == nil || c.Request.URL == nil {
++		return false
++	}
++	return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
 +}
 +
  // ServerExists will ensure that the requested server exists in this setup.
@@ -165,10 +662,10 @@ index 1908711..d999eb2 100644
  // the request context, and the logger for the context is also updated to include
 diff --git a/router/middleware/middleware_test.go b/router/middleware/middleware_test.go
 new file mode 100644
-index 0000000..56c478c
+index 0000000000000000000000000000000000000000..73d0b1ce2f87355fdd9eb5e4e3c245c47ffeb2d4
 --- /dev/null
 +++ b/router/middleware/middleware_test.go
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,115 @@
 +package middleware
 +
 +import (
@@ -198,6 +695,12 @@ index 0000000..56c478c
 +		c.Status(http.StatusNoContent)
 +	})
 +	router.GET("/download/file", func(c *gin.Context) {
++		c.Status(http.StatusNoContent)
++	})
++	router.GET("/download/directory", func(c *gin.Context) {
++		c.Status(http.StatusNoContent)
++	})
++	router.PATCH("/upload/file", func(c *gin.Context) {
 +		c.Status(http.StatusNoContent)
 +	})
 +
@@ -232,6 +735,30 @@ index 0000000..56c478c
 +		}
 +	})
 +
++	t.Run("directory archive route exposes download headers", func(t *testing.T) {
++		request := httptest.NewRequest(http.MethodOptions, "/download/directory", nil)
++		recorder := httptest.NewRecorder()
++		router.ServeHTTP(recorder, request)
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Content-Disposition") {
++			t.Fatalf("expected Content-Disposition in exposed headers, got %q", got)
++		}
++	})
++
++	t.Run("resumable upload route allows and exposes offset headers", func(t *testing.T) {
++		request := httptest.NewRequest(http.MethodOptions, "/upload/file", nil)
++		recorder := httptest.NewRecorder()
++		router.ServeHTTP(recorder, request)
++		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Upload-Offset") || !strings.Contains(got, "Upload-Length") {
++			t.Fatalf("expected resumable upload headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Upload-Offset") {
++			t.Fatalf("expected Upload-Offset in exposed headers, got %q", got)
++		}
++		if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "HEAD") || !strings.Contains(got, "PATCH") {
++			t.Fatalf("expected resumable upload methods, got %q", got)
++		}
++	})
++
 +	t.Run("download route keeps default headers", func(t *testing.T) {
 +		request := httptest.NewRequest(http.MethodOptions, "/download/file", nil)
 +		request.Header.Set("Origin", "https://cdn.example.com")
@@ -255,18 +782,30 @@ index 0000000..56c478c
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac760..88e490e 100644
+index bdac76065242c834f37f74a68fdba2211df96125..53f831cfe631333e0fe231755e43ce6b87f8dd9f 100644
 --- a/router/router.go
 +++ b/router/router.go
-@@ -46,6 +46,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -27,6 +27,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 	}
+ 	router.Use(middleware.AttachRequestID(), middleware.CaptureErrors(), middleware.SetAccessControlHeaders())
+ 	router.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))
++	router.GET("/openapi.json", getOpenAPI)
+ 	// @todo log this into a different file so you can setup IP blocking for abusive requests and such.
+ 	// This should still dump requests in debug mode since it does help with understanding the request
+ 	// lifecycle and quickly seeing what was called leading to the logs. However, it isn't feasible to mix
+@@ -46,7 +47,11 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  	// These routes use signed URLs to validate access to the resource being requested.
  	router.GET("/download/backup", getDownloadBackup)
  	router.GET("/download/file", getDownloadFile)
++	router.GET("/download/directory", getDownloadDirectory)
 +	router.GET("/download/stream", getDownloadStream)
  	router.POST("/upload/file", postServerUploadFiles)
++	router.PATCH("/upload/file", patchServerUploadFile)
++	router.HEAD("/upload/file", headServerUploadFile)
  
  	// This route is special it sits above all the other requests because we are
-@@ -63,6 +64,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+ 	// using a JWT to authorize access to it, therefore it needs to be publicly
+@@ -63,6 +68,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  	protected := router.Use(middleware.RequireAuthorization())
  	protected.POST("/api/update", postUpdateConfiguration)
  	protected.GET("/api/system", getSystemInformation)
@@ -274,7 +813,7 @@ index bdac760..88e490e 100644
  	protected.GET("/api/servers", getAllServers)
  	protected.POST("/api/servers", postCreateServer)
  	protected.DELETE("/api/transfers/:server", deleteTransfer)
-@@ -79,6 +81,14 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -79,6 +85,14 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  		server.GET("/logs", getServerLogs)
  		server.POST("/power", postServerPower)
  		server.POST("/commands", postServerCommands)
@@ -289,7 +828,7 @@ index bdac760..88e490e 100644
  		server.POST("/install", postServerInstall)
  		server.POST("/reinstall", postServerReinstall)
  		server.POST("/sync", postServerSync)
-@@ -92,6 +102,12 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
+@@ -92,15 +106,27 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
  		files := server.Group("/files")
  		{
  			files.GET("/contents", getServerFileContents)
@@ -297,12 +836,20 @@ index bdac760..88e490e 100644
 +			files.GET("/revisions/:revision", getServerFileRevision)
 +			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
 +			files.GET("/search", getServerFilesSearch)
++			files.POST("/search", postServerFilesSearch)
 +			files.GET("/archive/list", getServerArchiveList)
 +			files.POST("/archive/extract", postServerArchiveExtract)
  			files.GET("/list-directory", getServerListDirectory)
- 			files.PUT("/rename", putServerRenameFiles)
+-			files.PUT("/rename", putServerRenameFiles)
++			files.PUT("/rename", putServerRenameFilesSafe)
  			files.POST("/copy", postServerCopyFile)
-@@ -101,6 +117,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
++			files.DELETE("/operations/:operation", deleteServerFileOperation)
++			files.GET("/fingerprints", getServerFileFingerprints)
++			files.GET("/largest-directories", getServerLargestDirectories)
++			files.POST("/copy-many", postServerCopyMany)
+ 			files.POST("/write", postServerWriteFile)
+ 			files.POST("/create-directory", postServerCreateDirectory)
+ 			files.POST("/delete", postServerDeleteFiles)
  			files.POST("/compress", postServerCompressFiles)
  			files.POST("/decompress", postServerDecompressFiles)
  			files.POST("/chmod", postServerChmodFile)
@@ -312,7 +859,7 @@ index bdac760..88e490e 100644
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000..b9f5258
+index 0000000000000000000000000000000000000000..b9f5258b63263980d7e44f04de3b37c1e4d72ede
 --- /dev/null
 +++ b/router/router_cdn_stream.go
 @@ -0,0 +1,48 @@
@@ -364,9 +911,497 @@ index 0000000..b9f5258
 +
 +	return openDownloadFile(c, s.Filesystem(), filePath)
 +}
+diff --git a/router/router_download_directory.go b/router/router_download_directory.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..7ebaca70d8937927435e33a0431845d2a357b183
+--- /dev/null
++++ b/router/router_download_directory.go
+@@ -0,0 +1,312 @@
++package router
++
++import (
++	"archive/tar"
++	"archive/zip"
++	"compress/gzip"
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	pathpkg "path"
++	"strconv"
++	"strings"
++	"unicode"
++
++	"github.com/dsnet/compress/bzip2"
++	"github.com/gin-gonic/gin"
++	"github.com/klauspost/compress/zstd"
++	"github.com/ulikunitz/xz"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/router/tokens"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++type directoryArchiveFormat struct {
++	name      string
++	extension string
++	mime      string
++}
++
++var directoryArchiveFormats = map[string]directoryArchiveFormat{
++	"tar":      {name: "tar", extension: "tar", mime: "application/x-tar"},
++	"tar_gz":   {name: "tar_gz", extension: "tar.gz", mime: "application/gzip"},
++	"tar_xz":   {name: "tar_xz", extension: "tar.xz", mime: "application/x-xz"},
++	"tar_bz2":  {name: "tar_bz2", extension: "tar.bz2", mime: "application/x-bzip2"},
++	"tar_zstd": {name: "tar_zstd", extension: "tar.zst", mime: "application/zstd"},
++	"zip":      {name: "zip", extension: "zip", mime: "application/zip"},
++}
++
++const (
++	maxDirectoryArchiveEntries = 500000
++	maxDirectoryArchiveDepth   = 256
++)
++
++func getDownloadDirectory(c *gin.Context) {
++	manager := middleware.ExtractManager(c)
++	token := tokens.FilePayload{}
++	if err := tokens.ParseToken([]byte(c.Query("token")), &token); err != nil {
++		abortDirectoryDownload(c)
++		return
++	}
++	s, ok := manager.Get(token.ServerUuid)
++	if !ok || token.Denylisted() || !token.IsUniqueRequest() || !token.HasScope(tokens.FileDownload) {
++		abortDirectoryDownload(c)
++		return
++	}
++
++	formatName := c.Query("archive_format")
++	if formatName == "" {
++		formatName = "tar_gz"
++	}
++	format, ok := directoryArchiveFormats[formatName]
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Unsupported directory archive format."})
++		return
++	}
++	root, err := normalizeBetterFilesRoot(token.FilePath)
++	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), root) != nil {
++		abortDirectoryDownload(c)
++		return
++	}
++	info, err := betterFilesLstat(s.Filesystem(), root)
++	if err != nil || !info.IsDir() {
++		abortDirectoryDownload(c)
++		return
++	}
++
++	name := pathpkg.Base(root)
++	if root == "/" || name == "." || name == "/" {
++		name = "server-files"
++	}
++	filename := safeArchiveFilename(name) + "." + format.extension
++	c.Header("Content-Disposition", "attachment; filename="+strconv.Quote(filename))
++	c.Header("Content-Type", format.mime)
++	c.Header("X-Content-Type-Options", "nosniff")
++	c.Status(http.StatusOK)
++
++	if err := streamDirectoryArchive(c.Request.Context(), c.Writer, s.Filesystem(), root, format); err != nil && !errors.Is(err, context.Canceled) {
++		s.Log().WithError(err).Warn("directory archive stream ended with an error")
++	}
++}
++
++func abortDirectoryDownload(c *gin.Context) {
++	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "The requested directory was not found on this server."})
++}
++
++func safeArchiveFilename(value string) string {
++	var builder strings.Builder
++	for _, character := range value {
++		if character > unicode.MaxASCII || character < 0x20 || character == 0x7f || character == '/' || character == '\\' {
++			builder.WriteByte('_')
++		} else {
++			builder.WriteRune(character)
++		}
++	}
++	if builder.Len() == 0 {
++		return "directory"
++	}
++	return builder.String()
++}
++
++func streamDirectoryArchive(ctx context.Context, output io.Writer, fs *serverfs.Filesystem, root string, format directoryArchiveFormat) error {
++	if format.name == "zip" {
++		writer := zip.NewWriter(output)
++		err := writeZipDirectory(ctx, writer, fs, root)
++		closeErr := writer.Close()
++		if err != nil {
++			return err
++		}
++		return closeErr
++	}
++
++	compressed, closeCompressed, err := directoryArchiveCompressor(output, format.name)
++	if err != nil {
++		return err
++	}
++	writer := tar.NewWriter(compressed)
++	err = writeTarDirectory(ctx, writer, fs, root)
++	closeTarErr := writer.Close()
++	closeCompressionErr := closeCompressed()
++	if err != nil {
++		return err
++	}
++	if closeTarErr != nil {
++		return closeTarErr
++	}
++	return closeCompressionErr
++}
++
++func directoryArchiveCompressor(output io.Writer, format string) (io.Writer, func() error, error) {
++	switch format {
++	case "tar":
++		return output, func() error { return nil }, nil
++	case "tar_gz":
++		writer, err := gzip.NewWriterLevel(output, gzip.DefaultCompression)
++		if err != nil {
++			return nil, nil, err
++		}
++		return writer, writer.Close, nil
++	case "tar_xz":
++		writer, err := xz.NewWriter(output)
++		if err != nil {
++			return nil, nil, err
++		}
++		return writer, writer.Close, nil
++	case "tar_bz2":
++		writer, err := bzip2.NewWriter(output, &bzip2.WriterConfig{Level: 6})
++		if err != nil {
++			return nil, nil, err
++		}
++		return writer, writer.Close, nil
++	case "tar_zstd":
++		writer, err := zstd.NewWriter(output, zstd.WithEncoderLevel(zstd.SpeedDefault), zstd.WithEncoderConcurrency(1))
++		if err != nil {
++			return nil, nil, err
++		}
++		return writer, writer.Close, nil
++	default:
++		return nil, nil, errors.New("unsupported archive format")
++	}
++}
++
++type directoryArchiveItem struct {
++	path  string
++	rel   string
++	depth int
++}
++
++func writeTarDirectory(ctx context.Context, writer *tar.Writer, fs *serverfs.Filesystem, root string) error {
++	buffer := make([]byte, 64*1024)
++	return walkDirectoryArchive(ctx, fs, root, func(item directoryArchiveItem, info ufs.FileInfo, file io.Reader) error {
++		header, err := tar.FileInfoHeader(info, "")
++		if err != nil {
++			return err
++		}
++		header.Name = item.rel
++		if info.IsDir() {
++			header.Name += "/"
++		}
++		if err := writer.WriteHeader(header); err != nil {
++			return err
++		}
++		if file == nil {
++			return nil
++		}
++		written, err := io.CopyBuffer(writerOnly{Writer: writer}, file, buffer)
++		if err != nil {
++			return err
++		}
++		if written != info.Size() {
++			return io.ErrUnexpectedEOF
++		}
++		return nil
++	})
++}
++
++func writeZipDirectory(ctx context.Context, writer *zip.Writer, fs *serverfs.Filesystem, root string) error {
++	buffer := make([]byte, 64*1024)
++	return walkDirectoryArchive(ctx, fs, root, func(item directoryArchiveItem, info ufs.FileInfo, file io.Reader) error {
++		header, err := zip.FileInfoHeader(info)
++		if err != nil {
++			return err
++		}
++		header.Name = item.rel
++		if info.IsDir() {
++			header.Name += "/"
++			header.Method = zip.Store
++		} else {
++			header.Method = zip.Deflate
++		}
++		destination, err := writer.CreateHeader(header)
++		if err != nil || file == nil {
++			return err
++		}
++		written, err := io.CopyBuffer(writerOnly{Writer: destination}, file, buffer)
++		if err != nil {
++			return err
++		}
++		if written != info.Size() {
++			return io.ErrUnexpectedEOF
++		}
++		return nil
++	})
++}
++
++func walkDirectoryArchive(
++	ctx context.Context,
++	fs *serverfs.Filesystem,
++	root string,
++	visit func(directoryArchiveItem, ufs.FileInfo, io.Reader) error,
++) error {
++	if err := ctx.Err(); err != nil {
++		return err
++	}
++	entries, err := fs.ReadDirStat(root)
++	if err != nil {
++		return err
++	}
++	stack := make([]directoryArchiveItem, 0, len(entries))
++	for i := len(entries) - 1; i >= 0; i-- {
++		stack = append(stack, directoryArchiveItem{path: pathpkg.Join(root, entries[i].Name()), rel: entries[i].Name(), depth: 1})
++	}
++
++	visited := 0
++	for len(stack) > 0 {
++		if err := ctx.Err(); err != nil {
++			return err
++		}
++		item := stack[len(stack)-1]
++		stack = stack[:len(stack)-1]
++		visited++
++		if visited > maxDirectoryArchiveEntries || item.depth > maxDirectoryArchiveDepth {
++			return errors.New("directory archive traversal limit exceeded")
++		}
++		if pathpkg.IsAbs(item.rel) || hasParentPathComponent(item.rel) || ensureBetterFilesAllowed(fs, item.path) != nil {
++			continue
++		}
++		info, err := fs.UnixFS().Lstat(item.path)
++		if err != nil {
++			return err
++		}
++		if info.Mode()&ufs.ModeSymlink != 0 {
++			continue
++		}
++		if info.IsDir() {
++			if err := visit(item, info, nil); err != nil {
++				return err
++			}
++			children, err := fs.ReadDirStat(item.path)
++			if err != nil {
++				return err
++			}
++			for i := len(children) - 1; i >= 0; i-- {
++				stack = append(stack, directoryArchiveItem{
++					path:  pathpkg.Join(item.path, children[i].Name()),
++					rel:   pathpkg.Join(item.rel, children[i].Name()),
++					depth: item.depth + 1,
++				})
++			}
++			continue
++		}
++		if !info.Mode().IsRegular() {
++			continue
++		}
++		file, err := fs.UnixFS().OpenFile(item.path, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++		if err != nil {
++			return err
++		}
++		reader := &fingerprintContextReader{ctx: ctx, reader: io.LimitReader(file, info.Size())}
++		err = visit(item, info, reader)
++		closeErr := file.Close()
++		if err != nil {
++			return err
++		}
++		if closeErr != nil {
++			return closeErr
++		}
++	}
++	return nil
++}
+diff --git a/router/router_download_directory_http_test.go b/router/router_download_directory_http_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..b6e0cb8476c922e98cc9f051c5d60bf0fb770e16
+--- /dev/null
++++ b/router/router_download_directory_http_test.go
+@@ -0,0 +1,59 @@
++package router
++
++import (
++	"archive/zip"
++	"bytes"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestDirectoryDownloadJWTDirectoryValidationAndIgnoredFiles(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 10, "folder/secret.txt")
++	writeBetterFilesFixture(t, s.Filesystem(), "/folder/visible.txt", []byte("visible"))
++	writeBetterFilesFixture(t, s.Filesystem(), "/folder/secret.txt", []byte("secret"))
++	token := signBetterFilesDownloadToken(t, s.ID(), "/folder")
++	request := httptest.NewRequest(http.MethodGet, "/download/directory?"+url.Values{
++		"token":          {token},
++		"archive_format": {"zip"},
++	}.Encode(), nil)
++	recorder := httptest.NewRecorder()
++	handler.ServeHTTP(recorder, request)
++	require.Equal(t, http.StatusOK, recorder.Code)
++	require.Equal(t, "application/zip", recorder.Header().Get("Content-Type"))
++	require.Contains(t, recorder.Header().Get("Content-Disposition"), "folder.zip")
++
++	archive, err := zip.NewReader(bytes.NewReader(recorder.Body.Bytes()), int64(recorder.Body.Len()))
++	require.NoError(t, err)
++	files := map[string][]byte{}
++	for _, entry := range archive.File {
++		if entry.FileInfo().IsDir() {
++			continue
++		}
++		opened, err := entry.Open()
++		require.NoError(t, err)
++		files[entry.Name], err = io.ReadAll(opened)
++		require.NoError(t, err)
++		require.NoError(t, opened.Close())
++	}
++	require.Equal(t, []byte("visible"), files["visible.txt"])
++	require.NotContains(t, files, "secret.txt")
++
++	invalid := httptest.NewRecorder()
++	handler.ServeHTTP(invalid, httptest.NewRequest(http.MethodGet, "/download/directory?token=invalid", nil))
++	require.Equal(t, http.StatusNotFound, invalid.Code)
++
++	fileToken := signBetterFilesDownloadToken(t, s.ID(), "/folder/visible.txt")
++	fileResponse := httptest.NewRecorder()
++	handler.ServeHTTP(fileResponse, httptest.NewRequest(http.MethodGet, "/download/directory?"+url.Values{"token": {fileToken}}.Encode(), nil))
++	require.Equal(t, http.StatusNotFound, fileResponse.Code)
++
++	traversalToken := signBetterFilesDownloadToken(t, s.ID(), "/../folder")
++	traversalResponse := httptest.NewRecorder()
++	handler.ServeHTTP(traversalResponse, httptest.NewRequest(http.MethodGet, "/download/directory?"+url.Values{"token": {traversalToken}}.Encode(), nil))
++	require.Equal(t, http.StatusNotFound, traversalResponse.Code)
++}
+diff --git a/router/router_download_directory_test.go b/router/router_download_directory_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..913fac3e58ea501ec7107a1a0c13b421deb60b56
+--- /dev/null
++++ b/router/router_download_directory_test.go
+@@ -0,0 +1,99 @@
++package router
++
++import (
++	"archive/tar"
++	"archive/zip"
++	"bytes"
++	"compress/bzip2"
++	"compress/gzip"
++	"context"
++	"io"
++	"testing"
++
++	"github.com/klauspost/compress/zstd"
++	"github.com/stretchr/testify/require"
++	"github.com/ulikunitz/xz"
++)
++
++func TestStreamDirectoryArchiveEverySupportedFormat(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0, "secret.txt")
++	writeBetterFilesFixture(t, fs, "/folder/hello.txt", []byte("hello"))
++	writeBetterFilesFixture(t, fs, "/folder/nested/world.txt", []byte("world"))
++	writeBetterFilesFixture(t, fs, "/folder/secret.txt", []byte("secret"))
++
++	for _, name := range []string{"tar", "tar_gz", "tar_xz", "tar_bz2", "tar_zstd", "zip"} {
++		t.Run(name, func(t *testing.T) {
++			var output bytes.Buffer
++			require.NoError(t, streamDirectoryArchive(context.Background(), &output, fs, "/folder", directoryArchiveFormats[name]))
++			files := readDirectoryArchiveFixture(t, name, output.Bytes())
++			require.Equal(t, []byte("hello"), files["hello.txt"])
++			require.Equal(t, []byte("world"), files["nested/world.txt"])
++			require.NotContains(t, files, "secret.txt")
++		})
++	}
++}
++
++func TestStreamDirectoryArchiveCancellation(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/folder/file.txt", []byte("content"))
++	ctx, cancel := context.WithCancel(context.Background())
++	cancel()
++	var output bytes.Buffer
++	require.ErrorIs(t, streamDirectoryArchive(ctx, &output, fs, "/folder", directoryArchiveFormats["tar"]), context.Canceled)
++}
++
++func readDirectoryArchiveFixture(t *testing.T, format string, data []byte) map[string][]byte {
++	t.Helper()
++	if format == "zip" {
++		reader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
++		require.NoError(t, err)
++		files := make(map[string][]byte)
++		for _, entry := range reader.File {
++			if entry.FileInfo().IsDir() {
++				continue
++			}
++			opened, err := entry.Open()
++			require.NoError(t, err)
++			files[entry.Name], err = io.ReadAll(opened)
++			require.NoError(t, err)
++			require.NoError(t, opened.Close())
++		}
++		return files
++	}
++
++	var reader io.Reader = bytes.NewReader(data)
++	switch format {
++	case "tar_gz":
++		opened, err := gzip.NewReader(reader)
++		require.NoError(t, err)
++		defer opened.Close()
++		reader = opened
++	case "tar_xz":
++		opened, err := xz.NewReader(reader)
++		require.NoError(t, err)
++		reader = opened
++	case "tar_bz2":
++		reader = bzip2.NewReader(reader)
++	case "tar_zstd":
++		opened, err := zstd.NewReader(reader)
++		require.NoError(t, err)
++		defer opened.Close()
++		reader = opened
++	}
++
++	files := make(map[string][]byte)
++	archive := tar.NewReader(reader)
++	for {
++		header, err := archive.Next()
++		if err == io.EOF {
++			break
++		}
++		require.NoError(t, err)
++		if header.FileInfo().IsDir() {
++			continue
++		}
++		files[header.Name], err = io.ReadAll(archive)
++		require.NoError(t, err)
++	}
++	return files
++}
 diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
 new file mode 100644
-index 0000000..ff4dcb4
+index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828f18c68dd
 --- /dev/null
 +++ b/router/router_download_helpers.go
 @@ -0,0 +1,206 @@
@@ -578,7 +1613,7 @@ index 0000000..ff4dcb4
 +}
 diff --git a/router/router_download_helpers_test.go b/router/router_download_helpers_test.go
 new file mode 100644
-index 0000000..7ed8d5a
+index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26df8101e2d
 --- /dev/null
 +++ b/router/router_download_helpers_test.go
 @@ -0,0 +1,164 @@
@@ -746,9 +1781,702 @@ index 0000000..7ed8d5a
 +		}
 +	})
 +}
+diff --git a/router/router_file_operations.go b/router/router_file_operations.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..574085745c8f1cc18d1d3f7cae617ba210a0cfc6
+--- /dev/null
++++ b/router/router_file_operations.go
+@@ -0,0 +1,25 @@
++package router
++
++import (
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++	"github.com/google/uuid"
++
++	"github.com/pterodactyl/wings/router/middleware"
++)
++
++func deleteServerFileOperation(c *gin.Context) {
++	identifier := c.Param("operation")
++	if _, err := uuid.Parse(identifier); err != nil {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "The operation identifier is malformed."})
++		return
++	}
++
++	s := middleware.ExtractServer(c)
++	if !s.FileOperations().Cancel(identifier) {
++		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "The requested operation was not found on this server."})
++		return
++	}
++	c.Status(http.StatusNoContent)
++}
+diff --git a/router/router_file_operations_test.go b/router/router_file_operations_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b89b4f8688d035aea0b101d2ee934316e1ea512
+--- /dev/null
++++ b/router/router_file_operations_test.go
+@@ -0,0 +1,39 @@
++package router
++
++import (
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/google/uuid"
++	"github.com/stretchr/testify/require"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/server"
++)
++
++func TestDeleteServerFileOperationResponses(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++	started := make(chan struct{})
++	operation, done, err := s.FileOperations().Start(context.Background(), "copy_many", func(ctx context.Context, _ *server.FileOperation) error {
++		close(started)
++		<-ctx.Done()
++		return ctx.Err()
++	})
++	require.NoError(t, err)
++	<-started
++
++	request := func(identifier string) *httptest.ResponseRecorder {
++		recorder := httptest.NewRecorder()
++		req := httptest.NewRequest(http.MethodDelete, "/api/servers/"+s.ID()+"/files/operations/"+identifier, nil)
++		req.Header.Set("Authorization", "Bearer "+config.Get().Token.Token)
++		handler.ServeHTTP(recorder, req)
++		return recorder
++	}
++	require.Equal(t, http.StatusUnprocessableEntity, request("not-a-uuid").Code)
++	require.Equal(t, http.StatusNotFound, request(uuid.NewString()).Code)
++	require.Equal(t, http.StatusNoContent, request(operation.Identifier()).Code)
++	require.ErrorIs(t, <-done, server.ErrFileOperationCanceled)
++	require.Equal(t, http.StatusNotFound, request(operation.Identifier()).Code)
++}
+diff --git a/router/router_openapi.go b/router/router_openapi.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..aa5a4e6687eb83bc7b5a06925237de60a6d3c107
+--- /dev/null
++++ b/router/router_openapi.go
+@@ -0,0 +1,80 @@
++package router
++
++import (
++	"net/http"
++
++	"github.com/gin-gonic/gin"
++)
++
++// getOpenAPI exposes the concrete Better Files capability surface. Better
++// Files performs exact method detection against these path keys, so this list
++// intentionally contains only routes mounted by Configure.
++func getOpenAPI(c *gin.Context) {
++	operation := func(summary string, statuses ...string) gin.H {
++		responses := gin.H{}
++		for _, status := range statuses {
++			responses[status] = gin.H{"description": http.StatusText(statusCode(status))}
++		}
++		return gin.H{"summary": summary, "responses": responses}
++	}
++
++	c.JSON(http.StatusOK, gin.H{
++		"openapi": "3.1.0",
++		"info": gin.H{
++			"title":   "Wings Better Files API",
++			"version": "1.0.0",
++		},
++		"paths": gin.H{
++			"/upload/file": gin.H{
++				"post":  operation("Upload files using multipart form data", "200"),
++				"head":  operation("Read the current resumable upload offset", "200", "404"),
++				"patch": operation("Append a resumable upload chunk", "200", "409", "413"),
++			},
++			"/download/directory": gin.H{
++				"get": operation("Stream a directory archive", "200", "404"),
++			},
++			"/api/servers/{server}/files/copy-many": gin.H{
++				"post": operation("Copy multiple files or directories", "200", "202", "422"),
++			},
++			"/api/servers/{server}/files/rename": gin.H{
++				"put": operation("Rename multiple files", "204", "400", "422"),
++			},
++			"/api/servers/{server}/files/search": gin.H{
++				"get":  operation("Search files using the V1 query contract", "200", "400"),
++				"post": operation("Search files using structured filters", "200", "422"),
++			},
++			"/api/servers/{server}/files/largest-directories": gin.H{
++				"get": operation("Analyze directory disk usage", "200", "404", "422"),
++			},
++			"/api/servers/{server}/files/fingerprints": gin.H{
++				"get": operation("Fingerprint files", "200", "422"),
++			},
++			"/api/servers/{server}/files/operations/{operation}": gin.H{
++				"delete": operation("Cancel a file operation", "204", "404", "422"),
++			},
++		},
++	})
++}
++
++func statusCode(value string) int {
++	switch value {
++	case "200":
++		return http.StatusOK
++	case "202":
++		return http.StatusAccepted
++	case "204":
++		return http.StatusNoContent
++	case "400":
++		return http.StatusBadRequest
++	case "404":
++		return http.StatusNotFound
++	case "409":
++		return http.StatusConflict
++	case "413":
++		return http.StatusRequestEntityTooLarge
++	case "422":
++		return http.StatusUnprocessableEntity
++	default:
++		return http.StatusInternalServerError
++	}
++}
+diff --git a/router/router_openapi_test.go b/router/router_openapi_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..ada416ecd2614c80d9ed558d8fde3468e4156a15
+--- /dev/null
++++ b/router/router_openapi_test.go
+@@ -0,0 +1,39 @@
++package router
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestOpenAPIBetterFilesCapabilitiesMatchRuntimeMethods(t *testing.T) {
++	_, _, handler := newBetterFilesHTTPServer(t, 10, 10)
++	request := httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
++	recorder := httptest.NewRecorder()
++	handler.ServeHTTP(recorder, request)
++	require.Equal(t, http.StatusOK, recorder.Code)
++
++	var document struct {
++		Paths map[string]map[string]interface{} `json:"paths"`
++	}
++	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &document))
++	expected := map[string][]string{
++		"/upload/file":                                       {"head", "patch", "post"},
++		"/download/directory":                                {"get"},
++		"/api/servers/{server}/files/copy-many":              {"post"},
++		"/api/servers/{server}/files/rename":                 {"put"},
++		"/api/servers/{server}/files/search":                 {"get", "post"},
++		"/api/servers/{server}/files/largest-directories":    {"get"},
++		"/api/servers/{server}/files/fingerprints":           {"get"},
++		"/api/servers/{server}/files/operations/{operation}": {"delete"},
++	}
++	for path, methods := range expected {
++		require.Contains(t, document.Paths, path)
++		for _, method := range methods {
++			require.Contains(t, document.Paths[path], method, "%s %s", method, path)
++		}
++	}
++}
+diff --git a/router/router_resumable_upload.go b/router/router_resumable_upload.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477062b6d5c
+--- /dev/null
++++ b/router/router_resumable_upload.go
+@@ -0,0 +1,349 @@
++package router
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"strconv"
++	"strings"
++	"sync"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/internal/models"
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/router/tokens"
++	"github.com/pterodactyl/wings/server"
++	"github.com/pterodactyl/wings/server/filesystem"
++)
++
++const maxResumableUploadLocks = 10240
++
++type resumableUploadLock struct {
++	mu   sync.Mutex
++	refs int
++}
++
++type resumableUploadLockRegistry struct {
++	mu    sync.Mutex
++	locks map[string]*resumableUploadLock
++}
++
++var uploadLocks = resumableUploadLockRegistry{locks: make(map[string]*resumableUploadLock)}
++
++var uploadBufferPool = sync.Pool{New: func() interface{} {
++	buffer := make([]byte, 64*1024)
++	return &buffer
++}}
++
++var saveResumableUploadActivity = func(s *server.Server, user, ip, filename, directory string) {
++	s.SaveActivity(s.NewRequestActivity(user, ip), server.ActivityFileUploaded, models.ActivityMeta{
++		"file":      filename,
++		"directory": directory,
++	})
++}
++
++func (r *resumableUploadLockRegistry) acquire(key string) (func(), bool) {
++	r.mu.Lock()
++	lock := r.locks[key]
++	if lock == nil {
++		if len(r.locks) >= maxResumableUploadLocks {
++			r.mu.Unlock()
++			return nil, false
++		}
++		lock = &resumableUploadLock{}
++		r.locks[key] = lock
++	}
++	lock.refs++
++	r.mu.Unlock()
++
++	lock.mu.Lock()
++	return func() {
++		lock.mu.Unlock()
++		r.mu.Lock()
++		lock.refs--
++		if lock.refs == 0 {
++			delete(r.locks, key)
++		}
++		r.mu.Unlock()
++	}, true
++}
++
++func headServerUploadFile(c *gin.Context) {
++	s, _, ok := resumableUploadServer(c)
++	if !ok {
++		return
++	}
++	directory, target, ok := resumableUploadTarget(c, s)
++	_ = directory
++	if !ok {
++		return
++	}
++
++	release, ok := uploadLocks.acquire(s.ID() + "\x00" + target)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Too many uploads are currently active."})
++		return
++	}
++	defer release()
++
++	offset, err := resumableUploadOffset(s.Filesystem(), target)
++	if err != nil {
++		abortResumableUploadFile(c)
++		return
++	}
++	c.Header("Upload-Offset", strconv.FormatInt(offset, 10))
++	c.Status(http.StatusOK)
++}
++
++func patchServerUploadFile(c *gin.Context) {
++	s, token, ok := resumableUploadServer(c)
++	if !ok {
++		return
++	}
++	directory, target, ok := resumableUploadTarget(c, s)
++	if !ok {
++		return
++	}
++
++	if contentType := c.GetHeader("Content-Type"); contentType != "application/offset+octet-stream" {
++		c.AbortWithStatusJSON(http.StatusUnsupportedMediaType, gin.H{"error": "Content-Type must be application/offset+octet-stream."})
++		return
++	}
++	requestedOffset, ok := parseUploadInteger(c, "Upload-Offset", true)
++	if !ok {
++		return
++	}
++	uploadLength, hasUploadLength, ok := parseOptionalUploadInteger(c, "Upload-Length")
++	if !ok {
++		return
++	}
++	complete, ok := parseUploadComplete(c)
++	if !ok {
++		return
++	}
++
++	maxSize, ok := resumableUploadLimit(c)
++	if !ok {
++		return
++	}
++	if hasUploadLength && uploadLength > maxSize {
++		c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload exceeds the configured upload limit."})
++		return
++	}
++
++	release, ok := uploadLocks.acquire(s.ID() + "\x00" + target)
++	if !ok {
++		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Too many uploads are currently active."})
++		return
++	}
++	defer release()
++
++	current, err := resumableUploadOffset(s.Filesystem(), target)
++	if err != nil {
++		abortResumableUploadFile(c)
++		return
++	}
++	c.Header("Upload-Offset", strconv.FormatInt(current, 10))
++	if requestedOffset != current {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Upload offset does not match the current file size."})
++		return
++	}
++	if current > maxSize || (hasUploadLength && (uploadLength < current || requestedOffset > uploadLength)) {
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Upload length is inconsistent with the current file size."})
++		return
++	}
++
++	allowed := maxSize - current
++	if hasUploadLength && uploadLength-current < allowed {
++		allowed = uploadLength - current
++	}
++	if c.Request.ContentLength >= 0 && c.Request.ContentLength > allowed {
++		c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload chunk exceeds the remaining upload length."})
++		return
++	}
++	if err := s.Filesystem().HasSpaceFor(maxInt64(c.Request.ContentLength, 0)); err != nil {
++		c.AbortWithStatusJSON(http.StatusInsufficientStorage, gin.H{"error": "The server does not have enough disk space for this upload."})
++		return
++	}
++	if directory != "/" {
++		if err := s.Filesystem().CreateDirectory(pathBase(directory), pathDirectory(directory)); err != nil {
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++	}
++
++	file, err := s.Filesystem().Touch(target, ufs.O_WRONLY|ufs.O_APPEND|ufs.O_NOFOLLOW)
++	if err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	rollback := func() {
++		_ = file.Truncate(current)
++	}
++
++	buffer := uploadBufferPool.Get().(*[]byte)
++	defer uploadBufferPool.Put(buffer)
++	reader := io.LimitReader(&contextUploadReader{ctx: c.Request.Context(), reader: c.Request.Body}, allowed+1)
++	written, copyErr := io.CopyBuffer(writerOnly{Writer: file}, reader, *buffer)
++	if copyErr != nil || written > allowed {
++		rollback()
++		_ = file.Close()
++		if filesystem.IsErrorCode(copyErr, filesystem.ErrCodeDiskSpace) {
++			c.AbortWithStatusJSON(http.StatusInsufficientStorage, gin.H{"error": "The server does not have enough disk space for this upload."})
++		} else if written > allowed {
++			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload chunk exceeds the remaining upload length."})
++		} else {
++			middleware.CaptureAndAbort(c, copyErr)
++		}
++		return
++	}
++
++	newOffset := current + written
++	if complete && hasUploadLength && newOffset != uploadLength {
++		rollback()
++		_ = file.Close()
++		c.Header("Upload-Offset", strconv.FormatInt(current, 10))
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Final upload length does not match Upload-Length."})
++		return
++	}
++	if err := file.Close(); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	if err := s.Filesystem().Chown(target); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++
++	if complete {
++		saveResumableUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
++	}
++
++	c.Header("Upload-Offset", strconv.FormatInt(newOffset, 10))
++	c.Status(http.StatusOK)
++}
++
++func resumableUploadServer(c *gin.Context) (*server.Server, *tokens.UploadPayload, bool) {
++	token := &tokens.UploadPayload{}
++	if err := tokens.ParseToken([]byte(c.Query("token")), token); err != nil {
++		abortResumableUploadFile(c)
++		return nil, nil, false
++	}
++	s, ok := middleware.ExtractManager(c).Get(token.ServerUuid)
++	if !ok || token.Denylisted() || !token.HasScope(tokens.FileUpload) {
++		abortResumableUploadFile(c)
++		return nil, nil, false
++	}
++	return s, token, true
++}
++
++func resumableUploadTarget(c *gin.Context, s *server.Server) (string, string, bool) {
++	directory, target, err := normalizeBetterFilesUploadPath(c.Query("directory"), c.Query("file"))
++	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), target) != nil {
++		abortResumableUploadFile(c)
++		return "", "", false
++	}
++	return directory, target, true
++}
++
++func resumableUploadOffset(fs *filesystem.Filesystem, target string) (int64, error) {
++	info, err := fs.UnixFS().Lstat(target)
++	if errors.Is(err, ufs.ErrNotExist) {
++		return 0, nil
++	}
++	if err != nil {
++		return 0, err
++	}
++	if !info.Mode().IsRegular() || info.Mode()&ufs.ModeSymlink != 0 {
++		return 0, errBetterFilesInvalidPath
++	}
++	return info.Size(), nil
++}
++
++func resumableUploadLimit(c *gin.Context) (int64, bool) {
++	megabytes := config.Get().Api.UploadLimit
++	const maxMegabytes = int64(^uint64(0)>>1) / (1024 * 1024)
++	if megabytes <= 0 || megabytes > maxMegabytes {
++		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Upload limit is not configured correctly."})
++		return 0, false
++	}
++	return megabytes * 1024 * 1024, true
++}
++
++func parseUploadInteger(c *gin.Context, name string, required bool) (int64, bool) {
++	value := c.GetHeader(name)
++	if value == "" && required {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": name + " header is required."})
++		return 0, false
++	}
++	parsed, err := strconv.ParseInt(value, 10, 64)
++	if err != nil || parsed < 0 {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": name + " must be a non-negative integer."})
++		return 0, false
++	}
++	return parsed, true
++}
++
++func parseOptionalUploadInteger(c *gin.Context, name string) (int64, bool, bool) {
++	if c.GetHeader(name) == "" {
++		return 0, false, true
++	}
++	value, ok := parseUploadInteger(c, name, false)
++	return value, true, ok
++}
++
++func parseUploadComplete(c *gin.Context) (bool, bool) {
++	switch c.GetHeader("Upload-Complete") {
++	case "", "?0":
++		return false, true
++	case "?1":
++		return true, true
++	default:
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Upload-Complete must be ?0 or ?1."})
++		return false, false
++	}
++}
++
++func abortResumableUploadFile(c *gin.Context) {
++	c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "The requested resource was not found on this server."})
++}
++
++type contextUploadReader struct {
++	ctx    context.Context
++	reader io.Reader
++}
++
++func (r *contextUploadReader) Read(buffer []byte) (int, error) {
++	select {
++	case <-r.ctx.Done():
++		return 0, r.ctx.Err()
++	default:
++		return r.reader.Read(buffer)
++	}
++}
++
++type writerOnly struct{ io.Writer }
++
++func maxInt64(a, b int64) int64 {
++	if a > b {
++		return a
++	}
++	return b
++}
++
++func pathBase(value string) string {
++	index := strings.LastIndexByte(value, '/')
++	return value[index+1:]
++}
++
++func pathDirectory(value string) string {
++	index := strings.LastIndexByte(value, '/')
++	if index <= 0 {
++		return "/"
++	}
++	return value[:index]
++}
+diff --git a/router/router_resumable_upload_test.go b/router/router_resumable_upload_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..940b5bfc4fb9523acf389763e1cfc8d77e05dffd
+--- /dev/null
++++ b/router/router_resumable_upload_test.go
+@@ -0,0 +1,125 @@
++package router
++
++import (
++	"bytes"
++	"net/http"
++	"os"
++	"path/filepath"
++	"strconv"
++	"sync"
++	"sync/atomic"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++
++	"github.com/pterodactyl/wings/server"
++)
++
++func TestResumableUploadBehavior(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
++	token := signBetterFilesUploadToken(t, s.ID())
++	var activities atomic.Int64
++	previousActivity := saveResumableUploadActivity
++	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) { activities.Add(1) }
++	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++
++	total := int64(11)
++	first := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "hello.txt", 0, &total, false, bytes.NewBufferString("hello "))
++	require.Equal(t, http.StatusOK, first.Code)
++	require.Equal(t, "6", first.Header().Get("Upload-Offset"))
++	head := performResumableRequest(handler, http.MethodHead, token, "/uploads", "hello.txt", 0, nil, false, nil)
++	require.Equal(t, http.StatusOK, head.Code)
++	require.Equal(t, "6", head.Header().Get("Upload-Offset"))
++	second := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "hello.txt", 6, &total, true, bytes.NewBufferString("world"))
++	require.Equal(t, http.StatusOK, second.Code)
++	require.Equal(t, "11", second.Header().Get("Upload-Offset"))
++	require.Equal(t, []byte("hello world"), readServerHTTPFixture(t, s, "/uploads/hello.txt"))
++	require.Equal(t, int64(1), activities.Load())
++
++	emptyLength := int64(0)
++	empty := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "empty.txt", 0, &emptyLength, true, bytes.NewReader(nil))
++	require.Equal(t, http.StatusOK, empty.Code)
++	info, err := os.Stat(filepath.Join(s.Filesystem().Path(), "uploads", "empty.txt"))
++	require.NoError(t, err)
++	require.Zero(t, info.Size())
++	require.Equal(t, int64(2), activities.Load())
++}
++
++func TestResumableUploadIncorrectOffsetAndFinalLengthRollback(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
++	token := signBetterFilesUploadToken(t, s.ID())
++	previousActivity := saveResumableUploadActivity
++	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
++	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++
++	total := int64(4)
++	require.Equal(t, http.StatusOK, performResumableRequest(handler, http.MethodPatch, token, "/", "offset.txt", 0, &total, false, bytes.NewBufferString("ab")).Code)
++	wrong := performResumableRequest(handler, http.MethodPatch, token, "/", "offset.txt", 0, &total, false, bytes.NewBufferString("zz"))
++	require.Equal(t, http.StatusConflict, wrong.Code)
++	require.Equal(t, "2", wrong.Header().Get("Upload-Offset"))
++	require.Equal(t, []byte("ab"), readServerHTTPFixture(t, s, "/offset.txt"))
++
++	lengthMismatch := int64(5)
++	mismatch := performResumableRequest(handler, http.MethodPatch, token, "/", "mismatch.txt", 0, &lengthMismatch, true, bytes.NewBufferString("abc"))
++	require.Equal(t, http.StatusConflict, mismatch.Code)
++	require.Equal(t, []byte{}, readServerHTTPFixture(t, s, "/mismatch.txt"))
++}
++
++func TestResumableUploadConcurrentChunksCannotInterleave(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
++	token := signBetterFilesUploadToken(t, s.ID())
++	total := int64(4)
++	responses := make(chan int, 2)
++	var workers sync.WaitGroup
++	for _, content := range []string{"aaaa", "bbbb"} {
++		content := content
++		workers.Add(1)
++		go func() {
++			defer workers.Done()
++			responses <- performResumableRequest(handler, http.MethodPatch, token, "/", "concurrent.txt", 0, &total, false, bytes.NewBufferString(content)).Code
++		}()
++	}
++	workers.Wait()
++	close(responses)
++	counts := map[int]int{}
++	for status := range responses {
++		counts[status]++
++	}
++	require.Equal(t, 1, counts[http.StatusOK])
++	require.Equal(t, 1, counts[http.StatusConflict])
++	data := readServerHTTPFixture(t, s, "/concurrent.txt")
++	require.True(t, bytes.Equal(data, []byte("aaaa")) || bytes.Equal(data, []byte("bbbb")))
++}
++
++func TestResumableUploadLimitsQuotaAndIgnoredPath(t *testing.T) {
++	_, limitedServer, limitedHandler := newBetterFilesHTTPServer(t, 1, 10)
++	limitedToken := signBetterFilesUploadToken(t, limitedServer.ID())
++	tooLarge := int64(1024*1024 + 1)
++	response := performResumableRequest(limitedHandler, http.MethodPatch, limitedToken, "/", "large.bin", 0, &tooLarge, false, bytes.NewReader(nil))
++	require.Equal(t, http.StatusRequestEntityTooLarge, response.Code)
++
++	_, quotaServer, quotaHandler := newBetterFilesHTTPServer(t, 10, 1)
++	quotaToken := signBetterFilesUploadToken(t, quotaServer.ID())
++	body := bytes.Repeat([]byte{'x'}, 1024*1024+1)
++	quotaLength := int64(len(body))
++	response = performResumableRequest(quotaHandler, http.MethodPatch, quotaToken, "/", "quota.bin", 0, &quotaLength, false, bytes.NewReader(body))
++	require.Equal(t, http.StatusInsufficientStorage, response.Code)
++
++	_, ignoredServer, ignoredHandler := newBetterFilesHTTPServer(t, 10, 10, "private/**")
++	ignoredToken := signBetterFilesUploadToken(t, ignoredServer.ID())
++	ignoredLength := int64(1)
++	response = performResumableRequest(ignoredHandler, http.MethodPatch, ignoredToken, "/private", "secret.txt", 0, &ignoredLength, true, bytes.NewBufferString("x"))
++	require.Equal(t, http.StatusNotFound, response.Code)
++}
++
++func TestResumableUploadOffsetHeaderIsDecimalBytes(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++	token := signBetterFilesUploadToken(t, s.ID())
++	content := []byte("😀")
++	length := int64(len(content))
++	response := performResumableRequest(handler, http.MethodPatch, token, "/", "utf8.txt", 0, &length, false, bytes.NewReader(content))
++	require.Equal(t, http.StatusOK, response.Code)
++	offset, err := strconv.ParseInt(response.Header().Get("Upload-Offset"), 10, 64)
++	require.NoError(t, err)
++	require.Equal(t, int64(4), offset)
++}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
 new file mode 100644
-index 0000000..f3a3c19
+index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625c32f97e0
 --- /dev/null
 +++ b/router/router_server_archive_nbt.go
 @@ -0,0 +1,496 @@
@@ -1250,7 +2978,7 @@ index 0000000..f3a3c19
 +}
 diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
 new file mode 100644
-index 0000000..3b91d18
+index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7df283e95b
 --- /dev/null
 +++ b/router/router_server_betterfiles_collaboration.go
 @@ -0,0 +1,39 @@
@@ -1294,7 +3022,7 @@ index 0000000..3b91d18
 +	c.JSON(http.StatusOK, gin.H{"closed": closed})
 +}
 diff --git a/router/router_server_files.go b/router/router_server_files.go
-index 88acfdb..da7e309 100644
+index 75618442a8f6af401e65a2541af088afa8524f21..36b63257bbbb396c180d5354d409b5a957caf3eb 100644
 --- a/router/router_server_files.go
 +++ b/router/router_server_files.go
 @@ -9,7 +9,6 @@ import (
@@ -1433,9 +3161,1230 @@ index 88acfdb..da7e309 100644
  func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {
  	file, err := header.Open()
  	if err != nil {
+diff --git a/router/router_server_files_copy_many.go b/router/router_server_files_copy_many.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..814c57b29caa052d37278cc9974a35e8d9b82752
+--- /dev/null
++++ b/router/router_server_files_copy_many.go
+@@ -0,0 +1,345 @@
++package router
++
++import (
++	"context"
++	"errors"
++	"io"
++	"math"
++	"net/http"
++	pathpkg "path"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++	"github.com/google/uuid"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	"github.com/pterodactyl/wings/server"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const (
++	maxCopyManyItems   = 1000
++	maxCopyWalkEntries = 500000
++	maxCopyWalkDepth   = 256
++)
++
++type copyManyFile struct {
++	From string `json:"from"`
++	To   string `json:"to"`
++}
++
++type copyManyPayload struct {
++	Root       string         `json:"root"`
++	Files      []copyManyFile `json:"files"`
++	Overwrite  bool           `json:"overwrite"`
++	Foreground *bool          `json:"foreground"`
++}
++
++type normalizedCopyManyFile struct {
++	from        string
++	to          string
++	requestedTo string
++}
++
++func postServerCopyMany(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	var data copyManyPayload
++	if err := c.ShouldBindJSON(&data); err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid copy request."})
++		return
++	}
++	if len(data.Files) == 0 || len(data.Files) > maxCopyManyItems {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Between 1 and 1000 copy entries are required."})
++		return
++	}
++
++	root, err := normalizeBetterFilesRoot(data.Root)
++	if err != nil {
++		abortBetterFilesPath(c, err)
++		return
++	}
++	files, skipped, err := prepareCopyMany(s.Filesystem(), root, data.Files, data.Overwrite)
++	if err != nil {
++		abortBetterFilesPath(c, err)
++		return
++	}
++
++	foreground := true
++	if data.Foreground != nil {
++		foreground = *data.Foreground
++	}
++	parent := s.Context()
++	if foreground {
++		parent = c.Request.Context()
++	}
++
++	copied := 0
++	operation, done, err := s.FileOperations().Start(parent, "copy_many", func(ctx context.Context, operation *server.FileOperation) error {
++		total, err := copyManyTotal(ctx, s.Filesystem(), files)
++		if err != nil {
++			return err
++		}
++		operation.SetBytesTotal(total)
++		for _, file := range files {
++			if err := copyManyPath(ctx, s.Filesystem(), file.from, file.to, data.Overwrite, operation); err != nil {
++				return err
++			}
++			copied++
++		}
++		return nil
++	})
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many file operations are active."})
++		return
++	}
++
++	if !foreground {
++		c.JSON(http.StatusAccepted, gin.H{"identifier": operation.Identifier(), "skipped": skipped})
++		return
++	}
++	if err := <-done; err != nil {
++		c.AbortWithStatusJSON(http.StatusExpectationFailed, gin.H{"error": "File copy operation failed or was cancelled."})
++		return
++	}
++	c.JSON(http.StatusOK, gin.H{"copied": copied, "skipped": skipped})
++}
++
++func prepareCopyMany(fs *serverfs.Filesystem, root string, input []copyManyFile, overwrite bool) ([]normalizedCopyManyFile, []betterFilesEntry, error) {
++	files := make([]normalizedCopyManyFile, 0, len(input))
++	skipped := make([]betterFilesEntry, 0)
++	destinations := make(map[string]struct{}, len(input))
++
++	for _, requested := range input {
++		from, err := joinBetterFilesPath(root, requested.From)
++		if err != nil {
++			return nil, nil, err
++		}
++		to, err := joinBetterFilesPath(root, requested.To)
++		if err != nil || from == to {
++			return nil, nil, errBetterFilesInvalidPath
++		}
++		if _, exists := destinations[to]; exists {
++			return nil, nil, errBetterFilesInvalidPath
++		}
++		destinations[to] = struct{}{}
++		if err := ensureBetterFilesAllowed(fs, from, to); err != nil {
++			return nil, nil, err
++		}
++
++		sourceInfo, err := betterFilesLstat(fs, from)
++		if err != nil || (!sourceInfo.IsDir() && !sourceInfo.Mode().IsRegular()) {
++			return nil, nil, errBetterFilesInvalidPath
++		}
++		if sourceInfo.IsDir() && strings.HasPrefix(to+"/", from+"/") {
++			return nil, nil, errBetterFilesInvalidPath
++		}
++
++		destinationInfo, destinationErr := fs.UnixFS().Lstat(to)
++		if destinationErr == nil {
++			if destinationInfo.Mode()&ufs.ModeSymlink != 0 {
++				return nil, nil, errBetterFilesInvalidPath
++			}
++			if !overwrite {
++				skipped = append(skipped, newBetterFilesEntry(requested.To, destinationInfo, betterFilesMime(fs, to, destinationInfo)))
++				continue
++			}
++			if sourceInfo.IsDir() != destinationInfo.IsDir() {
++				return nil, nil, errBetterFilesInvalidPath
++			}
++		} else if !errors.Is(destinationErr, ufs.ErrNotExist) {
++			return nil, nil, destinationErr
++		}
++
++		files = append(files, normalizedCopyManyFile{from: from, to: to, requestedTo: requested.To})
++	}
++	return files, skipped, nil
++}
++
++type copyWalkItem struct {
++	from  string
++	to    string
++	depth int
++}
++
++type copyProgress interface {
++	AddBytesProcessed(uint64)
++	AddFilesProcessed(uint64)
++}
++
++func copyManyTotal(ctx context.Context, fs *serverfs.Filesystem, files []normalizedCopyManyFile) (uint64, error) {
++	var total uint64
++	for _, file := range files {
++		stack := []copyWalkItem{{from: file.from, to: file.to}}
++		visited := 0
++		for len(stack) > 0 {
++			if err := ctx.Err(); err != nil {
++				return 0, err
++			}
++			item := stack[len(stack)-1]
++			stack = stack[:len(stack)-1]
++			visited++
++			if visited > maxCopyWalkEntries || item.depth > maxCopyWalkDepth {
++				return 0, errors.New("copy traversal limit exceeded")
++			}
++
++			info, err := betterFilesLstat(fs, item.from)
++			if err != nil {
++				return 0, err
++			}
++			if info.Mode().IsRegular() {
++				if uint64(info.Size()) > math.MaxUint64-total {
++					return 0, errors.New("copy size overflow")
++				}
++				total += uint64(info.Size())
++				continue
++			}
++			if !info.IsDir() {
++				continue
++			}
++			entries, err := fs.ReadDirStat(item.from)
++			if err != nil {
++				return 0, err
++			}
++			for _, entry := range entries {
++				childFrom := pathpkg.Join(item.from, entry.Name())
++				childTo := pathpkg.Join(item.to, entry.Name())
++				if ensureBetterFilesAllowed(fs, childFrom, childTo) != nil || entry.Mode()&ufs.ModeSymlink != 0 {
++					continue
++				}
++				stack = append(stack, copyWalkItem{from: childFrom, to: childTo, depth: item.depth + 1})
++			}
++		}
++	}
++	return total, nil
++}
++
++func copyManyPath(ctx context.Context, fs *serverfs.Filesystem, from, to string, overwrite bool, operation copyProgress) error {
++	stack := []copyWalkItem{{from: from, to: to}}
++	visited := 0
++	for len(stack) > 0 {
++		if err := ctx.Err(); err != nil {
++			return err
++		}
++		item := stack[len(stack)-1]
++		stack = stack[:len(stack)-1]
++		visited++
++		if visited > maxCopyWalkEntries || item.depth > maxCopyWalkDepth {
++			return errors.New("copy traversal limit exceeded")
++		}
++
++		info, err := betterFilesLstat(fs, item.from)
++		if err != nil {
++			return err
++		}
++		switch {
++		case info.IsDir():
++			if err := ensureCopyDestinationDirectory(fs, item.to); err != nil {
++				return err
++			}
++			entries, err := fs.ReadDirStat(item.from)
++			if err != nil {
++				return err
++			}
++			for i := len(entries) - 1; i >= 0; i-- {
++				entry := entries[i]
++				childFrom := pathpkg.Join(item.from, entry.Name())
++				childTo := pathpkg.Join(item.to, entry.Name())
++				if ensureBetterFilesAllowed(fs, childFrom, childTo) != nil || entry.Mode()&ufs.ModeSymlink != 0 {
++					continue
++				}
++				stack = append(stack, copyWalkItem{from: childFrom, to: childTo, depth: item.depth + 1})
++			}
++		case info.Mode().IsRegular():
++			if !overwrite {
++				if _, err := fs.UnixFS().Lstat(item.to); err == nil {
++					continue
++				} else if !errors.Is(err, ufs.ErrNotExist) {
++					return err
++				}
++			}
++			if err := copyManyRegularFile(ctx, fs, item.from, item.to, info, operation); err != nil {
++				return err
++			}
++		default:
++			continue
++		}
++	}
++	return nil
++}
++
++func ensureCopyDestinationDirectory(fs *serverfs.Filesystem, destination string) error {
++	info, err := fs.UnixFS().Lstat(destination)
++	if err == nil {
++		if !info.IsDir() || info.Mode()&ufs.ModeSymlink != 0 {
++			return errBetterFilesInvalidPath
++		}
++		return nil
++	}
++	if !errors.Is(err, ufs.ErrNotExist) {
++		return err
++	}
++	return fs.CreateDirectory(pathpkg.Base(destination), pathpkg.Dir(destination))
++}
++
++func copyManyRegularFile(ctx context.Context, fs *serverfs.Filesystem, source, destination string, sourceInfo ufs.FileInfo, operation copyProgress) error {
++	file, err := fs.UnixFS().OpenFile(source, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++	if err != nil {
++		return err
++	}
++	openedInfo, err := file.Stat()
++	if err != nil {
++		_ = file.Close()
++		return err
++	}
++	if !openedInfo.Mode().IsRegular() {
++		_ = file.Close()
++		return errBetterFilesInvalidPath
++	}
++
++	temporary := pathpkg.Join(pathpkg.Dir(destination), ".wings-copy-"+uuid.NewString())
++	installed := false
++	defer func() {
++		_ = file.Close()
++		if !installed {
++			_ = fs.Delete(temporary)
++		}
++	}()
++
++	reader := &copyProgressReader{ctx: ctx, reader: io.LimitReader(file, openedInfo.Size()), operation: operation}
++	if err := fs.Write(temporary, reader, openedInfo.Size(), sourceInfo.Mode()&ufs.ModePerm); err != nil {
++		return err
++	}
++	temporaryInfo, err := fs.UnixFS().Lstat(temporary)
++	if err != nil || temporaryInfo.Size() != openedInfo.Size() {
++		return errors.New("source changed while it was copied")
++	}
++	if err := ctx.Err(); err != nil {
++		return err
++	}
++	if err := fs.Replace(temporary, destination); err != nil {
++		return err
++	}
++	installed = true
++	operation.AddFilesProcessed(1)
++	return nil
++}
++
++type copyProgressReader struct {
++	ctx       context.Context
++	reader    io.Reader
++	operation copyProgress
++}
++
++func (r *copyProgressReader) Read(buffer []byte) (int, error) {
++	select {
++	case <-r.ctx.Done():
++		return 0, r.ctx.Err()
++	default:
++	}
++	n, err := r.reader.Read(buffer)
++	if n > 0 {
++		r.operation.AddBytesProcessed(uint64(n))
++	}
++	return n, err
++}
+diff --git a/router/router_server_files_copy_many_test.go b/router/router_server_files_copy_many_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..181e3bf39853e5cefb53a0a40fadfdf057ada916
+--- /dev/null
++++ b/router/router_server_files_copy_many_test.go
+@@ -0,0 +1,138 @@
++package router
++
++import (
++	"context"
++	"os"
++	"path/filepath"
++	"strings"
++	"sync"
++	"sync/atomic"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++)
++
++type testCopyProgress struct {
++	bytes   atomic.Uint64
++	files   atomic.Uint64
++	started chan struct{}
++	once    sync.Once
++}
++
++func (p *testCopyProgress) AddBytesProcessed(value uint64) {
++	p.bytes.Add(value)
++	if p.started != nil && value > 0 {
++		p.once.Do(func() { close(p.started) })
++	}
++}
++
++func (p *testCopyProgress) AddFilesProcessed(value uint64) {
++	p.files.Add(value)
++}
++
++func TestCopyManyRecursiveMultipleAndOverwrite(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/source/one.txt", []byte("one"))
++	writeBetterFilesFixture(t, fs, "/source/nested/two.txt", []byte("two"))
++	writeBetterFilesFixture(t, fs, "/single.txt", []byte("single"))
++	writeBetterFilesFixture(t, fs, "/destination/one.txt", []byte("old"))
++
++	progress := &testCopyProgress{}
++	require.NoError(t, copyManyPath(context.Background(), fs, "/source", "/destination", true, progress))
++	require.NoError(t, copyManyPath(context.Background(), fs, "/single.txt", "/single-copy.txt", true, progress))
++	require.Equal(t, []byte("one"), readBetterFilesFixture(t, fs, "/destination/one.txt"))
++	require.Equal(t, []byte("two"), readBetterFilesFixture(t, fs, "/destination/nested/two.txt"))
++	require.Equal(t, []byte("single"), readBetterFilesFixture(t, fs, "/single-copy.txt"))
++	require.Equal(t, uint64(3), progress.files.Load())
++}
++
++func TestCopyManySkipsExistingAndRejectsTraversal(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/source.txt", []byte("source"))
++	writeBetterFilesFixture(t, fs, "/existing.txt", []byte("existing"))
++	files, skipped, err := prepareCopyMany(fs, "/", []copyManyFile{{From: "source.txt", To: "existing.txt"}}, false)
++	require.NoError(t, err)
++	require.Empty(t, files)
++	require.Len(t, skipped, 1)
++	require.Equal(t, "existing.txt", skipped[0].Name)
++
++	_, _, err = prepareCopyMany(fs, "/", []copyManyFile{{From: "../source.txt", To: "copy.txt"}}, false)
++	require.Error(t, err)
++}
++
++func TestCopyManyCancellationLeavesExistingDestinationUntouched(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	sourcePath := filepath.Join(fs.Path(), "large.bin")
++	file, err := os.Create(sourcePath)
++	require.NoError(t, err)
++	require.NoError(t, file.Truncate(128*1024*1024))
++	require.NoError(t, file.Close())
++	writeBetterFilesFixture(t, fs, "/destination.bin", []byte("original"))
++
++	ctx, cancel := context.WithCancel(context.Background())
++	progress := &testCopyProgress{started: make(chan struct{})}
++	result := make(chan error, 1)
++	go func() {
++		result <- copyManyPath(ctx, fs, "/large.bin", "/destination.bin", true, progress)
++	}()
++	select {
++	case <-progress.started:
++		cancel()
++	case <-time.After(3 * time.Second):
++		cancel()
++		t.Fatal("copy did not begin")
++	}
++	require.Error(t, <-result)
++	require.Equal(t, []byte("original"), readBetterFilesFixture(t, fs, "/destination.bin"))
++	entries, err := os.ReadDir(fs.Path())
++	require.NoError(t, err)
++	for _, entry := range entries {
++		require.False(t, strings.HasPrefix(entry.Name(), ".wings-copy-"))
++	}
++}
++
++func TestPrepareRenameRejectsDuplicatesTraversalAndExistingDestination(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/one.txt", []byte("one"))
++	writeBetterFilesFixture(t, fs, "/existing.txt", []byte("existing"))
++
++	_, err := prepareRenameFiles(fs, "/", []safeRenameFile{{From: "one.txt", To: "same.txt"}, {From: "missing.txt", To: "same.txt"}})
++	require.ErrorIs(t, err, errDuplicateRenameDestination)
++	_, err = prepareRenameFiles(fs, "/", []safeRenameFile{{From: "../one.txt", To: "new.txt"}})
++	require.Error(t, err)
++	_, err = prepareRenameFiles(fs, "/", []safeRenameFile{{From: "one.txt", To: "existing.txt"}})
++	require.ErrorIs(t, err, errRenameDestinationExists)
++
++	require.NoError(t, os.MkdirAll(filepath.Join(fs.Path(), "directory"), 0o755))
++	_, err = prepareRenameFiles(fs, "/", []safeRenameFile{{From: "directory", To: "directory/nested"}})
++	require.Error(t, err)
++	require.NoError(t, os.Symlink("one.txt", filepath.Join(fs.Path(), "link.txt")))
++	_, err = prepareRenameFiles(fs, "/", []safeRenameFile{{From: "link.txt", To: "renamed-link.txt"}})
++	require.Error(t, err)
++}
++
++func TestPrepareRenameSupportsMultipleFiles(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/one.txt", []byte("one"))
++	writeBetterFilesFixture(t, fs, "/two.txt", []byte("two"))
++	files, err := prepareRenameFiles(fs, "/", []safeRenameFile{
++		{From: "one.txt", To: "renamed/one.txt"},
++		{From: "two.txt", To: "renamed/two.txt"},
++	})
++	require.NoError(t, err)
++	for _, file := range files {
++		require.NoError(t, fs.RenameNoReplace(file.from, file.to))
++	}
++	require.Equal(t, []byte("one"), readBetterFilesFixture(t, fs, "/renamed/one.txt"))
++	require.Equal(t, []byte("two"), readBetterFilesFixture(t, fs, "/renamed/two.txt"))
++}
++
++func TestRenameNoReplacePreservesExistingDestination(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/source.txt", []byte("source"))
++	writeBetterFilesFixture(t, fs, "/destination.txt", []byte("destination"))
++	require.ErrorIs(t, fs.RenameNoReplace("/source.txt", "/destination.txt"), os.ErrExist)
++	require.Equal(t, []byte("source"), readBetterFilesFixture(t, fs, "/source.txt"))
++	require.Equal(t, []byte("destination"), readBetterFilesFixture(t, fs, "/destination.txt"))
++}
+diff --git a/router/router_server_files_fingerprints.go b/router/router_server_files_fingerprints.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..8aa1665c2098352268957e97ab0944af5da74c64
+--- /dev/null
++++ b/router/router_server_files_fingerprints.go
+@@ -0,0 +1,269 @@
++package router
++
++import (
++	"context"
++	"crypto/md5"
++	"crypto/sha1"
++	"crypto/sha256"
++	"crypto/sha512"
++	"encoding/hex"
++	"fmt"
++	"hash"
++	"hash/crc32"
++	"io"
++	"net/http"
++	"runtime"
++	"strconv"
++	"sync"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const maxFingerprintFiles = 100
++
++type fingerprintJob struct {
++	key  string
++	path string
++}
++
++type fingerprintResult struct {
++	key   string
++	value string
++	valid bool
++}
++
++func getServerFileFingerprints(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	algorithm := c.Query("algorithm")
++	if !validFingerprintAlgorithm(algorithm) {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Unsupported fingerprint algorithm."})
++		return
++	}
++	requested := c.QueryArray("files")
++	if len(requested) == 0 {
++		requested = c.QueryArray("files[]")
++	}
++	if len(requested) == 0 || len(requested) > maxFingerprintFiles {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Between 1 and 100 files are required."})
++		return
++	}
++	root, err := normalizeBetterFilesRoot(c.Query("root"))
++	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), root) != nil {
++		abortBetterFilesPath(c, errBetterFilesInvalidPath)
++		return
++	}
++
++	jobs := make([]fingerprintJob, 0, len(requested))
++	for _, key := range requested {
++		filePath, err := joinBetterFilesPath(root, key)
++		if err != nil {
++			abortBetterFilesPath(c, err)
++			return
++		}
++		if ensureBetterFilesAllowed(s.Filesystem(), filePath) != nil {
++			continue
++		}
++		jobs = append(jobs, fingerprintJob{key: key, path: filePath})
++	}
++	fingerprints := fingerprintFiles(c.Request.Context(), s.Filesystem(), algorithm, jobs)
++	c.JSON(http.StatusOK, gin.H{"fingerprints": fingerprints})
++}
++
++func validFingerprintAlgorithm(value string) bool {
++	switch value {
++	case "md5", "crc32", "sha1", "sha224", "sha256", "sha384", "sha512", "curseforge":
++		return true
++	default:
++		return false
++	}
++}
++
++func fingerprintFiles(ctx context.Context, fs *serverfs.Filesystem, algorithm string, jobs []fingerprintJob) map[string]string {
++	workerCount := runtime.NumCPU()
++	if workerCount < 1 {
++		workerCount = 1
++	}
++	if workerCount > 8 {
++		workerCount = 8
++	}
++	if workerCount > len(jobs) {
++		workerCount = len(jobs)
++	}
++	if workerCount == 0 {
++		return map[string]string{}
++	}
++
++	jobChannel := make(chan fingerprintJob)
++	resultChannel := make(chan fingerprintResult, len(jobs))
++	var workers sync.WaitGroup
++	for i := 0; i < workerCount; i++ {
++		workers.Add(1)
++		go func() {
++			defer workers.Done()
++			buffer := make([]byte, 64*1024)
++			for job := range jobChannel {
++				value, err := fingerprintOneFile(ctx, fs, algorithm, job.path, buffer)
++				select {
++				case resultChannel <- fingerprintResult{key: job.key, value: value, valid: err == nil}:
++				case <-ctx.Done():
++					return
++				}
++			}
++		}()
++	}
++	go func() {
++		defer close(jobChannel)
++		for _, job := range jobs {
++			select {
++			case jobChannel <- job:
++			case <-ctx.Done():
++				return
++			}
++		}
++	}()
++	go func() {
++		workers.Wait()
++		close(resultChannel)
++	}()
++
++	result := make(map[string]string, len(jobs))
++	for fingerprint := range resultChannel {
++		if fingerprint.valid {
++			result[fingerprint.key] = fingerprint.value
++		}
++	}
++	return result
++}
++
++func fingerprintOneFile(ctx context.Context, fs *serverfs.Filesystem, algorithm, filePath string, buffer []byte) (string, error) {
++	info, err := betterFilesLstat(fs, filePath)
++	if err != nil || !info.Mode().IsRegular() {
++		return "", errBetterFilesInvalidPath
++	}
++	file, err := fs.UnixFS().OpenFile(filePath, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++	if err != nil {
++		return "", err
++	}
++	defer file.Close()
++	if algorithm == "curseforge" {
++		return curseForgeFingerprint(ctx, file, buffer)
++	}
++
++	hasher, crc, err := newFingerprintHasher(algorithm)
++	if err != nil {
++		return "", err
++	}
++	reader := &fingerprintContextReader{ctx: ctx, reader: file}
++	if _, err := io.CopyBuffer(hasher, reader, buffer); err != nil {
++		return "", err
++	}
++	if crc != nil {
++		return fmt.Sprintf("%08x", crc.Sum32()), nil
++	}
++	return hex.EncodeToString(hasher.Sum(nil)), nil
++}
++
++func newFingerprintHasher(algorithm string) (hash.Hash, hash.Hash32, error) {
++	switch algorithm {
++	case "md5":
++		return md5.New(), nil, nil
++	case "crc32":
++		hasher := crc32.NewIEEE()
++		return hasher, hasher, nil
++	case "sha1":
++		return sha1.New(), nil, nil
++	case "sha224":
++		return sha256.New224(), nil, nil
++	case "sha256":
++		return sha256.New(), nil, nil
++	case "sha384":
++		return sha512.New384(), nil, nil
++	case "sha512":
++		return sha512.New(), nil, nil
++	default:
++		return nil, nil, fmt.Errorf("unsupported fingerprint algorithm")
++	}
++}
++
++func curseForgeFingerprint(ctx context.Context, file ufs.File, buffer []byte) (string, error) {
++	var normalizedLength uint32
++	for {
++		if err := ctx.Err(); err != nil {
++			return "", err
++		}
++		n, err := file.Read(buffer)
++		for _, value := range buffer[:n] {
++			if !curseForgeIgnoredByte(value) {
++				normalizedLength++
++			}
++		}
++		if err == io.EOF {
++			break
++		}
++		if err != nil {
++			return "", err
++		}
++	}
++	if _, err := file.Seek(0, io.SeekStart); err != nil {
++		return "", err
++	}
++
++	const multiplier uint32 = 1540483477
++	hashValue := uint32(1) ^ normalizedLength
++	var tail uint32
++	var shift uint32
++	for {
++		if err := ctx.Err(); err != nil {
++			return "", err
++		}
++		n, err := file.Read(buffer)
++		for _, value := range buffer[:n] {
++			if curseForgeIgnoredByte(value) {
++				continue
++			}
++			tail |= uint32(value) << shift
++			shift += 8
++			if shift == 32 {
++				mixed := tail * multiplier
++				mixed = (mixed ^ (mixed >> 24)) * multiplier
++				hashValue = hashValue*multiplier ^ mixed
++				tail = 0
++				shift = 0
++			}
++		}
++		if err == io.EOF {
++			break
++		}
++		if err != nil {
++			return "", err
++		}
++	}
++	if shift > 0 {
++		hashValue = (hashValue ^ tail) * multiplier
++	}
++	hashValue = (hashValue ^ (hashValue >> 13)) * multiplier
++	hashValue ^= hashValue >> 15
++	return strconv.FormatUint(uint64(hashValue), 10), nil
++}
++
++func curseForgeIgnoredByte(value byte) bool {
++	return value == '\t' || value == '\n' || value == '\r' || value == ' '
++}
++
++type fingerprintContextReader struct {
++	ctx    context.Context
++	reader io.Reader
++}
++
++func (r *fingerprintContextReader) Read(buffer []byte) (int, error) {
++	select {
++	case <-r.ctx.Done():
++		return 0, r.ctx.Err()
++	default:
++		return r.reader.Read(buffer)
++	}
++}
+diff --git a/router/router_server_files_fingerprints_test.go b/router/router_server_files_fingerprints_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..e8343cba6bad097675c2b4c173562a00d01273a1
+--- /dev/null
++++ b/router/router_server_files_fingerprints_test.go
+@@ -0,0 +1,53 @@
++package router
++
++import (
++	"context"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestFileFingerprintsKnownValues(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/fixture.txt", []byte("hello world\n"))
++	expected := map[string]string{
++		"md5":        "6f5902ac237024bdd0c176cb93063dc4",
++		"crc32":      "af083b2d",
++		"sha1":       "22596363b3de40b06f981fb85d82312e8c0ed511",
++		"sha224":     "95041dd60ab08c0bf5636d50be85fe9790300f39eb84602858a9b430",
++		"sha256":     "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447",
++		"sha384":     "6b3b69ff0a404f28d75e98a066d3fc64fffd9940870cc68bece28545b9a75086b343d7a1366838083e4b8f3ca6fd3c80",
++		"sha512":     "db3974a97f2407b7cae1ae637c0030687a11913274d578492558e39c16c017de84eacdc8c62fe34ee4e12b4b1428817f09b6a2760c3f8a664ceae94d2434a593",
++		"curseforge": "2824650221",
++	}
++	for algorithm, expectedValue := range expected {
++		t.Run(algorithm, func(t *testing.T) {
++			result := fingerprintFiles(context.Background(), fs, algorithm, []fingerprintJob{{key: "fixture.txt", path: "/fixture.txt"}})
++			require.Equal(t, expectedValue, result["fixture.txt"])
++		})
++	}
++}
++
++func TestFileFingerprintsMultipleAndInvalidEntries(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/one.txt", []byte("one"))
++	writeBetterFilesFixture(t, fs, "/two.txt", []byte("two"))
++	result := fingerprintFiles(context.Background(), fs, "sha256", []fingerprintJob{
++		{key: "one.txt", path: "/one.txt"},
++		{key: "two.txt", path: "/two.txt"},
++		{key: "missing.txt", path: "/missing.txt"},
++		{key: "directory", path: "/"},
++	})
++	require.Len(t, result, 2)
++	require.Contains(t, result, "one.txt")
++	require.Contains(t, result, "two.txt")
++	require.NotContains(t, result, "missing.txt")
++	require.NotContains(t, result, "directory")
++}
++
++func TestCRC32FingerprintIsAlwaysEightHexDigits(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/empty.txt", nil)
++	result := fingerprintFiles(context.Background(), fs, "crc32", []fingerprintJob{{key: "empty.txt", path: "/empty.txt"}})
++	require.Equal(t, "00000000", result["empty.txt"])
++}
+diff --git a/router/router_server_files_largest.go b/router/router_server_files_largest.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..030ff1d607b84508d65403a1fd494b2b4f70016c
+--- /dev/null
++++ b/router/router_server_files_largest.go
+@@ -0,0 +1,194 @@
++package router
++
++import (
++	"context"
++	"errors"
++	"net/http"
++	pathpkg "path"
++	"sort"
++
++	"github.com/gin-gonic/gin"
++	"golang.org/x/sys/unix"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const (
++	maxLargestDirectoryEntries = 500000
++	maxLargestDirectories      = 100000
++	maxLargestDirectoryDepth   = 256
++)
++
++type largestDirectoryAggregate struct {
++	path          string
++	info          ufs.FileInfo
++	logical       int64
++	physical      int64
++	totalLogical  int64
++	totalPhysical int64
++}
++
++type largestDirectoryWalk struct {
++	path  string
++	depth int
++}
++
++func getServerLargestDirectories(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	root, err := normalizeBetterFilesRoot(c.Query("directory"))
++	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), root) != nil {
++		abortBetterFilesPath(c, errBetterFilesInvalidPath)
++		return
++	}
++	rootInfo, err := betterFilesLstat(s.Filesystem(), root)
++	if err != nil || !rootInfo.IsDir() {
++		abortBetterFilesPath(c, err)
++		return
++	}
++
++	entries, err := analyzeLargestDirectories(c.Request.Context(), s.Filesystem(), root, rootInfo)
++	if err != nil {
++		if errors.Is(err, errLargestDirectoryTraversalLimit) {
++			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Directory analysis traversal limit exceeded."})
++			return
++		}
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	c.JSON(http.StatusOK, entries)
++}
++
++var errLargestDirectoryTraversalLimit = errors.New("largest directory traversal limit exceeded")
++
++func analyzeLargestDirectories(ctx context.Context, fs *serverfs.Filesystem, root string, rootInfo ufs.FileInfo) ([]betterFilesEntry, error) {
++	aggregates := map[string]*largestDirectoryAggregate{
++		root: {path: root, info: rootInfo},
++	}
++	stack := []largestDirectoryWalk{{path: root}}
++	seenInodes := make(map[[2]uint64]struct{})
++	visitedEntries := 0
++
++	for len(stack) > 0 {
++		if err := ctx.Err(); err != nil {
++			return nil, err
++		}
++		directory := stack[len(stack)-1]
++		stack = stack[:len(stack)-1]
++		if directory.depth > maxLargestDirectoryDepth || len(aggregates) > maxLargestDirectories {
++			return nil, errLargestDirectoryTraversalLimit
++		}
++
++		entries, err := fs.ReadDirStat(directory.path)
++		if err != nil {
++			return nil, err
++		}
++		for _, info := range entries {
++			visitedEntries++
++			if visitedEntries > maxLargestDirectoryEntries {
++				return nil, errLargestDirectoryTraversalLimit
++			}
++			fullPath := pathpkg.Join(directory.path, info.Name())
++			if ensureBetterFilesAllowed(fs, fullPath) != nil || info.Mode()&ufs.ModeSymlink != 0 {
++				continue
++			}
++			if info.IsDir() {
++				aggregates[fullPath] = &largestDirectoryAggregate{path: fullPath, info: info}
++				stack = append(stack, largestDirectoryWalk{path: fullPath, depth: directory.depth + 1})
++				continue
++			}
++			if !info.Mode().IsRegular() {
++				continue
++			}
++			if stat, ok := info.Sys().(*unix.Stat_t); ok && stat.Nlink > 1 {
++				key := [2]uint64{uint64(stat.Dev), stat.Ino}
++				if _, exists := seenInodes[key]; exists {
++					continue
++				}
++				seenInodes[key] = struct{}{}
++			}
++			aggregate := aggregates[directory.path]
++			aggregate.logical = saturatingAddInt64(aggregate.logical, info.Size())
++			aggregate.physical = saturatingAddInt64(aggregate.physical, betterFilesPhysicalSize(info))
++		}
++	}
++
++	candidates := make([]*largestDirectoryAggregate, 0, len(aggregates))
++	var total int64
++	for _, aggregate := range aggregates {
++		aggregate.totalLogical = aggregate.logical
++		aggregate.totalPhysical = aggregate.physical
++	}
++	for path, aggregate := range aggregates {
++		if path == root {
++			continue
++		}
++		for parent := pathpkg.Dir(path); ; parent = pathpkg.Dir(parent) {
++			if ancestor := aggregates[parent]; ancestor != nil {
++				ancestor.totalLogical = saturatingAddInt64(ancestor.totalLogical, aggregate.logical)
++				ancestor.totalPhysical = saturatingAddInt64(ancestor.totalPhysical, aggregate.physical)
++			}
++			if parent == root || parent == "/" || parent == "." {
++				break
++			}
++		}
++	}
++	for path, aggregate := range aggregates {
++		if path == root || aggregate.logical <= 0 {
++			continue
++		}
++		candidates = append(candidates, aggregate)
++		total = saturatingAddInt64(total, aggregate.logical)
++	}
++	sort.Slice(candidates, func(i, j int) bool {
++		if candidates[i].logical == candidates[j].logical {
++			return candidates[i].path < candidates[j].path
++		}
++		return candidates[i].logical > candidates[j].logical
++	})
++	if total == 0 {
++		return []betterFilesEntry{}, nil
++	}
++
++	threshold := total - total/10
++	cutoff := len(candidates)
++	var cumulative int64
++	for i, candidate := range candidates {
++		cumulative = saturatingAddInt64(cumulative, candidate.logical)
++		if cumulative >= threshold {
++			cutoff = i + 1
++			break
++		}
++	}
++	if cutoff < 10 {
++		cutoff = 10
++		if cutoff > len(candidates) {
++			cutoff = len(candidates)
++		}
++	}
++	if cutoff > 50 {
++		cutoff = 50
++	}
++	if cutoff > len(candidates) {
++		cutoff = len(candidates)
++	}
++
++	result := make([]betterFilesEntry, 0, cutoff)
++	for _, candidate := range candidates[:cutoff] {
++		entry := newBetterFilesEntry(betterFilesRelativePath(root, candidate.path), candidate.info, "inode/directory")
++		entry.Size = candidate.totalLogical
++		entry.SizePhysical = candidate.totalPhysical
++		result = append(result, entry)
++	}
++	sort.SliceStable(result, func(i, j int) bool { return result[i].Size > result[j].Size })
++	return result, nil
++}
++
++func saturatingAddInt64(current, value int64) int64 {
++	const maxInt64 = int64(^uint64(0) >> 1)
++	if value > 0 && current > maxInt64-value {
++		return maxInt64
++	}
++	return current + value
++}
+diff --git a/router/router_server_files_largest_test.go b/router/router_server_files_largest_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..193875d50a083512d95baa17052c846eea2891b2
+--- /dev/null
++++ b/router/router_server_files_largest_test.go
+@@ -0,0 +1,46 @@
++package router
++
++import (
++	"context"
++	"fmt"
++	"os"
++	"path/filepath"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestLargestDirectoriesOrderingPhysicalSizeAndSafety(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0, "ignored/**")
++	writeBetterFilesFixture(t, fs, "/large/data.bin", make([]byte, 32*1024))
++	writeBetterFilesFixture(t, fs, "/small/data.bin", make([]byte, 1024))
++	writeBetterFilesFixture(t, fs, "/ignored/data.bin", make([]byte, 64*1024))
++
++	external := t.TempDir()
++	require.NoError(t, os.WriteFile(filepath.Join(external, "outside.bin"), make([]byte, 128*1024), 0o644))
++	require.NoError(t, os.Symlink(external, filepath.Join(fs.Path(), "escape")))
++	rootInfo, err := betterFilesLstat(fs, "/")
++	require.NoError(t, err)
++	results, err := analyzeLargestDirectories(context.Background(), fs, "/", rootInfo)
++	require.NoError(t, err)
++	require.Len(t, results, 2)
++	require.Equal(t, "large", results[0].Name)
++	require.Greater(t, results[0].Size, results[1].Size)
++	require.GreaterOrEqual(t, results[0].SizePhysical, int64(0))
++	for _, result := range results {
++		require.NotEqual(t, "ignored", result.Name)
++		require.NotEqual(t, "escape", result.Name)
++	}
++}
++
++func TestLargestDirectoriesKeepsMinimumWhenFewerThanTenExist(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	for i, size := range []int{500, 400, 300, 200, 100} {
++		writeBetterFilesFixture(t, fs, fmt.Sprintf("/directory-%d/data.bin", i), make([]byte, size))
++	}
++	rootInfo, err := betterFilesLstat(fs, "/")
++	require.NoError(t, err)
++	results, err := analyzeLargestDirectories(context.Background(), fs, "/", rootInfo)
++	require.NoError(t, err)
++	require.Len(t, results, 5)
++}
+diff --git a/router/router_server_files_rename.go b/router/router_server_files_rename.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..60f27fc23a46ad1d16b21204fa2cde9c64357a39
+--- /dev/null
++++ b/router/router_server_files_rename.go
+@@ -0,0 +1,134 @@
++package router
++
++import (
++	"errors"
++	"net/http"
++	"os"
++	"strings"
++
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++type safeRenameFile struct {
++	To   string `json:"to"`
++	From string `json:"from"`
++}
++
++type normalizedRenameFile struct {
++	from string
++	to   string
++}
++
++var (
++	errDuplicateRenameDestination = errors.New("duplicate rename destination")
++	errRenameDestinationExists    = errors.New("rename destination exists")
++)
++
++func putServerRenameFilesSafe(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	var data struct {
++		Root  string           `json:"root"`
++		Files []safeRenameFile `json:"files"`
++	}
++	// BindJSON writes the same 400 response used by the existing Pterodactyl
++	// rename handler when the request body cannot be decoded.
++	if err := c.BindJSON(&data); err != nil {
++		return
++	}
++	if len(data.Files) == 0 || len(data.Files) > maxCopyManyItems {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Between 1 and 1000 rename entries are required."})
++		return
++	}
++	root, err := normalizeBetterFilesRoot(data.Root)
++	if err != nil {
++		abortBetterFilesPath(c, err)
++		return
++	}
++	normalized, err := prepareRenameFiles(s.Filesystem(), root, data.Files)
++	if err != nil {
++		switch {
++		case errors.Is(err, errDuplicateRenameDestination):
++			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Duplicate rename destinations are not allowed."})
++		case errors.Is(err, errRenameDestinationExists):
++			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Cannot move or rename file, destination already exists."})
++		case errors.Is(err, errBetterFilesInvalidPath):
++			abortBetterFilesPath(c, err)
++		default:
++			middleware.CaptureAndAbort(c, err)
++		}
++		return
++	}
++
++	for _, file := range normalized {
++		if c.Request.Context().Err() != nil {
++			return
++		}
++		if file.from == file.to {
++			continue
++		}
++		if err := s.Filesystem().RenameNoReplace(file.from, file.to); err != nil {
++			if errors.Is(err, os.ErrNotExist) {
++				s.Log().WithError(err).WithField("from_path", file.from).WithField("to_path", file.to).
++					Warn("failed to rename: source or target does not exist")
++				continue
++			}
++			if errors.Is(err, os.ErrExist) {
++				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Cannot move or rename file, destination already exists."})
++				return
++			}
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++		s.RenameFileHistory(file.from, file.to)
++	}
++	c.Status(http.StatusNoContent)
++}
++
++func prepareRenameFiles(fs *serverfs.Filesystem, root string, input []safeRenameFile) ([]normalizedRenameFile, error) {
++	normalized := make([]normalizedRenameFile, 0, len(input))
++	destinations := make(map[string]struct{}, len(input))
++	for _, requested := range input {
++		from, err := joinBetterFilesPath(root, requested.From)
++		if err != nil {
++			return nil, err
++		}
++		to, err := joinBetterFilesPath(root, requested.To)
++		if err != nil {
++			return nil, err
++		}
++		if _, duplicate := destinations[to]; duplicate {
++			return nil, errDuplicateRenameDestination
++		}
++		destinations[to] = struct{}{}
++		if err := ensureBetterFilesAllowed(fs, from, to); err != nil {
++			return nil, err
++		}
++		sourceInfo, sourceErr := fs.UnixFS().Lstat(from)
++		if sourceErr != nil && !errors.Is(sourceErr, os.ErrNotExist) {
++			return nil, sourceErr
++		}
++		if sourceErr == nil {
++			if sourceInfo.Mode()&ufs.ModeSymlink != 0 || (!sourceInfo.IsDir() && !sourceInfo.Mode().IsRegular()) {
++				return nil, errBetterFilesInvalidPath
++			}
++			if sourceInfo.IsDir() && strings.HasPrefix(to+"/", from+"/") {
++				return nil, errBetterFilesInvalidPath
++			}
++		}
++		if from != to {
++			if sourceErr == nil {
++				if _, destinationErr := fs.UnixFS().Lstat(to); destinationErr == nil {
++					return nil, errRenameDestinationExists
++				} else if !errors.Is(destinationErr, os.ErrNotExist) {
++					return nil, destinationErr
++				}
++			}
++		}
++		normalized = append(normalized, normalizedRenameFile{from: from, to: to})
++	}
++	return normalized, nil
++}
 diff --git a/router/router_server_files_revisions.go b/router/router_server_files_revisions.go
 new file mode 100644
-index 0000000..9ea5000
+index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d3be75f7b
 --- /dev/null
 +++ b/router/router_server_files_revisions.go
 @@ -0,0 +1,146 @@
@@ -1587,7 +4536,7 @@ index 0000000..9ea5000
 +}
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
-index 0000000..43f8d3e
+index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d31286d521da9
 --- /dev/null
 +++ b/router/router_server_files_search.go
 @@ -0,0 +1,611 @@
@@ -2202,9 +5151,572 @@ index 0000000..43f8d3e
 +
 +	c.JSON(http.StatusOK, response)
 +}
+diff --git a/router/router_server_files_search_v2.go b/router/router_server_files_search_v2.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9458127b36ad2f127a09c34cbeca5624f92c75b
+--- /dev/null
++++ b/router/router_server_files_search_v2.go
+@@ -0,0 +1,443 @@
++package router
++
++import (
++	"bytes"
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	pathpkg "path"
++	"strings"
++	"sync"
++	"unicode"
++	"unicode/utf8"
++
++	"github.com/bmatcuk/doublestar/v4"
++	"github.com/gabriel-vasile/mimetype"
++	"github.com/gin-gonic/gin"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/pterodactyl/wings/router/middleware"
++	serverfs "github.com/pterodactyl/wings/server/filesystem"
++)
++
++const (
++	maxSearchV2Results       = 500
++	maxSearchV2Patterns      = 128
++	maxSearchV2Entries       = 250000
++	maxSearchV2Directories   = 16384
++	maxSearchV2Depth         = 256
++	defaultSearchV2ReadLimit = int64(2 * 1024 * 1024)
++	maxSearchV2ReadLimit     = int64(64 * 1024 * 1024)
++)
++
++type searchV2PathFilter struct {
++	Include         []string `json:"include"`
++	Exclude         []string `json:"exclude"`
++	CaseInsensitive bool     `json:"case_insensitive"`
++}
++
++type searchV2SizeFilter struct {
++	Min *int64 `json:"min"`
++	Max *int64 `json:"max"`
++}
++
++type searchV2ContentFilter struct {
++	Query            string `json:"query"`
++	MaxSearchSize    int64  `json:"max_search_size"`
++	IncludeUnmatched bool   `json:"include_unmatched"`
++	CaseInsensitive  bool   `json:"case_insensitive"`
++}
++
++type searchV2Payload struct {
++	Root          string                 `json:"root"`
++	PathFilter    *searchV2PathFilter    `json:"path_filter"`
++	SizeFilter    *searchV2SizeFilter    `json:"size_filter"`
++	ContentFilter *searchV2ContentFilter `json:"content_filter"`
++	PerPage       int                    `json:"per_page"`
++}
++
++type searchV2Directory struct {
++	path  string
++	depth int
++}
++
++type searchV2RuneMatcher struct {
++	pattern         []rune
++	failure         []int
++	caseInsensitive bool
++}
++
++var searchV2BufferPool = sync.Pool{New: func() interface{} {
++	buffer := make([]byte, 64*1024)
++	return &buffer
++}}
++
++func postServerFilesSearch(c *gin.Context) {
++	s := middleware.ExtractServer(c)
++	var data searchV2Payload
++	if err := c.ShouldBindJSON(&data); err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid search request."})
++		return
++	}
++	if err := validateSearchV2Payload(&data); err != nil {
++		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
++		return
++	}
++	root, err := normalizeBetterFilesRoot(data.Root)
++	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), root) != nil {
++		abortBetterFilesPath(c, errBetterFilesInvalidPath)
++		return
++	}
++	rootInfo, err := betterFilesLstat(s.Filesystem(), root)
++	if err != nil || !rootInfo.IsDir() {
++		abortBetterFilesPath(c, err)
++		return
++	}
++
++	results, err := runSearchV2(c.Request.Context(), s.Filesystem(), root, data)
++	if err != nil {
++		if errors.Is(err, errSearchV2TraversalLimit) {
++			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Search traversal limit exceeded."})
++			return
++		}
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	c.JSON(http.StatusOK, gin.H{"results": results})
++}
++
++var errSearchV2TraversalLimit = errors.New("search traversal limit exceeded")
++
++func validateSearchV2Payload(data *searchV2Payload) error {
++	if data.PerPage <= 0 {
++		data.PerPage = 100
++	}
++	if data.PerPage > maxSearchV2Results {
++		data.PerPage = maxSearchV2Results
++	}
++	if data.PathFilter != nil {
++		if len(data.PathFilter.Include)+len(data.PathFilter.Exclude) > maxSearchV2Patterns {
++			return errors.New("too many path patterns")
++		}
++		normalizePatterns := func(patterns []string) error {
++			for i, pattern := range patterns {
++				if pattern == "" || len(pattern) > betterFilesMaxPathLength || strings.ContainsAny(pattern, "\x00\\") || hasParentPathComponent(pattern) {
++					return errors.New("invalid path pattern")
++				}
++				pattern = strings.TrimLeft(pattern, "/")
++				if !doublestar.ValidatePattern(pattern) {
++					return errors.New("invalid path pattern")
++				}
++				if data.PathFilter.CaseInsensitive {
++					pattern = strings.ToLower(pattern)
++				}
++				patterns[i] = pattern
++			}
++			return nil
++		}
++		if err := normalizePatterns(data.PathFilter.Include); err != nil {
++			return err
++		}
++		if err := normalizePatterns(data.PathFilter.Exclude); err != nil {
++			return err
++		}
++	}
++	if data.SizeFilter != nil {
++		if data.SizeFilter.Min != nil && *data.SizeFilter.Min < 0 || data.SizeFilter.Max != nil && *data.SizeFilter.Max < 0 {
++			return errors.New("file sizes must be non-negative")
++		}
++		if data.SizeFilter.Min != nil && data.SizeFilter.Max != nil && *data.SizeFilter.Min > *data.SizeFilter.Max {
++			return errors.New("minimum file size exceeds maximum file size")
++		}
++	}
++	if data.ContentFilter != nil {
++		if !utf8.ValidString(data.ContentFilter.Query) || len(data.ContentFilter.Query) > betterFilesMaxPathLength || strings.ContainsRune(data.ContentFilter.Query, '\x00') {
++			return errors.New("invalid content query")
++		}
++		if data.ContentFilter.MaxSearchSize == 0 {
++			data.ContentFilter.MaxSearchSize = defaultSearchV2ReadLimit
++		}
++		if data.ContentFilter.MaxSearchSize < 0 || data.ContentFilter.MaxSearchSize > maxSearchV2ReadLimit {
++			return errors.New("max_search_size must be between 0 and 67108864")
++		}
++	}
++	return nil
++}
++
++func runSearchV2(ctx context.Context, fs *serverfs.Filesystem, root string, data searchV2Payload) ([]betterFilesEntry, error) {
++	results := make([]betterFilesEntry, 0, data.PerPage)
++	stack := []searchV2Directory{{path: root}}
++	entriesVisited := 0
++	directoriesVisited := 0
++	var contentMatcher *searchV2RuneMatcher
++	if data.ContentFilter != nil {
++		contentMatcher = newSearchV2RuneMatcher(data.ContentFilter.Query, data.ContentFilter.CaseInsensitive)
++	}
++
++	for len(stack) > 0 && len(results) < data.PerPage {
++		if err := ctx.Err(); err != nil {
++			return nil, err
++		}
++		directory := stack[len(stack)-1]
++		stack = stack[:len(stack)-1]
++		directoriesVisited++
++		if directoriesVisited > maxSearchV2Directories || directory.depth > maxSearchV2Depth {
++			return nil, errSearchV2TraversalLimit
++		}
++
++		entries, err := fs.ReadDirStat(directory.path)
++		if err != nil {
++			return nil, err
++		}
++		for i := len(entries) - 1; i >= 0 && len(results) < data.PerPage; i-- {
++			if err := ctx.Err(); err != nil {
++				return nil, err
++			}
++			info := entries[i]
++			entriesVisited++
++			if entriesVisited > maxSearchV2Entries {
++				return nil, errSearchV2TraversalLimit
++			}
++			fullPath := pathpkg.Join(directory.path, info.Name())
++			if ensureBetterFilesAllowed(fs, fullPath) != nil || info.Mode()&ufs.ModeSymlink != 0 {
++				continue
++			}
++			relative := betterFilesRelativePath(root, fullPath)
++			pathMatches, pathExcluded := searchV2PathDecision(relative, data.PathFilter)
++
++			if info.IsDir() {
++				if pathExcluded {
++					continue
++				}
++				if directory.depth < maxSearchV2Depth {
++					stack = append(stack, searchV2Directory{path: fullPath, depth: directory.depth + 1})
++				}
++				if data.ContentFilter != nil || !pathMatches || !searchV2SizeMatches(info.Size(), data.SizeFilter) {
++					continue
++				}
++				results = append(results, newBetterFilesEntry(relative, info, "inode/directory"))
++				continue
++			}
++			if !info.Mode().IsRegular() || !pathMatches || !searchV2SizeMatches(info.Size(), data.SizeFilter) {
++				continue
++			}
++
++			mime := ""
++			if data.ContentFilter != nil {
++				matched, detectedMime := searchV2ContentMatches(ctx, fs, fullPath, info, *data.ContentFilter, contentMatcher)
++				if err := ctx.Err(); err != nil {
++					return nil, err
++				}
++				if !matched {
++					continue
++				}
++				mime = detectedMime
++			}
++			if mime == "" {
++				mime = betterFilesMime(fs, fullPath, info)
++			}
++			results = append(results, newBetterFilesEntry(relative, info, mime))
++		}
++	}
++	return results, nil
++}
++
++func betterFilesRelativePath(root, fullPath string) string {
++	if root == "/" {
++		return strings.TrimPrefix(fullPath, "/")
++	}
++	return strings.TrimPrefix(strings.TrimPrefix(fullPath, root), "/")
++}
++
++func searchV2PathDecision(relative string, filter *searchV2PathFilter) (bool, bool) {
++	if filter == nil {
++		return true, false
++	}
++	candidate := relative
++	if filter.CaseInsensitive {
++		candidate = strings.ToLower(candidate)
++	}
++	matchAny := func(patterns []string) bool {
++		for _, pattern := range patterns {
++			if doublestar.MatchUnvalidated(pattern, candidate) {
++				return true
++			}
++		}
++		return false
++	}
++	if matchAny(filter.Exclude) {
++		return false, true
++	}
++	if len(filter.Include) > 0 && !matchAny(filter.Include) {
++		return false, false
++	}
++	return true, false
++}
++
++func searchV2SizeMatches(size int64, filter *searchV2SizeFilter) bool {
++	if filter == nil {
++		return true
++	}
++	if filter.Min != nil && size < *filter.Min {
++		return false
++	}
++	return filter.Max == nil || size <= *filter.Max
++}
++
++func searchV2ContentMatches(
++	ctx context.Context,
++	fs *serverfs.Filesystem,
++	filePath string,
++	info ufs.FileInfo,
++	filter searchV2ContentFilter,
++	matcher *searchV2RuneMatcher,
++) (bool, string) {
++	if info.Size() > filter.MaxSearchSize {
++		return filter.IncludeUnmatched, betterFilesMime(fs, filePath, info)
++	}
++	file, err := fs.UnixFS().OpenFile(filePath, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++	if err != nil {
++		return false, ""
++	}
++	defer file.Close()
++	openedInfo, err := file.Stat()
++	if err != nil || !openedInfo.Mode().IsRegular() || openedInfo.Size() > filter.MaxSearchSize {
++		return false, ""
++	}
++	detectedMime, err := mimetype.DetectReader(file)
++	if err != nil || detectedMime == nil {
++		return false, ""
++	}
++	detected := detectedMime.String()
++	if !betterFilesTextMime(detected) {
++		return false, ""
++	}
++	if _, err := file.Seek(0, io.SeekStart); err != nil {
++		return false, ""
++	}
++	if !streamSearchV2Text(ctx, io.LimitReader(file, filter.MaxSearchSize+1), filter.MaxSearchSize, matcher) {
++		return false, ""
++	}
++	return true, detected
++}
++
++func newSearchV2RuneMatcher(query string, caseInsensitive bool) *searchV2RuneMatcher {
++	pattern := []rune(query)
++	if caseInsensitive {
++		for i := range pattern {
++			pattern[i] = unicode.ToLower(pattern[i])
++		}
++	}
++	failure := make([]int, len(pattern))
++	for i, matched := 1, 0; i < len(pattern); i++ {
++		for matched > 0 && pattern[i] != pattern[matched] {
++			matched = failure[matched-1]
++		}
++		if pattern[i] == pattern[matched] {
++			matched++
++		}
++		failure[i] = matched
++	}
++	return &searchV2RuneMatcher{pattern: pattern, failure: failure, caseInsensitive: caseInsensitive}
++}
++
++func (m *searchV2RuneMatcher) consume(value rune, state *int) bool {
++	if len(m.pattern) == 0 {
++		return true
++	}
++	if m.caseInsensitive {
++		value = unicode.ToLower(value)
++	}
++	for *state > 0 && value != m.pattern[*state] {
++		*state = m.failure[*state-1]
++	}
++	if value == m.pattern[*state] {
++		*state++
++	}
++	return *state == len(m.pattern)
++}
++
++// streamSearchV2Text validates UTF-8 and searches incrementally, keeping only
++// one fixed-size buffer even when max_search_size is tens of megabytes.
++func streamSearchV2Text(ctx context.Context, reader io.Reader, limit int64, matcher *searchV2RuneMatcher) bool {
++	buffer := searchV2BufferPool.Get().(*[]byte)
++	defer searchV2BufferPool.Put(buffer)
++
++	matched := len(matcher.pattern) == 0
++	matchState := 0
++	var carry [utf8.UTFMax]byte
++	carryLength := 0
++	var total int64
++
++	consume := func(value rune) bool {
++		if value == 0 {
++			return false
++		}
++		if !matched && matcher.consume(value, &matchState) {
++			matched = true
++		}
++		return true
++	}
++
++	for {
++		if err := ctx.Err(); err != nil {
++			return false
++		}
++		n, readErr := reader.Read(*buffer)
++		if n > 0 {
++			total += int64(n)
++			if total > limit || bytes.IndexByte((*buffer)[:n], 0) >= 0 {
++				return false
++			}
++			data := (*buffer)[:n]
++
++			if carryLength > 0 {
++				for len(data) > 0 && !utf8.FullRune(carry[:carryLength]) {
++					carry[carryLength] = data[0]
++					carryLength++
++					data = data[1:]
++				}
++				if utf8.FullRune(carry[:carryLength]) {
++					value, size := utf8.DecodeRune(carry[:carryLength])
++					if (size == 1 && value == utf8.RuneError) || size != carryLength || !consume(value) {
++						return false
++					}
++					carryLength = 0
++				}
++			}
++
++			for len(data) > 0 {
++				if !utf8.FullRune(data) {
++					carryLength = copy(carry[:], data)
++					break
++				}
++				value, size := utf8.DecodeRune(data)
++				if size == 1 && value == utf8.RuneError || !consume(value) {
++					return false
++				}
++				data = data[size:]
++			}
++		}
++
++		if readErr == io.EOF {
++			return carryLength == 0 && matched
++		}
++		if readErr != nil || n == 0 {
++			return false
++		}
++	}
++}
++
++func betterFilesTextMime(value string) bool {
++	mediaType := strings.ToLower(strings.SplitN(value, ";", 2)[0])
++	if strings.HasPrefix(mediaType, "text/") {
++		return true
++	}
++	switch mediaType {
++	case "application/json", "application/ld+json", "application/xml", "application/javascript", "application/x-httpd-php", "application/toml", "application/x-yaml":
++		return true
++	default:
++		return strings.HasSuffix(mediaType, "+json") || strings.HasSuffix(mediaType, "+xml")
++	}
++}
+diff --git a/router/router_server_files_search_v2_test.go b/router/router_server_files_search_v2_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..8f280593cf86827c202492794b35b0ba506a444f
+--- /dev/null
++++ b/router/router_server_files_search_v2_test.go
+@@ -0,0 +1,108 @@
++package router
++
++import (
++	"bytes"
++	"context"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestSearchV2GlobContentUnicodeAndIgnoredFiles(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0, "logs/**", "ignored/**")
++	writeBetterFilesFixture(t, fs, "/config/paper.yml", []byte("name: HéLLo 😀\n"))
++	writeBetterFilesFixture(t, fs, "/config/other.yml", []byte("name: other\n"))
++	writeBetterFilesFixture(t, fs, "/logs/server.yml", []byte("name: HéLLo 😀\n"))
++	writeBetterFilesFixture(t, fs, "/ignored/secret.yml", []byte("name: HéLLo 😀\n"))
++	writeBetterFilesFixture(t, fs, "/config/binary.yml", []byte{'x', 0, 'y'})
++
++	data := searchV2Payload{
++		PathFilter: &searchV2PathFilter{
++			Include:         []string{"**/*.yml"},
++			Exclude:         []string{"**/other.yml"},
++			CaseInsensitive: true,
++		},
++		ContentFilter: &searchV2ContentFilter{Query: "héllo 😀", MaxSearchSize: 1024, CaseInsensitive: true},
++		PerPage:       100,
++	}
++	require.NoError(t, validateSearchV2Payload(&data))
++	results, err := runSearchV2(context.Background(), fs, "/", data)
++	require.NoError(t, err)
++	require.Len(t, results, 1)
++	require.Equal(t, "config/paper.yml", results[0].Name)
++}
++
++func TestSearchV2SizeIncludeUnmatchedAndLimit(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/large.txt", []byte("content too large for configured search"))
++	writeBetterFilesFixture(t, fs, "/small.txt", []byte("match"))
++	minimum := int64(1)
++	maximum := int64(100)
++	data := searchV2Payload{
++		SizeFilter:    &searchV2SizeFilter{Min: &minimum, Max: &maximum},
++		ContentFilter: &searchV2ContentFilter{Query: "absent", MaxSearchSize: 5, IncludeUnmatched: true},
++		PerPage:       1,
++	}
++	require.NoError(t, validateSearchV2Payload(&data))
++	results, err := runSearchV2(context.Background(), fs, "/", data)
++	require.NoError(t, err)
++	require.Len(t, results, 1)
++	require.Equal(t, "large.txt", results[0].Name)
++}
++
++func TestSearchV2HardMaximum(t *testing.T) {
++	data := searchV2Payload{PerPage: 5000}
++	require.NoError(t, validateSearchV2Payload(&data))
++	require.Equal(t, 500, data.PerPage)
++}
++
++func TestSearchV2ContentCaseSensitivity(t *testing.T) {
++	fs := newBetterFilesTestFilesystem(t, 0)
++	writeBetterFilesFixture(t, fs, "/mixed.txt", []byte("MiXeD Value"))
++	data := searchV2Payload{
++		ContentFilter: &searchV2ContentFilter{Query: "mixed value", MaxSearchSize: 1024},
++		PerPage:       10,
++	}
++	require.NoError(t, validateSearchV2Payload(&data))
++	results, err := runSearchV2(context.Background(), fs, "/", data)
++	require.NoError(t, err)
++	require.Empty(t, results)
++
++	data.ContentFilter.CaseInsensitive = true
++	results, err = runSearchV2(context.Background(), fs, "/", data)
++	require.NoError(t, err)
++	require.Len(t, results, 1)
++}
++
++func TestStreamSearchV2TextAcrossBufferBoundaries(t *testing.T) {
++	prefix := bytes.Repeat([]byte{'a'}, 64*1024-2)
++	content := append(prefix, []byte("a😀Target")...)
++	matcher := newSearchV2RuneMatcher("a😀target", true)
++	require.True(t, streamSearchV2Text(context.Background(), bytes.NewReader(content), int64(len(content)), matcher))
++
++	replacement := []byte("valid � text")
++	require.True(t, streamSearchV2Text(
++		context.Background(),
++		bytes.NewReader(replacement),
++		int64(len(replacement)),
++		newSearchV2RuneMatcher("�", false),
++	))
++	require.False(t, streamSearchV2Text(
++		context.Background(),
++		bytes.NewReader([]byte{'x', 0, 'y'}),
++		3,
++		newSearchV2RuneMatcher("x", false),
++	))
++	require.False(t, streamSearchV2Text(
++		context.Background(),
++		bytes.NewReader([]byte{0xff}),
++		1,
++		newSearchV2RuneMatcher("", false),
++	))
++	require.False(t, streamSearchV2Text(
++		context.Background(),
++		bytes.NewReader([]byte("too long")),
++		3,
++		newSearchV2RuneMatcher("too", false),
++	))
++}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 0000000..cc79320
+index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004acfd548b1a
 --- /dev/null
 +++ b/router/router_server_git.go
 @@ -0,0 +1,1431 @@
@@ -3640,7 +7152,7 @@ index 0000000..cc79320
 +	}, nil
 +}
 diff --git a/router/router_server_ws.go b/router/router_server_ws.go
-index b0ba3a4..15d0a31 100644
+index b0ba3a4c254ac16a1edd4e0af9d0725a43454738..15d0a31f32d68392bd35c9d1231d1558b4ddf855 100644
 --- a/router/router_server_ws.go
 +++ b/router/router_server_ws.go
 @@ -106,13 +106,33 @@ func getServerWebsocket(c *gin.Context) {
@@ -3731,7 +7243,7 @@ index b0ba3a4..15d0a31 100644
  }
 diff --git a/router/router_system_config.go b/router/router_system_config.go
 new file mode 100644
-index 0000000..430efcc
+index 0000000000000000000000000000000000000000..430efccfce960a815a50486930ea655efbbe0b1e
 --- /dev/null
 +++ b/router/router_system_config.go
 @@ -0,0 +1,26 @@
@@ -3763,7 +7275,7 @@ index 0000000..430efcc
 +}
 diff --git a/router/router_system_config_test.go b/router/router_system_config_test.go
 new file mode 100644
-index 0000000..7143a8b
+index 0000000000000000000000000000000000000000..7143a8b491e9640d1d503b253571f57ae948abcc
 --- /dev/null
 +++ b/router/router_system_config_test.go
 @@ -0,0 +1,62 @@
@@ -3830,10 +7342,10 @@ index 0000000..7143a8b
 +	}, response)
 +}
 diff --git a/router/tokens/websocket.go b/router/tokens/websocket.go
-index 8ad3fb5..8b5bad1 100644
+index 07ad8f4e6633999989f32602868fbfacfb37f237..c896adeed8e8a0127b41b3384793b402b79ea937 100644
 --- a/router/tokens/websocket.go
 +++ b/router/tokens/websocket.go
-@@ -55,6 +55,8 @@ type WebsocketPayload struct {
+@@ -85,6 +85,8 @@ type WebsocketPayload struct {
  	Scoped
  
  	UserUUID    string   `json:"user_uuid"`
@@ -3844,7 +7356,7 @@ index 8ad3fb5..8b5bad1 100644
  }
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 0000000..e74ea9c
+index 0000000000000000000000000000000000000000..e74ea9c28b9b75175902d1e6be40bdc308d1d9d5
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
 @@ -0,0 +1,1269 @@
@@ -5119,7 +8631,7 @@ index 0000000..e74ea9c
 +}
 diff --git a/router/websocket/betterfiles_collaboration_ot.go b/router/websocket/betterfiles_collaboration_ot.go
 new file mode 100644
-index 0000000..b9c6811
+index 0000000000000000000000000000000000000000..b9c6811e8690498aed5925574f2e1d287dcc8feb
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration_ot.go
 @@ -0,0 +1,292 @@
@@ -5417,7 +8929,7 @@ index 0000000..b9c6811
 +}
 diff --git a/router/websocket/betterfiles_collaboration_ot_test.go b/router/websocket/betterfiles_collaboration_ot_test.go
 new file mode 100644
-index 0000000..461c1ca
+index 0000000000000000000000000000000000000000..461c1ca9cb80a19f8bc545a7d6df8f88d7e90fda
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration_ot_test.go
 @@ -0,0 +1,128 @@
@@ -5551,7 +9063,7 @@ index 0000000..461c1ca
 +}
 diff --git a/router/websocket/file_collaboration_yjs.go b/router/websocket/file_collaboration_yjs.go
 new file mode 100644
-index 0000000..622fd79
+index 0000000000000000000000000000000000000000..622fd79ca2017c42b7dc7e5d6f5b525eabecc9f2
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs.go
 @@ -0,0 +1,611 @@
@@ -6168,7 +9680,7 @@ index 0000000..622fd79
 +}
 diff --git a/router/websocket/file_collaboration_yjs_test.go b/router/websocket/file_collaboration_yjs_test.go
 new file mode 100644
-index 0000000..b370dd1
+index 0000000000000000000000000000000000000000..b370dd1838bc05fa7a9120075d623047276cd13d
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs_test.go
 @@ -0,0 +1,339 @@
@@ -6512,7 +10024,7 @@ index 0000000..b370dd1
 +	require.Equal(t, "ab", truncated)
 +}
 diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
-index 57315a9..436ca49 100644
+index 57315a96f2d7baba708d8f9bf1333aed935182d6..436ca497351df2cf4937abe7ce2c41ebbd3ee155 100644
 --- a/router/websocket/limiter.go
 +++ b/router/websocket/limiter.go
 @@ -1,6 +1,7 @@
@@ -6540,8 +10052,70 @@ index 57315a9..436ca49 100644
 +func IsFileCollaborationEvent(e Event) bool {
 +	return IsBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)
 +}
+diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
+index 12e5f8168dd72837db7082b2803609cd87768e60..b79ddc184fa248858ab68414e7839f293044e2e2 100644
+--- a/router/websocket/listeners.go
++++ b/router/websocket/listeners.go
+@@ -78,6 +78,25 @@ var e = []string{
+ 	server.BackupRestoreCompletedEvent,
+ 	server.TransferLogsEvent,
+ 	server.TransferStatusEvent,
++	server.OperationProgressEvent,
++	server.OperationErrorEvent,
++	server.OperationCompletedEvent,
++}
++
++func websocketEventArgs(data interface{}) ([]string, bool) {
++	values, ok := data.([]interface{})
++	if !ok {
++		return nil, false
++	}
++	args := make([]string, len(values))
++	for i, value := range values {
++		arg, ok := value.(string)
++		if !ok {
++			return nil, false
++		}
++		args[i] = arg
++	}
++	return args, true
+ }
+ 
+ // ListenForServerEvents will listen for different events happening on a server
+@@ -132,7 +151,9 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
+ 			}
+ 			var sendErr error
+ 			message := Message{Event: Event(e.Topic)}
+-			if str, ok := e.Data.(string); ok {
++			if args, ok := websocketEventArgs(e.Data); ok {
++				message.Args = args
++			} else if str, ok := e.Data.(string); ok {
+ 				message.Args = []string{str}
+ 			} else if b, ok := e.Data.([]byte); ok {
+ 				message.Args = []string{string(b)}
+diff --git a/router/websocket/listeners_operation_test.go b/router/websocket/listeners_operation_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..e05c740a919f54ef3cd6f7c0237f3b0d767ff761
+--- /dev/null
++++ b/router/websocket/listeners_operation_test.go
+@@ -0,0 +1,15 @@
++package websocket
++
++import (
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++func TestWebsocketEventArgsPreservesOperationWireArguments(t *testing.T) {
++	args, ok := websocketEventArgs([]interface{}{"operation-id", `{"type":"copy_many"}`})
++	require.True(t, ok)
++	require.Equal(t, []string{"operation-id", `{"type":"copy_many"}`}, args)
++	_, ok = websocketEventArgs([]interface{}{"operation-id", 1})
++	require.False(t, ok)
++}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667..e08e07a 100644
+index 4482667e67723a87eeb47735708f96206806c5db..e08e07acacf0eb94cc629833f74f92d0e6a1eb37 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
 @@ -39,13 +39,14 @@ const (
@@ -6603,9 +10177,23 @@ index 4482667..e08e07a 100644
  	switch m.Event {
  	case AuthenticationEvent:
  		{
+diff --git a/server/events.go b/server/events.go
+index d08411cce8e18de88008df04789d40bc24e55ad7..c4a31cb52bda7e5d77f0e0198ec40741a904930f 100644
+--- a/server/events.go
++++ b/server/events.go
+@@ -19,6 +19,9 @@ const (
+ 	TransferLogsEvent           = "transfer logs"
+ 	TransferStatusEvent         = "transfer status"
+ 	DeletedEvent                = "deleted"
++	OperationProgressEvent      = "operation progress"
++	OperationErrorEvent         = "operation error"
++	OperationCompletedEvent     = "operation completed"
+ )
+ 
+ // Events returns the server's emitter instance.
 diff --git a/server/file_history.go b/server/file_history.go
 new file mode 100644
-index 0000000..98f3cf3
+index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717ca8a08f58
 --- /dev/null
 +++ b/server/file_history.go
 @@ -0,0 +1,783 @@
@@ -7394,7 +10982,7 @@ index 0000000..98f3cf3
 +}
 diff --git a/server/file_history_test.go b/server/file_history_test.go
 new file mode 100644
-index 0000000..32cabc5
+index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af92b9280e
 --- /dev/null
 +++ b/server/file_history_test.go
 @@ -0,0 +1,140 @@
@@ -7538,3 +11126,551 @@ index 0000000..32cabc5
 +		t.Fatal("recovered revision content does not match")
 +	}
 +}
+diff --git a/server/file_operations.go b/server/file_operations.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..75a73a9d6837ccd7bbfaa8e3b086a9dfd6d05245
+--- /dev/null
++++ b/server/file_operations.go
+@@ -0,0 +1,213 @@
++package server
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"sync"
++	"sync/atomic"
++	"time"
++
++	"github.com/google/uuid"
++)
++
++const maxFileOperationsPerServer = 64
++
++var (
++	ErrFileOperationLimit    = errors.New("too many file operations are active")
++	ErrFileOperationCanceled = errors.New("operation cancelled")
++)
++
++type FileOperationSnapshot struct {
++	Type           string    `json:"type"`
++	ServerUUID     string    `json:"server_uuid"`
++	StartTime      time.Time `json:"start_time"`
++	BytesProcessed uint64    `json:"bytes_processed"`
++	BytesTotal     uint64    `json:"bytes_total"`
++	FilesProcessed uint64    `json:"files_processed"`
++	Cancelled      bool      `json:"cancelled"`
++}
++
++type FileOperation struct {
++	identifier string
++	typ        string
++	serverUUID string
++	startTime  time.Time
++	cancel     context.CancelFunc
++
++	bytesProcessed atomic.Uint64
++	bytesTotal     atomic.Uint64
++	filesProcessed atomic.Uint64
++	cancelled      atomic.Bool
++}
++
++func (o *FileOperation) Identifier() string { return o.identifier }
++
++func (o *FileOperation) AddBytesProcessed(value uint64) {
++	o.bytesProcessed.Add(value)
++}
++
++func (o *FileOperation) SetBytesTotal(value uint64) {
++	o.bytesTotal.Store(value)
++}
++
++func (o *FileOperation) AddFilesProcessed(value uint64) {
++	o.filesProcessed.Add(value)
++}
++
++func (o *FileOperation) Snapshot() FileOperationSnapshot {
++	return FileOperationSnapshot{
++		Type:           o.typ,
++		ServerUUID:     o.serverUUID,
++		StartTime:      o.startTime,
++		BytesProcessed: o.bytesProcessed.Load(),
++		BytesTotal:     o.bytesTotal.Load(),
++		FilesProcessed: o.filesProcessed.Load(),
++		Cancelled:      o.cancelled.Load(),
++	}
++}
++
++type FileOperationManager struct {
++	server *Server
++
++	mu         sync.RWMutex
++	operations map[string]*FileOperation
++}
++
++func NewFileOperationManager(server *Server) *FileOperationManager {
++	return &FileOperationManager{server: server, operations: make(map[string]*FileOperation)}
++}
++
++// Start registers and runs one bounded, server-local file operation. The
++// returned channel always receives exactly one terminal result.
++func (m *FileOperationManager) Start(
++	parent context.Context,
++	typ string,
++	work func(context.Context, *FileOperation) error,
++) (*FileOperation, <-chan error, error) {
++	if parent == nil {
++		parent = m.server.Context()
++	}
++
++	ctx, cancel := context.WithCancel(m.server.Context())
++	stopParent := context.AfterFunc(parent, cancel)
++	op := &FileOperation{
++		identifier: uuid.NewString(),
++		typ:        typ,
++		serverUUID: m.server.ID(),
++		startTime:  time.Now().UTC(),
++		cancel:     cancel,
++	}
++
++	m.mu.Lock()
++	if len(m.operations) >= maxFileOperationsPerServer {
++		m.mu.Unlock()
++		stopParent()
++		cancel()
++		return nil, nil, ErrFileOperationLimit
++	}
++	m.operations[op.identifier] = op
++	m.mu.Unlock()
++
++	result := make(chan error, 1)
++	go func() {
++		defer stopParent()
++		defer cancel()
++
++		progressDone := make(chan struct{})
++		progressStopped := make(chan struct{})
++		go m.publishProgressUntilDone(op, progressDone, progressStopped)
++		err := work(ctx, op)
++		close(progressDone)
++		<-progressStopped
++
++		m.mu.Lock()
++		delete(m.operations, op.identifier)
++		cancelled := op.cancelled.Load() || ctx.Err() != nil
++		m.mu.Unlock()
++
++		switch {
++		case cancelled:
++			err = ErrFileOperationCanceled
++			m.publishArgs(OperationErrorEvent, op.identifier, ErrFileOperationCanceled.Error())
++		case err != nil:
++			m.server.Log().WithError(err).WithField("operation", op.identifier).Warn("file operation failed")
++			m.publishArgs(OperationErrorEvent, op.identifier, safeFileOperationError(err))
++		default:
++			m.publishArgs(OperationCompletedEvent, op.identifier)
++		}
++
++		result <- err
++		close(result)
++	}()
++
++	return op, result, nil
++}
++
++func (m *FileOperationManager) publishProgressUntilDone(op *FileOperation, done <-chan struct{}, stopped chan<- struct{}) {
++	defer close(stopped)
++	m.publishProgress(op)
++	ticker := time.NewTicker(time.Second)
++	defer ticker.Stop()
++	for {
++		select {
++		case <-done:
++			return
++		case <-ticker.C:
++			m.publishProgress(op)
++		}
++	}
++}
++
++func (m *FileOperationManager) publishProgress(op *FileOperation) {
++	payload, err := json.Marshal(op.Snapshot())
++	if err != nil {
++		return
++	}
++	m.publishArgs(OperationProgressEvent, op.identifier, string(payload))
++}
++
++func (m *FileOperationManager) publishArgs(event string, args ...string) {
++	m.server.Events().Publish(event, args)
++}
++
++func (m *FileOperationManager) Cancel(identifier string) bool {
++	m.mu.RLock()
++	op, ok := m.operations[identifier]
++	if ok {
++		op.cancelled.Store(true)
++		op.cancel()
++	}
++	m.mu.RUnlock()
++	return ok
++}
++
++func (m *FileOperationManager) CancelAll() {
++	m.mu.RLock()
++	for _, op := range m.operations {
++		op.cancelled.Store(true)
++		op.cancel()
++	}
++	m.mu.RUnlock()
++}
++
++func (m *FileOperationManager) Has(identifier string) bool {
++	m.mu.RLock()
++	_, ok := m.operations[identifier]
++	m.mu.RUnlock()
++	return ok
++}
++
++func (m *FileOperationManager) Count() int {
++	m.mu.RLock()
++	count := len(m.operations)
++	m.mu.RUnlock()
++	return count
++}
++
++func safeFileOperationError(err error) string {
++	if errors.Is(err, context.Canceled) || errors.Is(err, ErrFileOperationCanceled) {
++		return ErrFileOperationCanceled.Error()
++	}
++	return "file operation failed"
++}
+diff --git a/server/file_operations_test.go b/server/file_operations_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..727a06c8348874140251a9b2f89864aecdddcf67
+--- /dev/null
++++ b/server/file_operations_test.go
+@@ -0,0 +1,150 @@
++package server
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/stretchr/testify/require"
++
++	wingsevents "github.com/pterodactyl/wings/events"
++)
++
++func testOperationServer(t *testing.T, id string) *Server {
++	t.Helper()
++	s, err := New(nil)
++	require.NoError(t, err)
++	s.cfg.Uuid = id
++	t.Cleanup(s.CtxCancel)
++	return s
++}
++
++func waitForOperationEvent(t *testing.T, events <-chan []byte, topic string) wingsevents.Event {
++	t.Helper()
++	timer := time.NewTimer(3 * time.Second)
++	defer timer.Stop()
++	for {
++		select {
++		case raw := <-events:
++			event := wingsevents.MustDecode(raw)
++			if event.Topic == topic {
++				return event
++			}
++		case <-timer.C:
++			t.Fatalf("timed out waiting for %q", topic)
++		}
++	}
++}
++
++func operationEventArgs(t *testing.T, event wingsevents.Event) []string {
++	t.Helper()
++	values, ok := event.Data.([]interface{})
++	require.True(t, ok)
++	args := make([]string, len(values))
++	for index, value := range values {
++		args[index], ok = value.(string)
++		require.True(t, ok)
++	}
++	return args
++}
++
++func TestFileOperationProgressCompletionAndCleanup(t *testing.T) {
++	s := testOperationServer(t, "server-a")
++	eventChannel := make(chan []byte, 16)
++	s.Events().On(eventChannel)
++	t.Cleanup(func() { s.Events().Off(eventChannel) })
++
++	op, done, err := s.FileOperations().Start(context.Background(), "copy_many", func(_ context.Context, operation *FileOperation) error {
++		operation.SetBytesTotal(500)
++		operation.AddBytesProcessed(100)
++		operation.AddFilesProcessed(2)
++		return nil
++	})
++	require.NoError(t, err)
++	require.NoError(t, <-done)
++
++	progress := waitForOperationEvent(t, eventChannel, OperationProgressEvent)
++	args := operationEventArgs(t, progress)
++	require.Len(t, args, 2)
++	require.Equal(t, op.Identifier(), args[0])
++	var snapshot FileOperationSnapshot
++	require.NoError(t, json.Unmarshal([]byte(args[1]), &snapshot))
++	require.Equal(t, "copy_many", snapshot.Type)
++	require.Equal(t, "server-a", snapshot.ServerUUID)
++
++	completed := waitForOperationEvent(t, eventChannel, OperationCompletedEvent)
++	require.Equal(t, []string{op.Identifier()}, operationEventArgs(t, completed))
++	require.Eventually(t, func() bool { return s.FileOperations().Count() == 0 }, time.Second, time.Millisecond)
++}
++
++func TestFileOperationErrorAndCleanup(t *testing.T) {
++	s := testOperationServer(t, "server-errors")
++	eventChannel := make(chan []byte, 16)
++	s.Events().On(eventChannel)
++	t.Cleanup(func() { s.Events().Off(eventChannel) })
++
++	op, done, err := s.FileOperations().Start(context.Background(), "copy_many", func(context.Context, *FileOperation) error {
++		return errors.New("/host/private/path")
++	})
++	require.NoError(t, err)
++	require.Error(t, <-done)
++	event := waitForOperationEvent(t, eventChannel, OperationErrorEvent)
++	require.Equal(t, []string{op.Identifier(), "file operation failed"}, operationEventArgs(t, event))
++	require.Zero(t, s.FileOperations().Count())
++}
++
++func TestFileOperationCancellationAndServerIsolation(t *testing.T) {
++	first := testOperationServer(t, "server-first")
++	second := testOperationServer(t, "server-second")
++	eventChannel := make(chan []byte, 16)
++	first.Events().On(eventChannel)
++	t.Cleanup(func() { first.Events().Off(eventChannel) })
++
++	started := make(chan struct{})
++	op, done, err := first.FileOperations().Start(context.Background(), "copy_many", func(ctx context.Context, operation *FileOperation) error {
++		close(started)
++		for {
++			select {
++			case <-ctx.Done():
++				return ctx.Err()
++			default:
++				operation.AddBytesProcessed(1)
++			}
++		}
++	})
++	require.NoError(t, err)
++	<-started
++	require.False(t, second.FileOperations().Cancel(op.Identifier()))
++	require.True(t, first.FileOperations().Cancel(op.Identifier()))
++	require.ErrorIs(t, <-done, ErrFileOperationCanceled)
++	event := waitForOperationEvent(t, eventChannel, OperationErrorEvent)
++	require.Equal(t, []string{op.Identifier(), "operation cancelled"}, operationEventArgs(t, event))
++	require.Zero(t, first.FileOperations().Count())
++}
++
++func TestFileOperationRaceSafeProgress(t *testing.T) {
++	s := testOperationServer(t, "server-race")
++	var readers sync.WaitGroup
++	op, done, err := s.FileOperations().Start(context.Background(), "copy_many", func(_ context.Context, operation *FileOperation) error {
++		for i := 0; i < 10000; i++ {
++			operation.AddBytesProcessed(1)
++			operation.AddFilesProcessed(1)
++		}
++		return nil
++	})
++	require.NoError(t, err)
++	for i := 0; i < 8; i++ {
++		readers.Add(1)
++		go func() {
++			defer readers.Done()
++			for j := 0; j < 1000; j++ {
++				_ = op.Snapshot()
++			}
++		}()
++	}
++	readers.Wait()
++	require.NoError(t, <-done)
++}
+diff --git a/server/filesystem/replace.go b/server/filesystem/replace.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..e13edc4ba84df3e8f4a2cf18cc9da532057c0602
+--- /dev/null
++++ b/server/filesystem/replace.go
+@@ -0,0 +1,124 @@
++package filesystem
++
++import (
++	"errors"
++	"path/filepath"
++
++	"golang.org/x/sys/unix"
++
++	"github.com/pterodactyl/wings/internal/ufs"
++)
++
++// RenameNoReplace atomically moves a regular file or directory while refusing
++// to replace any destination that appears concurrently. This closes the
++// lstat-then-rename race in bulk rename requests.
++func (fs *Filesystem) RenameNoReplace(oldpath, newpath string) error {
++	if oldpath == newpath {
++		return nil
++	}
++
++	olddirfd, oldname, closeOld, err := fs.unixFS.SafePath(oldpath)
++	defer closeOld()
++	if err != nil {
++		return err
++	}
++	if oldname == "." {
++		return ufs.ErrBadPathResolution
++	}
++	oldInfo, err := fs.unixFS.Lstatat(olddirfd, oldname)
++	if err != nil {
++		return err
++	}
++	if oldInfo.Mode()&ufs.ModeSymlink != 0 || (!oldInfo.IsDir() && !oldInfo.Mode().IsRegular()) {
++		return ufs.ErrBadPathResolution
++	}
++
++	newdirfd, newname, closeNew, err := fs.unixFS.SafePath(newpath)
++	if err != nil {
++		closeNew()
++		if !errors.Is(err, ufs.ErrNotExist) {
++			return err
++		}
++		if err := fs.mkdirAll(filepath.Dir(newpath), 0o755); err != nil {
++			return err
++		}
++		newdirfd, newname, closeNew, err = fs.unixFS.SafePath(newpath)
++		if err != nil {
++			closeNew()
++			return err
++		}
++	}
++	defer closeNew()
++	if newname == "." {
++		return ufs.ErrBadPathResolution
++	}
++
++	for {
++		err = unix.Renameat2(olddirfd, oldname, newdirfd, newname, unix.RENAME_NOREPLACE)
++		if err == unix.EINTR {
++			continue
++		}
++		if err != nil {
++			return &ufs.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: err}
++		}
++		return nil
++	}
++}
++
++// Replace atomically renames a regular temporary file over a regular target.
++// It is used by streamed copies so a cancelled or failed copy never exposes a
++// partially written destination. Quota usage for the replaced inode is removed
++// only after the atomic rename succeeds.
++func (fs *Filesystem) Replace(oldpath, newpath string) error {
++	olddirfd, oldname, closeOld, err := fs.unixFS.SafePath(oldpath)
++	defer closeOld()
++	if err != nil {
++		return err
++	}
++	if oldname == "." {
++		return ufs.ErrBadPathResolution
++	}
++	oldInfo, err := fs.unixFS.Lstatat(olddirfd, oldname)
++	if err != nil {
++		return err
++	}
++	if !oldInfo.Mode().IsRegular() {
++		return ufs.ErrBadPathResolution
++	}
++
++	newdirfd, newname, closeNew, err := fs.unixFS.SafePath(newpath)
++	defer closeNew()
++	if err != nil {
++		return err
++	}
++	if newname == "." {
++		return ufs.ErrBadPathResolution
++	}
++
++	var replacedSize int64
++	newInfo, statErr := fs.unixFS.Lstatat(newdirfd, newname)
++	switch {
++	case statErr == nil:
++		if !newInfo.Mode().IsRegular() {
++			return ufs.ErrBadPathResolution
++		}
++		replacedSize = newInfo.Size()
++	case !errors.Is(statErr, ufs.ErrNotExist):
++		return statErr
++	}
++
++	for {
++		err = unix.Renameat(olddirfd, oldname, newdirfd, newname)
++		if err == unix.EINTR {
++			continue
++		}
++		if err != nil {
++			return &ufs.LinkError{Op: "replace", Old: oldpath, New: newpath, Err: err}
++		}
++		break
++	}
++	if replacedSize > 0 {
++		fs.adjustDisk(-replacedSize)
++	}
++	return nil
++}
+diff --git a/server/server.go b/server/server.go
+index a1777b047ba40a7d9060d76a298ecf7df6a2284a..073ec76f961d7cb07313fe6aaa664e6352d8d55a 100644
+--- a/server/server.go
++++ b/server/server.go
+@@ -46,7 +46,8 @@ type Server struct {
+ 	resources   ResourceUsage
+ 	Environment environment.ProcessEnvironment `json:"-"`
+ 
+-	fs *filesystem.Filesystem
++	fs             *filesystem.Filesystem
++	fileOperations *FileOperationManager
+ 
+ 	// Events emitted by the server instance.
+ 	emitter *events.Bus
+@@ -103,6 +104,7 @@ func New(client remote.Client) (*Server, error) {
+ 		return nil, errors.Wrap(err, "server: could not set defaults for server configuration")
+ 	}
+ 	s.resources.State = system.NewAtomicString(environment.ProcessOfflineState)
++	s.fileOperations = NewFileOperationManager(&s)
+ 	return &s, nil
+ }
+ 
+@@ -111,12 +113,20 @@ func New(client remote.Client) (*Server, error) {
+ // processes for the server as well.
+ func (s *Server) CleanupForDestroy() {
+ 	s.CtxCancel()
++	if s.fileOperations != nil {
++		s.fileOperations.CancelAll()
++	}
+ 	s.Events().Destroy()
+ 	s.DestroyAllSinks()
+ 	s.Websockets().CancelAll()
+ 	s.powerLock.Destroy()
+ }
+ 
++// FileOperations returns the server-isolated manager for cancellable filesystem work.
++func (s *Server) FileOperations() *FileOperationManager {
++	return s.fileOperations
++}
++
+ // ID returns the UUID for the server instance.
+ func (s *Server) ID() string {
+ 	return s.Config().GetUuid()
