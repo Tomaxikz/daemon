@@ -312,7 +312,7 @@ index bdac760..88e490e 100644
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000..9afddc7
+index 0000000..b9f5258
 --- /dev/null
 +++ b/router/router_cdn_stream.go
 @@ -0,0 +1,48 @@
@@ -347,7 +347,7 @@ index 0000000..9afddc7
 +	}
 +
 +	s, ok := manager.Get(token.ServerUuid)
-+	if !ok || !token.HasScope(tokens.FileDownload) {
++	if !ok || token.Denylisted() || !token.HasScope(tokens.FileDownload) {
 +		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 +			"error": "The requested resource was not found on this server.",
 +		})

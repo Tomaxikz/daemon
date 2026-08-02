@@ -597,7 +597,7 @@ func postServerUploadFiles(c *gin.Context) {
 	}
 
 	s, ok := manager.Get(token.ServerUuid)
-	if !ok || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
+	if !ok || token.Denylisted() || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "The requested resource was not found on this server.",
 		})

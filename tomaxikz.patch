@@ -1127,7 +1127,7 @@ index bdac760..82f4eea 100644
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000..9afddc7
+index 0000000..b9f5258
 --- /dev/null
 +++ b/router/router_cdn_stream.go
 @@ -0,0 +1,48 @@
@@ -1162,7 +1162,7 @@ index 0000000..9afddc7
 +	}
 +
 +	s, ok := manager.Get(token.ServerUuid)
-+	if !ok || !token.HasScope(tokens.FileDownload) {
++	if !ok || token.Denylisted() || !token.HasScope(tokens.FileDownload) {
 +		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 +			"error": "The requested resource was not found on this server.",
 +		})
@@ -2109,7 +2109,7 @@ index 0000000..3b91d18
 +	c.JSON(http.StatusOK, gin.H{"closed": closed})
 +}
 diff --git a/router/router_server_files.go b/router/router_server_files.go
-index 88acfdb..769808a 100644
+index 7561844..abd8f3d 100644
 --- a/router/router_server_files.go
 +++ b/router/router_server_files.go
 @@ -9,7 +9,6 @@ import (
@@ -2177,8 +2177,8 @@ index 88acfdb..769808a 100644
  	}
  
  	s, ok := manager.Get(token.ServerUuid)
--	if !ok || !token.IsUniqueRequest() || !token.HasScope(tokens.FileUpload) {
-+	if !ok || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
+-	if !ok || token.Denylisted() || !token.IsUniqueRequest() || !token.HasScope(tokens.FileUpload) {
++	if !ok || token.Denylisted() || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
  		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
  			"error": "The requested resource was not found on this server.",
  		})

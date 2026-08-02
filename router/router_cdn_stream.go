@@ -29,7 +29,7 @@ func getTokenStreamFile(c *gin.Context) (*downloadFile, bool) {
 	}
 
 	s, ok := manager.Get(token.ServerUuid)
-	if !ok || !token.HasScope(tokens.FileDownload) {
+	if !ok || token.Denylisted() || !token.HasScope(tokens.FileDownload) {
 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
 			"error": "The requested resource was not found on this server.",
 		})
