@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	stderrors "errors"
 	"io"
 	"net"
 	"os"
@@ -59,6 +60,16 @@ func (l *sshSessionLimiter) acquire() bool {
 func (l *sshSessionLimiter) release() {
 	l.active.Add(-1)
 }
+
+// sshHandshakeError identifies failures that occur before an inbound client
+// completes the SSH handshake. These errors are controlled by remote clients
+// and are routine noise on a public SFTP port, not daemon failures.
+type sshHandshakeError struct {
+	cause error
+}
+
+func (e *sshHandshakeError) Error() string { return e.cause.Error() }
+func (e *sshHandshakeError) Unwrap() error { return e.cause }
 
 //goland:noinspection GoNameStartsWithPackageName
 type SFTPServer struct {
@@ -147,10 +158,64 @@ func (c *SFTPServer) Run() error {
 			go func(conn net.Conn) {
 				defer conn.Close()
 				if err := c.AcceptInbound(conn, conf); err != nil {
-					log.WithField("error", err).WithField("ip", conn.RemoteAddr().String()).Error("sftp: failed to accept inbound connection")
+					logInboundSFTPError(err, conn.RemoteAddr().String())
 				}
 			}(conn)
 		}
+	}
+}
+
+// logInboundSFTPError keeps client-controlled handshake failures out of the
+// error log. Public SFTP listeners are continuously hit by scanners, obsolete
+// SSH clients, and non-SSH protocols; logging those with stack traces creates
+// noise without identifying a daemon fault. Unexpected post-handshake errors
+// remain error-level and retain their full diagnostic context.
+func logInboundSFTPError(err error, remoteAddress string) {
+	var handshakeErr *sshHandshakeError
+	if stderrors.As(err, &handshakeErr) {
+		log.WithFields(log.Fields{
+			"ip":     remoteAddress,
+			"reason": sshHandshakeRejectionReason(handshakeErr.cause),
+		}).Debug("sftp: rejected inbound SSH handshake")
+		return
+	}
+
+	log.WithError(err).WithField("ip", remoteAddress).Error("sftp: failed to accept inbound connection")
+}
+
+// sshHandshakeRejectionReason returns a bounded, non-sensitive description of
+// a rejected handshake. In particular, it avoids logging attacker-controlled
+// algorithm lists or malformed version strings.
+func sshHandshakeRejectionReason(err error) string {
+	if stderrors.Is(err, io.EOF) {
+		return "connection closed before handshake completed"
+	}
+
+	var netErr net.Error
+	if stderrors.As(err, &netErr) && netErr.Timeout() {
+		return "handshake timed out"
+	}
+
+	message := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(message, "overflow reading version string"):
+		return "invalid SSH version string"
+	case strings.Contains(message, "no common algorithm for key exchange"):
+		return "no compatible key-exchange algorithm"
+	case strings.Contains(message, "no common algorithm for host key"):
+		return "no compatible host-key algorithm"
+	case strings.Contains(message, "no common algorithm for cipher"):
+		return "no compatible cipher"
+	case strings.Contains(message, "no common algorithm for mac"):
+		return "no compatible message-authentication algorithm"
+	case strings.Contains(message, "unable to authenticate"):
+		return "authentication rejected"
+	case strings.Contains(message, "connection reset by peer"),
+		strings.Contains(message, "broken pipe"),
+		strings.Contains(message, "unexpected eof"):
+		return "connection closed during handshake"
+	default:
+		return "SSH handshake rejected"
 	}
 }
 
@@ -161,7 +226,7 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
 	if err != nil {
-		return errors.WithStack(err)
+		return &sshHandshakeError{cause: err}
 	}
 	_ = conn.SetDeadline(time.Time{})
 	defer sconn.Close()

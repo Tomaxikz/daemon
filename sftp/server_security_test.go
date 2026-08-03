@@ -2,6 +2,8 @@ package sftp
 
 import (
 	"context"
+	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +33,72 @@ func TestSSHSessionLimiter(t *testing.T) {
 	limiter.release()
 	require.True(t, limiter.acquire())
 	require.Equal(t, int32(maxSSHSessionChannels), limiter.active.Load())
+}
+
+func TestSSHHandshakeErrorPreservesCause(t *testing.T) {
+	err := &sshHandshakeError{cause: io.EOF}
+	require.ErrorIs(t, err, io.EOF)
+
+	var target *sshHandshakeError
+	require.ErrorAs(t, err, &target)
+	require.Same(t, err, target)
+}
+
+func TestSSHHandshakeRejectionReason(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{name: "eof", err: io.EOF, expected: "connection closed before handshake completed"},
+		{
+			name:     "invalid version",
+			err:      errors.New("ssh: overflow reading version string"),
+			expected: "invalid SSH version string",
+		},
+		{
+			name:     "key exchange",
+			err:      errors.New("ssh: no common algorithm for key exchange; we offered: [modern], peer offered: [obsolete]"),
+			expected: "no compatible key-exchange algorithm",
+		},
+		{
+			name:     "host key",
+			err:      errors.New("ssh: no common algorithm for host key; we offered: [ssh-ed25519], peer offered: [ssh-rsa]"),
+			expected: "no compatible host-key algorithm",
+		},
+		{
+			name:     "cipher",
+			err:      errors.New("ssh: no common algorithm for cipher"),
+			expected: "no compatible cipher",
+		},
+		{
+			name:     "mac",
+			err:      errors.New("ssh: no common algorithm for MAC"),
+			expected: "no compatible message-authentication algorithm",
+		},
+		{
+			name:     "authentication",
+			err:      errors.New("ssh: unable to authenticate, attempted methods [none password], no supported methods remain"),
+			expected: "authentication rejected",
+		},
+		{
+			name:     "connection reset",
+			err:      errors.New("read tcp: connection reset by peer"),
+			expected: "connection closed during handshake",
+		},
+		{
+			name:     "unknown",
+			err:      errors.New("ssh: unexpected message type"),
+			expected: "SSH handshake rejected",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.expected, sshHandshakeRejectionReason(test.err))
+			require.NotContains(t, sshHandshakeRejectionReason(test.err), "peer offered")
+		})
+	}
 }
 
 func TestSftpSessionClosesOnUserRevocation(t *testing.T) {
