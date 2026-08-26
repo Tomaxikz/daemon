@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -20,19 +22,63 @@ import (
 	"github.com/pterodactyl/wings/server/filesystem"
 )
 
-const maxResumableUploadLocks = 10240
+const (
+	maxConcurrentResumableUploads          = 64
+	maxConcurrentResumableUploadsPerServer = 16
+	maxConcurrentResumableUploadsPerToken  = 4
+	maxResumableUploadLocks                = maxConcurrentResumableUploads + 64
+	maxResumableUploadSessions             = 4096
+	maxResumableUploadSessionsPerServer    = 256
+	resumableUploadIdleTimeout             = 30 * time.Second
+)
 
-type resumableUploadLock struct {
-	mu   sync.Mutex
-	refs int
-}
+var errResumableUploadIdleTimeout = errors.New("resumable upload body timed out")
+
+type resumableUploadIdleTimeoutContextKey struct{}
 
 type resumableUploadLockRegistry struct {
-	mu    sync.Mutex
-	locks map[string]*resumableUploadLock
+	mu     sync.Mutex
+	active map[string]struct{}
 }
 
-var uploadLocks = resumableUploadLockRegistry{locks: make(map[string]*resumableUploadLock)}
+type resumableUploadAdmissionRegistry struct {
+	mu             sync.Mutex
+	globalLimit    int
+	perServerLimit int
+	perTokenLimit  int
+	global         int
+	byServer       map[string]int
+	byToken        map[string]int
+}
+
+type resumableUploadSession struct {
+	serverID string
+	target   string
+	expires  time.Time
+	consumed bool
+}
+
+type resumableUploadSessionRegistry struct {
+	mu             sync.Mutex
+	globalLimit    int
+	perServerLimit int
+	nextExpiry     time.Time
+	sessions       map[string]resumableUploadSession
+	byServer       map[string]int
+}
+
+var uploadLocks = resumableUploadLockRegistry{active: make(map[string]struct{})}
+
+var uploadAdmissions = newResumableUploadAdmissionRegistry(
+	maxConcurrentResumableUploads,
+	maxConcurrentResumableUploadsPerServer,
+	maxConcurrentResumableUploadsPerToken,
+)
+
+var uploadSessions = newResumableUploadSessionRegistry(
+	maxResumableUploadSessions,
+	maxResumableUploadSessionsPerServer,
+)
 
 var uploadBufferPool = sync.Pool{New: func() interface{} {
 	buffer := make([]byte, 64*1024)
@@ -48,38 +94,139 @@ var saveResumableUploadActivity = func(s *server.Server, user, ip, filename, dir
 
 func (r *resumableUploadLockRegistry) acquire(key string) (func(), bool) {
 	r.mu.Lock()
-	lock := r.locks[key]
-	if lock == nil {
-		if len(r.locks) >= maxResumableUploadLocks {
-			r.mu.Unlock()
-			return nil, false
-		}
-		lock = &resumableUploadLock{}
-		r.locks[key] = lock
+	defer r.mu.Unlock()
+	if _, ok := r.active[key]; ok || len(r.active) >= maxResumableUploadLocks {
+		return nil, false
 	}
-	lock.refs++
-	r.mu.Unlock()
+	r.active[key] = struct{}{}
 
-	lock.mu.Lock()
 	return func() {
-		lock.mu.Unlock()
 		r.mu.Lock()
-		lock.refs--
-		if lock.refs == 0 {
-			delete(r.locks, key)
-		}
+		delete(r.active, key)
 		r.mu.Unlock()
 	}, true
 }
 
+func newResumableUploadAdmissionRegistry(global, perServer, perToken int) *resumableUploadAdmissionRegistry {
+	return &resumableUploadAdmissionRegistry{
+		globalLimit:    global,
+		perServerLimit: perServer,
+		perTokenLimit:  perToken,
+		byServer:       make(map[string]int),
+		byToken:        make(map[string]int),
+	}
+}
+
+func (r *resumableUploadAdmissionRegistry) acquire(serverID, tokenID string) (func(), bool) {
+	tokenKey := serverID + "\x00" + tokenID
+	r.mu.Lock()
+	if r.global >= r.globalLimit || r.byServer[serverID] >= r.perServerLimit || r.byToken[tokenKey] >= r.perTokenLimit {
+		r.mu.Unlock()
+		return nil, false
+	}
+	r.global++
+	r.byServer[serverID]++
+	r.byToken[tokenKey]++
+	r.mu.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			r.mu.Lock()
+			r.global--
+			r.byServer[serverID]--
+			if r.byServer[serverID] == 0 {
+				delete(r.byServer, serverID)
+			}
+			r.byToken[tokenKey]--
+			if r.byToken[tokenKey] == 0 {
+				delete(r.byToken, tokenKey)
+			}
+			r.mu.Unlock()
+		})
+	}, true
+}
+
+func newResumableUploadSessionRegistry(global, perServer int) *resumableUploadSessionRegistry {
+	return &resumableUploadSessionRegistry{
+		globalLimit:    global,
+		perServerLimit: perServer,
+		sessions:       make(map[string]resumableUploadSession),
+		byServer:       make(map[string]int),
+	}
+}
+
+func (r *resumableUploadSessionRegistry) bind(token *tokens.UploadPayload, serverID, target string) bool {
+	now := time.Now()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.pruneExpired(now)
+
+	if session, ok := r.sessions[token.UniqueId]; ok {
+		return !session.consumed && session.serverID == serverID && session.target == target
+	}
+	if len(r.sessions) >= r.globalLimit || r.byServer[serverID] >= r.perServerLimit {
+		return false
+	}
+	if token.ExpirationTime == nil || !now.Before(token.ExpirationTime.Time) || !token.IsUniqueRequest() {
+		return false
+	}
+
+	expires := token.ExpirationTime.Time
+	r.sessions[token.UniqueId] = resumableUploadSession{
+		serverID: serverID,
+		target:   target,
+		expires:  expires,
+	}
+	r.byServer[serverID]++
+	if r.nextExpiry.IsZero() || expires.Before(r.nextExpiry) {
+		r.nextExpiry = expires
+	}
+	return true
+}
+
+func (r *resumableUploadSessionRegistry) retire(tokenID, serverID, target string) {
+	r.mu.Lock()
+	if session, ok := r.sessions[tokenID]; ok && !session.consumed && session.serverID == serverID && session.target == target {
+		session.target = ""
+		session.consumed = true
+		r.sessions[tokenID] = session
+	}
+	r.mu.Unlock()
+}
+
+func (r *resumableUploadSessionRegistry) pruneExpired(now time.Time) {
+	if r.nextExpiry.IsZero() || now.Before(r.nextExpiry) {
+		return
+	}
+	r.nextExpiry = time.Time{}
+	for id, session := range r.sessions {
+		if !now.Before(session.expires) {
+			delete(r.sessions, id)
+			r.byServer[session.serverID]--
+			if r.byServer[session.serverID] == 0 {
+				delete(r.byServer, session.serverID)
+			}
+			continue
+		}
+		if r.nextExpiry.IsZero() || session.expires.Before(r.nextExpiry) {
+			r.nextExpiry = session.expires
+		}
+	}
+}
+
 func headServerUploadFile(c *gin.Context) {
-	s, _, ok := resumableUploadServer(c)
+	s, token, ok := resumableUploadServer(c)
 	if !ok {
 		return
 	}
 	directory, target, ok := resumableUploadTarget(c, s)
 	_ = directory
 	if !ok {
+		return
+	}
+	if !uploadSessions.bind(token, s.ID(), target) {
+		abortResumableUploadFile(c)
 		return
 	}
 
@@ -134,10 +281,22 @@ func patchServerUploadFile(c *gin.Context) {
 		c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload exceeds the configured upload limit."})
 		return
 	}
+	if !uploadSessions.bind(token, s.ID(), target) {
+		abortResumableUploadFile(c)
+		return
+	}
+
+	releaseAdmission, ok := uploadAdmissions.acquire(s.ID(), token.UniqueId)
+	if !ok {
+		c.Header("Retry-After", "1")
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many resumable uploads are currently active."})
+		return
+	}
+	defer releaseAdmission()
 
 	release, ok := uploadLocks.acquire(s.ID() + "\x00" + target)
 	if !ok {
-		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Too many uploads are currently active."})
+		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "An upload is already active for this file."})
 		return
 	}
 	defer release()
@@ -187,8 +346,16 @@ func patchServerUploadFile(c *gin.Context) {
 
 	buffer := uploadBufferPool.Get().(*[]byte)
 	defer uploadBufferPool.Put(buffer)
-	reader := io.LimitReader(&contextUploadReader{ctx: c.Request.Context(), reader: c.Request.Body}, allowed+1)
+	deadlineReader := newResumableUploadDeadlineReader(
+		c.Writer,
+		c.Request.Body,
+		resumableUploadIdleTimeoutForRequest(c.Request),
+	)
+	reader := io.LimitReader(&contextUploadReader{ctx: c.Request.Context(), reader: deadlineReader}, allowed+1)
 	written, copyErr := io.CopyBuffer(writerOnly{Writer: file}, reader, *buffer)
+	if deadlineErr := deadlineReader.clear(); copyErr == nil && deadlineErr != nil {
+		copyErr = deadlineErr
+	}
 	if copyErr != nil || written > allowed {
 		rollback()
 		_ = file.Close()
@@ -196,6 +363,8 @@ func patchServerUploadFile(c *gin.Context) {
 			c.AbortWithStatusJSON(http.StatusInsufficientStorage, gin.H{"error": "The server does not have enough disk space for this upload."})
 		} else if written > allowed {
 			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload chunk exceeds the remaining upload length."})
+		} else if errors.Is(copyErr, errResumableUploadIdleTimeout) {
+			c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{"error": "The upload body was idle for too long."})
 		} else {
 			middleware.CaptureAndAbort(c, copyErr)
 		}
@@ -220,6 +389,7 @@ func patchServerUploadFile(c *gin.Context) {
 	}
 
 	if complete {
+		uploadSessions.retire(token.UniqueId, s.ID(), target)
 		saveResumableUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
 	}
 
@@ -234,7 +404,7 @@ func resumableUploadServer(c *gin.Context) (*server.Server, *tokens.UploadPayloa
 		return nil, nil, false
 	}
 	s, ok := middleware.ExtractManager(c).Get(token.ServerUuid)
-	if !ok || token.Denylisted() || !token.HasScope(tokens.FileUpload) {
+	if !ok || token.UniqueId == "" || token.Denylisted() || !token.HasScope(tokens.FileUpload) {
 		abortResumableUploadFile(c)
 		return nil, nil, false
 	}
@@ -315,6 +485,58 @@ func abortResumableUploadFile(c *gin.Context) {
 type contextUploadReader struct {
 	ctx    context.Context
 	reader io.Reader
+}
+
+type resumableUploadDeadlineReader struct {
+	reader     io.Reader
+	controller *http.ResponseController
+	timeout    time.Duration
+	supported  bool
+}
+
+func newResumableUploadDeadlineReader(writer http.ResponseWriter, reader io.Reader, timeout time.Duration) *resumableUploadDeadlineReader {
+	return &resumableUploadDeadlineReader{
+		reader:     reader,
+		controller: http.NewResponseController(writer),
+		timeout:    timeout,
+	}
+}
+
+func (r *resumableUploadDeadlineReader) Read(buffer []byte) (int, error) {
+	if err := r.setDeadline(time.Now().Add(r.timeout)); err != nil {
+		return 0, err
+	}
+	n, err := r.reader.Read(buffer)
+	if err != nil {
+		var networkError net.Error
+		if errors.As(err, &networkError) && networkError.Timeout() {
+			return n, errors.Join(errResumableUploadIdleTimeout, err)
+		}
+	}
+	return n, err
+}
+
+func (r *resumableUploadDeadlineReader) setDeadline(deadline time.Time) error {
+	err := r.controller.SetReadDeadline(deadline)
+	if err != nil {
+		return err
+	}
+	r.supported = true
+	return nil
+}
+
+func (r *resumableUploadDeadlineReader) clear() error {
+	if !r.supported {
+		return nil
+	}
+	return r.controller.SetReadDeadline(time.Time{})
+}
+
+func resumableUploadIdleTimeoutForRequest(request *http.Request) time.Duration {
+	if timeout, ok := request.Context().Value(resumableUploadIdleTimeoutContextKey{}).(time.Duration); ok && timeout > 0 {
+		return timeout
+	}
+	return resumableUploadIdleTimeout
 }
 
 func (r *contextUploadReader) Read(buffer []byte) (int, error) {

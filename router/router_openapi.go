@@ -28,7 +28,7 @@ func getOpenAPI(c *gin.Context) {
 			"/upload/file": gin.H{
 				"post":  operation("Upload files using multipart form data", "200"),
 				"head":  operation("Read the current resumable upload offset", "200", "404"),
-				"patch": operation("Append a resumable upload chunk", "200", "409", "413"),
+				"patch": operation("Append a resumable upload chunk", "200", "408", "409", "413", "429"),
 			},
 			"/download/directory": gin.H{
 				"get": operation("Stream a directory archive", "200", "404"),
@@ -68,10 +68,14 @@ func statusCode(value string) int {
 		return http.StatusBadRequest
 	case "404":
 		return http.StatusNotFound
+	case "408":
+		return http.StatusRequestTimeout
 	case "409":
 		return http.StatusConflict
 	case "413":
 		return http.StatusRequestEntityTooLarge
+	case "429":
+		return http.StatusTooManyRequests
 	case "422":
 		return http.StatusUnprocessableEntity
 	default:

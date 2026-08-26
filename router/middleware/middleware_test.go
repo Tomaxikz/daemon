@@ -76,15 +76,15 @@ func TestSetAccessControlHeadersAllowsRangeStreaming(t *testing.T) {
 		}
 	})
 
-	t.Run("resumable upload route allows and exposes offset headers", func(t *testing.T) {
+	t.Run("resumable upload route allows and exposes response headers", func(t *testing.T) {
 		request := httptest.NewRequest(http.MethodOptions, "/upload/file", nil)
 		recorder := httptest.NewRecorder()
 		router.ServeHTTP(recorder, request)
 		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Upload-Offset") || !strings.Contains(got, "Upload-Length") {
 			t.Fatalf("expected resumable upload headers, got %q", got)
 		}
-		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Upload-Offset") {
-			t.Fatalf("expected Upload-Offset in exposed headers, got %q", got)
+		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Upload-Offset") || !strings.Contains(got, "Retry-After") {
+			t.Fatalf("expected Upload-Offset and Retry-After in exposed headers, got %q", got)
 		}
 		if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "HEAD") || !strings.Contains(got, "PATCH") {
 			t.Fatalf("expected resumable upload methods, got %q", got)

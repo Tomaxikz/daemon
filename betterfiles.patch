@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index b1331236f8f10eea37caa06e7a99a818cf159749..eb4398e2a3069eff9dd015a464721042cbd41d50 100644
+index 230062f54242573ebcbf7105eff4d6831cbe05a1..3e482e9fb3a99442282e63e45e7d87240ba687d2 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -138,6 +138,11 @@ type SystemConfiguration struct {
@@ -50,10 +50,20 @@ index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f5436541
 +	return e.client
 +}
 diff --git a/go.mod b/go.mod
-index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..b85113ce0c9a2c8e0b6413540c7f98980a2ba85e 100644
+index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..44c218d83ec95bf132c93a183fd7ade2ab0def4d 100644
 --- a/go.mod
 +++ b/go.mod
-@@ -13,11 +13,14 @@ require (
+@@ -1,8 +1,6 @@
+ module github.com/pterodactyl/wings
+ 
+-go 1.24.0
+-
+-toolchain go1.24.1
++go 1.26.7
+ 
+ require (
+ 	emperror.dev/errors v0.8.1
+@@ -13,11 +11,14 @@ require (
  	github.com/apex/log v1.9.0
  	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
  	github.com/beevik/etree v1.5.0
@@ -68,7 +78,7 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..b85113ce0c9a2c8e0b6413540c7f9898
  	github.com/fatih/color v1.18.0
  	github.com/franela/goblin v0.0.0-20211003143422-0a4f594942bf
  	github.com/gabriel-vasile/mimetype v1.4.8
-@@ -39,12 +42,16 @@ require (
+@@ -39,12 +40,16 @@ require (
  	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
  	github.com/patrickmn/go-cache v2.1.0+incompatible
  	github.com/pkg/sftp v1.13.10
@@ -79,13 +89,14 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..b85113ce0c9a2c8e0b6413540c7f9898
  	github.com/stretchr/testify v1.10.0
 +	github.com/ulikunitz/xz v0.5.15
  	golang.org/x/crypto v0.46.0
- 	golang.org/x/sync v0.19.0
+-	golang.org/x/sync v0.19.0
++	golang.org/x/sync v0.21.0
  	golang.org/x/sys v0.39.0
 +	golang.org/x/time v0.10.0
  	gopkg.in/ini.v1 v1.67.0
  	gopkg.in/yaml.v2 v2.4.0
  	gopkg.in/yaml.v3 v3.0.1
-@@ -66,9 +73,7 @@ require (
+@@ -66,9 +71,7 @@ require (
  	github.com/containerd/errdefs/pkg v0.3.0 // indirect
  	github.com/containerd/log v0.1.0 // indirect
  	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -95,7 +106,7 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..b85113ce0c9a2c8e0b6413540c7f9898
  	github.com/dustin/go-humanize v1.0.1 // indirect
  	github.com/felixge/httpsnoop v1.0.4 // indirect
  	github.com/gammazero/deque v1.0.0 // indirect
-@@ -117,7 +122,6 @@ require (
+@@ -117,7 +120,6 @@ require (
  	github.com/spf13/pflag v1.0.6 // indirect
  	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
  	github.com/ugorji/go/codec v1.2.12 // indirect
@@ -103,16 +114,18 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..b85113ce0c9a2c8e0b6413540c7f9898
  	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
  	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect
  	go.opentelemetry.io/otel v1.35.0 // indirect
-@@ -132,7 +136,6 @@ require (
+@@ -131,8 +133,7 @@ require (
+ 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
  	golang.org/x/net v0.47.0 // indirect
  	golang.org/x/term v0.38.0 // indirect
- 	golang.org/x/text v0.32.0 // indirect
+-	golang.org/x/text v0.32.0 // indirect
 -	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
++	golang.org/x/text v0.39.0 // indirect
  	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
  	google.golang.org/protobuf v1.36.5 // indirect
  	gotest.tools/v3 v3.0.2 // indirect
 diff --git a/go.sum b/go.sum
-index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..427f1bc25d2c237e2f98a02deddc4d41be2d920b 100644
+index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..f38a2fb24418ea68b52608be06fc6e9b86ee5b5f 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -51,6 +51,8 @@ github.com/aws/aws-sdk-go v1.20.6/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN
@@ -142,8 +155,36 @@ index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..427f1bc25d2c237e2f98a02deddc4d41
  github.com/sirupsen/logrus v1.9.3 h1:dueUQJ1C2q9oE3F7wvmSGAaVtTmUizReu6fjN8uqzbQ=
  github.com/sirupsen/logrus v1.9.3/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
  github.com/smartystreets/assertions v1.0.0/go.mod h1:kHHU4qYBaI3q23Pp3VPrmWhuIUrLW/7eUrw0BU5VaoM=
-@@ -529,8 +535,8 @@ golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=
- golang.org/x/text v0.32.0/go.mod h1:o/rUWzghvpD5TXrTIBuJU77MTaN0ljMWE47kxGJQ7jY=
+@@ -449,8 +455,8 @@ golang.org/x/mod v0.1.1-0.20191105210325-c90efee705ee/go.mod h1:QqPTAvyqsEbceGzB
+ golang.org/x/mod v0.2.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+ golang.org/x/mod v0.3.0/go.mod h1:s0Qsj1ACt9ePp/hMypM3fl4fZqREWJwdYDEqhRiZZUA=
+ golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4/go.mod h1:jJ57K6gSWd91VN4djpZkiMVwK6gcyfeH4XE8wZrZaV4=
+-golang.org/x/mod v0.30.0 h1:fDEXFVZ/fmCKProc/yAXXUijritrDzahmwwefnjoPFk=
+-golang.org/x/mod v0.30.0/go.mod h1:lAsf5O2EvJeSFMiBxXDki7sCgAxEUcZHXoXMKT4GJKc=
++golang.org/x/mod v0.37.0 h1:vF1DjpVEshcIqoEaauuHebaLk1O1forxjxBaVn884JQ=
++golang.org/x/mod v0.37.0/go.mod h1:m8S8VeM9r4dzDwjrKO0a1sZP3YjeMamRRlD+fmR2Q/0=
+ golang.org/x/net v0.0.0-20180724234803-3673e40ba225/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+ golang.org/x/net v0.0.0-20180826012351-8a410e7b638d/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+ golang.org/x/net v0.0.0-20180906233101-161cd47e91fd/go.mod h1:mL1N/T3taQHkDXs73rZJwtUhF3w3ftmwwsq0BUmARs4=
+@@ -485,8 +491,8 @@ golang.org/x/sync v0.0.0-20190423024810-112230192c58/go.mod h1:RxMgew5VJxzue5/jJ
+ golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+ golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+ golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
+-golang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=
+-golang.org/x/sync v0.19.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=
++golang.org/x/sync v0.21.0 h1:HLII4xRRTtCRkxYp4HNFF0Js/Og6q2i++KXbg0gHCwM=
++golang.org/x/sync v0.21.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
+ golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+ golang.org/x/sys v0.0.0-20180909124046-d0be0721c37e/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+ golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+@@ -525,12 +531,12 @@ golang.org/x/text v0.3.3/go.mod h1:5Zoc/QRtKVWzQhOtBMvqHzDpF6irO9z98xDceosuGiQ=
+ golang.org/x/text v0.3.7/go.mod h1:u+2+/6zg+i71rQMx5EYifcz6MCKuco9NR6JIITiCfzQ=
+ golang.org/x/text v0.4.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+ golang.org/x/text v0.7.0/go.mod h1:mrYo+phRRbMaCq/xk9113O4dZlRixOauAjOtrjsXDZ8=
+-golang.org/x/text v0.32.0 h1:ZD01bjUt1FQ9WJ0ClOL5vxgxOI/sVCNgX1YtKwcY0mU=
+-golang.org/x/text v0.32.0/go.mod h1:o/rUWzghvpD5TXrTIBuJU77MTaN0ljMWE47kxGJQ7jY=
++golang.org/x/text v0.39.0 h1:UbZz4pLOvn600D6Oh6GGEI6VAmndrEBLv8/6BEXzyus=
++golang.org/x/text v0.39.0/go.mod h1:3UwRclnC2g0TU9x8PZiyfOajCd1zaUNHF9cvqcQZ+ZM=
  golang.org/x/time v0.0.0-20181108054448-85acf8d2951c/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
  golang.org/x/time v0.0.0-20190308202827-9d24e82272b4/go.mod h1:tRJNPiyCQ0inRvYxbN9jk5I+vvW/OXSQhTDSoE431IQ=
 -golang.org/x/time v0.0.0-20220922220347-f3bd1da661af h1:Yx9k8YCG3dvF87UAn2tu2HQLf2dt/eR1bXxpLMWeH+Y=
@@ -153,6 +194,17 @@ index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..427f1bc25d2c237e2f98a02deddc4d41
  golang.org/x/tools v0.0.0-20180917221912-90fa682c2a6e/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
  golang.org/x/tools v0.0.0-20190114222345-bf090417da8b/go.mod h1:n7NCudcB/nEzxVGmLbDWY5pfWTLqBcC2KZ6jyYvM4mQ=
  golang.org/x/tools v0.0.0-20190226205152-f727befe758c/go.mod h1:9Yl7xja0Znq3iFh3HoIrodX9oNMXvdceNzlUR8zjMvY=
+@@ -560,8 +566,8 @@ golang.org/x/tools v0.0.0-20200212150539-ea181f53ac56/go.mod h1:TB2adYChydJhpapK
+ golang.org/x/tools v0.0.0-20200619180055-7c47624df98f/go.mod h1:EkVYQZoAsY45+roYkvgYkIh4xh/qjgUK9TdY2XT94GE=
+ golang.org/x/tools v0.0.0-20210106214847-113979e3529a/go.mod h1:emZCQorbCU4vsT4fOWvOPXz4eW1wZW4PmDk9uLelYpA=
+ golang.org/x/tools v0.1.12/go.mod h1:hNGJHUnrk76NpqgfD5Aqm5Crs+Hm0VOH/i9J2+nxYbc=
+-golang.org/x/tools v0.39.0 h1:ik4ho21kwuQln40uelmciQPp9SipgNDdrafrYA4TmQQ=
+-golang.org/x/tools v0.39.0/go.mod h1:JnefbkDPyD8UU2kI5fuf8ZX4/yUeh9W877ZeBONxUqQ=
++golang.org/x/tools v0.47.0 h1:7Kn5x/d1svx/PzryTsqeoZN4TZwqeH5pGWjefhLi/1Q=
++golang.org/x/tools v0.47.0/go.mod h1:dFHnyTvFWY212G+h7ZY4Vsp/K3U4/7W9TyVaAul8uCA=
+ golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+ golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 diff --git a/router/betterfiles_entry.go b/router/betterfiles_entry.go
 new file mode 100644
 index 0000000000000000000000000000000000000000..74ccb8f6a9f9008898e5c1fee74019001c669c28
@@ -231,10 +283,10 @@ index 0000000000000000000000000000000000000000..74ccb8f6a9f9008898e5c1fee7401900
 +}
 diff --git a/router/betterfiles_http_test.go b/router/betterfiles_http_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..ca3dabad4f5ba836d83b58a56f57bfbc2fd8368c
+index 0000000000000000000000000000000000000000..8f75b755798ae70d5077603d884349a3b8f001b9
 --- /dev/null
 +++ b/router/betterfiles_http_test.go
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,124 @@
 +package router
 +
 +import (
@@ -341,8 +393,16 @@ index 0000000000000000000000000000000000000000..ca3dabad4f5ba836d83b58a56f57bfbc
 +		}
 +	}
 +	recorder := httptest.NewRecorder()
-+	handler.ServeHTTP(recorder, request)
++	handler.ServeHTTP(&deadlineResponseRecorder{ResponseRecorder: recorder}, request)
 +	return recorder
++}
++
++type deadlineResponseRecorder struct {
++	*httptest.ResponseRecorder
++}
++
++func (*deadlineResponseRecorder) SetReadDeadline(time.Time) error {
++	return nil
 +}
 +
 +func readServerHTTPFixture(t *testing.T, s *server.Server, name string) []byte {
@@ -613,7 +673,7 @@ index 0000000000000000000000000000000000000000..25a8e740984614a4a4c5dfb1a5766320
 +	return data
 +}
 diff --git a/router/middleware/middleware.go b/router/middleware/middleware.go
-index 190871149a34778f688b62a62f2ca093614809c7..c8b5f385a08f8b6f7d68633a3e7b9a6cb3d202cc 100644
+index 190871149a34778f688b62a62f2ca093614809c7..a236b62c9944f2f6742175c8b7f6cfb05847c6ae 100644
 --- a/router/middleware/middleware.go
 +++ b/router/middleware/middleware.go
 @@ -99,13 +99,26 @@ func SetAccessControlHeaders() gin.HandlerFunc {
@@ -631,7 +691,7 @@ index 190871149a34778f688b62a62f2ca093614809c7..c8b5f385a08f8b6f7d68633a3e7b9a6c
 +			c.Header("Vary", "Origin, Access-Control-Request-Headers")
 +		}
 +		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
-+			c.Header("Access-Control-Expose-Headers", "Upload-Offset, X-Request-Id")
++			c.Header("Access-Control-Expose-Headers", "Retry-After, Upload-Offset, X-Request-Id")
 +		}
  
  		// CORS for Private Networks (RFC1918)
@@ -662,7 +722,7 @@ index 190871149a34778f688b62a62f2ca093614809c7..c8b5f385a08f8b6f7d68633a3e7b9a6c
  // the request context, and the logger for the context is also updated to include
 diff --git a/router/middleware/middleware_test.go b/router/middleware/middleware_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..73d0b1ce2f87355fdd9eb5e4e3c245c47ffeb2d4
+index 0000000000000000000000000000000000000000..320dbfa2d6d3620762cb371c91cb682af8805641
 --- /dev/null
 +++ b/router/middleware/middleware_test.go
 @@ -0,0 +1,115 @@
@@ -744,15 +804,15 @@ index 0000000000000000000000000000000000000000..73d0b1ce2f87355fdd9eb5e4e3c245c4
 +		}
 +	})
 +
-+	t.Run("resumable upload route allows and exposes offset headers", func(t *testing.T) {
++	t.Run("resumable upload route allows and exposes response headers", func(t *testing.T) {
 +		request := httptest.NewRequest(http.MethodOptions, "/upload/file", nil)
 +		recorder := httptest.NewRecorder()
 +		router.ServeHTTP(recorder, request)
 +		if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Upload-Offset") || !strings.Contains(got, "Upload-Length") {
 +			t.Fatalf("expected resumable upload headers, got %q", got)
 +		}
-+		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Upload-Offset") {
-+			t.Fatalf("expected Upload-Offset in exposed headers, got %q", got)
++		if got := recorder.Header().Get("Access-Control-Expose-Headers"); !strings.Contains(got, "Upload-Offset") || !strings.Contains(got, "Retry-After") {
++			t.Fatalf("expected Upload-Offset and Retry-After in exposed headers, got %q", got)
 +		}
 +		if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "HEAD") || !strings.Contains(got, "PATCH") {
 +			t.Fatalf("expected resumable upload methods, got %q", got)
@@ -1859,10 +1919,10 @@ index 0000000000000000000000000000000000000000..5b89b4f8688d035aea0b101d2ee93431
 +}
 diff --git a/router/router_openapi.go b/router/router_openapi.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..aa5a4e6687eb83bc7b5a06925237de60a6d3c107
+index 0000000000000000000000000000000000000000..7fdea72693403d42dda0227a13cc02a9bb983b38
 --- /dev/null
 +++ b/router/router_openapi.go
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,84 @@
 +package router
 +
 +import (
@@ -1893,7 +1953,7 @@ index 0000000000000000000000000000000000000000..aa5a4e6687eb83bc7b5a06925237de60
 +			"/upload/file": gin.H{
 +				"post":  operation("Upload files using multipart form data", "200"),
 +				"head":  operation("Read the current resumable upload offset", "200", "404"),
-+				"patch": operation("Append a resumable upload chunk", "200", "409", "413"),
++				"patch": operation("Append a resumable upload chunk", "200", "408", "409", "413", "429"),
 +			},
 +			"/download/directory": gin.H{
 +				"get": operation("Stream a directory archive", "200", "404"),
@@ -1933,10 +1993,14 @@ index 0000000000000000000000000000000000000000..aa5a4e6687eb83bc7b5a06925237de60
 +		return http.StatusBadRequest
 +	case "404":
 +		return http.StatusNotFound
++	case "408":
++		return http.StatusRequestTimeout
 +	case "409":
 +		return http.StatusConflict
 +	case "413":
 +		return http.StatusRequestEntityTooLarge
++	case "429":
++		return http.StatusTooManyRequests
 +	case "422":
 +		return http.StatusUnprocessableEntity
 +	default:
@@ -1945,10 +2009,10 @@ index 0000000000000000000000000000000000000000..aa5a4e6687eb83bc7b5a06925237de60
 +}
 diff --git a/router/router_openapi_test.go b/router/router_openapi_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..ada416ecd2614c80d9ed558d8fde3468e4156a15
+index 0000000000000000000000000000000000000000..28c793cbe83b270121dee4176ced71a531f561de
 --- /dev/null
 +++ b/router/router_openapi_test.go
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,47 @@
 +package router
 +
 +import (
@@ -1987,23 +2051,33 @@ index 0000000000000000000000000000000000000000..ada416ecd2614c80d9ed558d8fde3468
 +			require.Contains(t, document.Paths[path], method, "%s %s", method, path)
 +		}
 +	}
++
++	patch, ok := document.Paths["/upload/file"]["patch"].(map[string]interface{})
++	require.True(t, ok)
++	responses, ok := patch["responses"].(map[string]interface{})
++	require.True(t, ok)
++	for _, status := range []string{"200", "408", "409", "413", "429"} {
++		require.Contains(t, responses, status)
++	}
 +}
 diff --git a/router/router_resumable_upload.go b/router/router_resumable_upload.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477062b6d5c
+index 0000000000000000000000000000000000000000..dddb9bd4d9cbfdf6fab4c85e061ffdc086d87a31
 --- /dev/null
 +++ b/router/router_resumable_upload.go
-@@ -0,0 +1,349 @@
+@@ -0,0 +1,571 @@
 +package router
 +
 +import (
 +	"context"
 +	"errors"
 +	"io"
++	"net"
 +	"net/http"
 +	"strconv"
 +	"strings"
 +	"sync"
++	"time"
 +
 +	"github.com/gin-gonic/gin"
 +
@@ -2016,19 +2090,63 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +	"github.com/pterodactyl/wings/server/filesystem"
 +)
 +
-+const maxResumableUploadLocks = 10240
++const (
++	maxConcurrentResumableUploads          = 64
++	maxConcurrentResumableUploadsPerServer = 16
++	maxConcurrentResumableUploadsPerToken  = 4
++	maxResumableUploadLocks                = maxConcurrentResumableUploads + 64
++	maxResumableUploadSessions             = 4096
++	maxResumableUploadSessionsPerServer    = 256
++	resumableUploadIdleTimeout             = 30 * time.Second
++)
 +
-+type resumableUploadLock struct {
-+	mu   sync.Mutex
-+	refs int
-+}
++var errResumableUploadIdleTimeout = errors.New("resumable upload body timed out")
++
++type resumableUploadIdleTimeoutContextKey struct{}
 +
 +type resumableUploadLockRegistry struct {
-+	mu    sync.Mutex
-+	locks map[string]*resumableUploadLock
++	mu     sync.Mutex
++	active map[string]struct{}
 +}
 +
-+var uploadLocks = resumableUploadLockRegistry{locks: make(map[string]*resumableUploadLock)}
++type resumableUploadAdmissionRegistry struct {
++	mu             sync.Mutex
++	globalLimit    int
++	perServerLimit int
++	perTokenLimit  int
++	global         int
++	byServer       map[string]int
++	byToken        map[string]int
++}
++
++type resumableUploadSession struct {
++	serverID string
++	target   string
++	expires  time.Time
++	consumed bool
++}
++
++type resumableUploadSessionRegistry struct {
++	mu             sync.Mutex
++	globalLimit    int
++	perServerLimit int
++	nextExpiry     time.Time
++	sessions       map[string]resumableUploadSession
++	byServer       map[string]int
++}
++
++var uploadLocks = resumableUploadLockRegistry{active: make(map[string]struct{})}
++
++var uploadAdmissions = newResumableUploadAdmissionRegistry(
++	maxConcurrentResumableUploads,
++	maxConcurrentResumableUploadsPerServer,
++	maxConcurrentResumableUploadsPerToken,
++)
++
++var uploadSessions = newResumableUploadSessionRegistry(
++	maxResumableUploadSessions,
++	maxResumableUploadSessionsPerServer,
++)
 +
 +var uploadBufferPool = sync.Pool{New: func() interface{} {
 +	buffer := make([]byte, 64*1024)
@@ -2044,38 +2162,139 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +
 +func (r *resumableUploadLockRegistry) acquire(key string) (func(), bool) {
 +	r.mu.Lock()
-+	lock := r.locks[key]
-+	if lock == nil {
-+		if len(r.locks) >= maxResumableUploadLocks {
-+			r.mu.Unlock()
-+			return nil, false
-+		}
-+		lock = &resumableUploadLock{}
-+		r.locks[key] = lock
++	defer r.mu.Unlock()
++	if _, ok := r.active[key]; ok || len(r.active) >= maxResumableUploadLocks {
++		return nil, false
 +	}
-+	lock.refs++
-+	r.mu.Unlock()
++	r.active[key] = struct{}{}
 +
-+	lock.mu.Lock()
 +	return func() {
-+		lock.mu.Unlock()
 +		r.mu.Lock()
-+		lock.refs--
-+		if lock.refs == 0 {
-+			delete(r.locks, key)
-+		}
++		delete(r.active, key)
 +		r.mu.Unlock()
 +	}, true
 +}
 +
++func newResumableUploadAdmissionRegistry(global, perServer, perToken int) *resumableUploadAdmissionRegistry {
++	return &resumableUploadAdmissionRegistry{
++		globalLimit:    global,
++		perServerLimit: perServer,
++		perTokenLimit:  perToken,
++		byServer:       make(map[string]int),
++		byToken:        make(map[string]int),
++	}
++}
++
++func (r *resumableUploadAdmissionRegistry) acquire(serverID, tokenID string) (func(), bool) {
++	tokenKey := serverID + "\x00" + tokenID
++	r.mu.Lock()
++	if r.global >= r.globalLimit || r.byServer[serverID] >= r.perServerLimit || r.byToken[tokenKey] >= r.perTokenLimit {
++		r.mu.Unlock()
++		return nil, false
++	}
++	r.global++
++	r.byServer[serverID]++
++	r.byToken[tokenKey]++
++	r.mu.Unlock()
++
++	var once sync.Once
++	return func() {
++		once.Do(func() {
++			r.mu.Lock()
++			r.global--
++			r.byServer[serverID]--
++			if r.byServer[serverID] == 0 {
++				delete(r.byServer, serverID)
++			}
++			r.byToken[tokenKey]--
++			if r.byToken[tokenKey] == 0 {
++				delete(r.byToken, tokenKey)
++			}
++			r.mu.Unlock()
++		})
++	}, true
++}
++
++func newResumableUploadSessionRegistry(global, perServer int) *resumableUploadSessionRegistry {
++	return &resumableUploadSessionRegistry{
++		globalLimit:    global,
++		perServerLimit: perServer,
++		sessions:       make(map[string]resumableUploadSession),
++		byServer:       make(map[string]int),
++	}
++}
++
++func (r *resumableUploadSessionRegistry) bind(token *tokens.UploadPayload, serverID, target string) bool {
++	now := time.Now()
++	r.mu.Lock()
++	defer r.mu.Unlock()
++	r.pruneExpired(now)
++
++	if session, ok := r.sessions[token.UniqueId]; ok {
++		return !session.consumed && session.serverID == serverID && session.target == target
++	}
++	if len(r.sessions) >= r.globalLimit || r.byServer[serverID] >= r.perServerLimit {
++		return false
++	}
++	if token.ExpirationTime == nil || !now.Before(token.ExpirationTime.Time) || !token.IsUniqueRequest() {
++		return false
++	}
++
++	expires := token.ExpirationTime.Time
++	r.sessions[token.UniqueId] = resumableUploadSession{
++		serverID: serverID,
++		target:   target,
++		expires:  expires,
++	}
++	r.byServer[serverID]++
++	if r.nextExpiry.IsZero() || expires.Before(r.nextExpiry) {
++		r.nextExpiry = expires
++	}
++	return true
++}
++
++func (r *resumableUploadSessionRegistry) retire(tokenID, serverID, target string) {
++	r.mu.Lock()
++	if session, ok := r.sessions[tokenID]; ok && !session.consumed && session.serverID == serverID && session.target == target {
++		session.target = ""
++		session.consumed = true
++		r.sessions[tokenID] = session
++	}
++	r.mu.Unlock()
++}
++
++func (r *resumableUploadSessionRegistry) pruneExpired(now time.Time) {
++	if r.nextExpiry.IsZero() || now.Before(r.nextExpiry) {
++		return
++	}
++	r.nextExpiry = time.Time{}
++	for id, session := range r.sessions {
++		if !now.Before(session.expires) {
++			delete(r.sessions, id)
++			r.byServer[session.serverID]--
++			if r.byServer[session.serverID] == 0 {
++				delete(r.byServer, session.serverID)
++			}
++			continue
++		}
++		if r.nextExpiry.IsZero() || session.expires.Before(r.nextExpiry) {
++			r.nextExpiry = session.expires
++		}
++	}
++}
++
 +func headServerUploadFile(c *gin.Context) {
-+	s, _, ok := resumableUploadServer(c)
++	s, token, ok := resumableUploadServer(c)
 +	if !ok {
 +		return
 +	}
 +	directory, target, ok := resumableUploadTarget(c, s)
 +	_ = directory
 +	if !ok {
++		return
++	}
++	if !uploadSessions.bind(token, s.ID(), target) {
++		abortResumableUploadFile(c)
 +		return
 +	}
 +
@@ -2130,10 +2349,22 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +		c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload exceeds the configured upload limit."})
 +		return
 +	}
++	if !uploadSessions.bind(token, s.ID(), target) {
++		abortResumableUploadFile(c)
++		return
++	}
++
++	releaseAdmission, ok := uploadAdmissions.acquire(s.ID(), token.UniqueId)
++	if !ok {
++		c.Header("Retry-After", "1")
++		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many resumable uploads are currently active."})
++		return
++	}
++	defer releaseAdmission()
 +
 +	release, ok := uploadLocks.acquire(s.ID() + "\x00" + target)
 +	if !ok {
-+		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Too many uploads are currently active."})
++		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "An upload is already active for this file."})
 +		return
 +	}
 +	defer release()
@@ -2183,8 +2414,16 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +
 +	buffer := uploadBufferPool.Get().(*[]byte)
 +	defer uploadBufferPool.Put(buffer)
-+	reader := io.LimitReader(&contextUploadReader{ctx: c.Request.Context(), reader: c.Request.Body}, allowed+1)
++	deadlineReader := newResumableUploadDeadlineReader(
++		c.Writer,
++		c.Request.Body,
++		resumableUploadIdleTimeoutForRequest(c.Request),
++	)
++	reader := io.LimitReader(&contextUploadReader{ctx: c.Request.Context(), reader: deadlineReader}, allowed+1)
 +	written, copyErr := io.CopyBuffer(writerOnly{Writer: file}, reader, *buffer)
++	if deadlineErr := deadlineReader.clear(); copyErr == nil && deadlineErr != nil {
++		copyErr = deadlineErr
++	}
 +	if copyErr != nil || written > allowed {
 +		rollback()
 +		_ = file.Close()
@@ -2192,6 +2431,8 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +			c.AbortWithStatusJSON(http.StatusInsufficientStorage, gin.H{"error": "The server does not have enough disk space for this upload."})
 +		} else if written > allowed {
 +			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The upload chunk exceeds the remaining upload length."})
++		} else if errors.Is(copyErr, errResumableUploadIdleTimeout) {
++			c.AbortWithStatusJSON(http.StatusRequestTimeout, gin.H{"error": "The upload body was idle for too long."})
 +		} else {
 +			middleware.CaptureAndAbort(c, copyErr)
 +		}
@@ -2216,6 +2457,7 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +	}
 +
 +	if complete {
++		uploadSessions.retire(token.UniqueId, s.ID(), target)
 +		saveResumableUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
 +	}
 +
@@ -2230,7 +2472,7 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +		return nil, nil, false
 +	}
 +	s, ok := middleware.ExtractManager(c).Get(token.ServerUuid)
-+	if !ok || token.Denylisted() || !token.HasScope(tokens.FileUpload) {
++	if !ok || token.UniqueId == "" || token.Denylisted() || !token.HasScope(tokens.FileUpload) {
 +		abortResumableUploadFile(c)
 +		return nil, nil, false
 +	}
@@ -2313,6 +2555,58 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +	reader io.Reader
 +}
 +
++type resumableUploadDeadlineReader struct {
++	reader     io.Reader
++	controller *http.ResponseController
++	timeout    time.Duration
++	supported  bool
++}
++
++func newResumableUploadDeadlineReader(writer http.ResponseWriter, reader io.Reader, timeout time.Duration) *resumableUploadDeadlineReader {
++	return &resumableUploadDeadlineReader{
++		reader:     reader,
++		controller: http.NewResponseController(writer),
++		timeout:    timeout,
++	}
++}
++
++func (r *resumableUploadDeadlineReader) Read(buffer []byte) (int, error) {
++	if err := r.setDeadline(time.Now().Add(r.timeout)); err != nil {
++		return 0, err
++	}
++	n, err := r.reader.Read(buffer)
++	if err != nil {
++		var networkError net.Error
++		if errors.As(err, &networkError) && networkError.Timeout() {
++			return n, errors.Join(errResumableUploadIdleTimeout, err)
++		}
++	}
++	return n, err
++}
++
++func (r *resumableUploadDeadlineReader) setDeadline(deadline time.Time) error {
++	err := r.controller.SetReadDeadline(deadline)
++	if err != nil {
++		return err
++	}
++	r.supported = true
++	return nil
++}
++
++func (r *resumableUploadDeadlineReader) clear() error {
++	if !r.supported {
++		return nil
++	}
++	return r.controller.SetReadDeadline(time.Time{})
++}
++
++func resumableUploadIdleTimeoutForRequest(request *http.Request) time.Duration {
++	if timeout, ok := request.Context().Value(resumableUploadIdleTimeoutContextKey{}).(time.Duration); ok && timeout > 0 {
++		return timeout
++	}
++	return resumableUploadIdleTimeout
++}
++
 +func (r *contextUploadReader) Read(buffer []byte) (int, error) {
 +	select {
 +	case <-r.ctx.Done():
@@ -2345,24 +2639,33 @@ index 0000000000000000000000000000000000000000..43b333f2a10fbb1757794ded8e063477
 +}
 diff --git a/router/router_resumable_upload_test.go b/router/router_resumable_upload_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..940b5bfc4fb9523acf389763e1cfc8d77e05dffd
+index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f4d1ee3d0
 --- /dev/null
 +++ b/router/router_resumable_upload_test.go
-@@ -0,0 +1,125 @@
+@@ -0,0 +1,343 @@
 +package router
 +
 +import (
++	"bufio"
 +	"bytes"
++	"context"
++	"fmt"
++	"net"
 +	"net/http"
++	"net/http/httptest"
++	"net/url"
 +	"os"
 +	"path/filepath"
 +	"strconv"
 +	"sync"
 +	"sync/atomic"
 +	"testing"
++	"time"
 +
++	"github.com/gbrlsnchs/jwt/v3"
 +	"github.com/stretchr/testify/require"
 +
++	"github.com/pterodactyl/wings/router/tokens"
 +	"github.com/pterodactyl/wings/server"
 +)
 +
@@ -2388,7 +2691,8 @@ index 0000000000000000000000000000000000000000..940b5bfc4fb9523acf389763e1cfc8d7
 +	require.Equal(t, int64(1), activities.Load())
 +
 +	emptyLength := int64(0)
-+	empty := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "empty.txt", 0, &emptyLength, true, bytes.NewReader(nil))
++	emptyToken := signBetterFilesUploadToken(t, s.ID())
++	empty := performResumableRequest(handler, http.MethodPatch, emptyToken, "/uploads", "empty.txt", 0, &emptyLength, true, bytes.NewReader(nil))
 +	require.Equal(t, http.StatusOK, empty.Code)
 +	info, err := os.Stat(filepath.Join(s.Filesystem().Path(), "uploads", "empty.txt"))
 +	require.NoError(t, err)
@@ -2411,7 +2715,8 @@ index 0000000000000000000000000000000000000000..940b5bfc4fb9523acf389763e1cfc8d7
 +	require.Equal(t, []byte("ab"), readServerHTTPFixture(t, s, "/offset.txt"))
 +
 +	lengthMismatch := int64(5)
-+	mismatch := performResumableRequest(handler, http.MethodPatch, token, "/", "mismatch.txt", 0, &lengthMismatch, true, bytes.NewBufferString("abc"))
++	mismatchToken := signBetterFilesUploadToken(t, s.ID())
++	mismatch := performResumableRequest(handler, http.MethodPatch, mismatchToken, "/", "mismatch.txt", 0, &lengthMismatch, true, bytes.NewBufferString("abc"))
 +	require.Equal(t, http.StatusConflict, mismatch.Code)
 +	require.Equal(t, []byte{}, readServerHTTPFixture(t, s, "/mismatch.txt"))
 +}
@@ -2473,6 +2778,213 @@ index 0000000000000000000000000000000000000000..940b5bfc4fb9523acf389763e1cfc8d7
 +	offset, err := strconv.ParseInt(response.Header().Get("Upload-Offset"), 10, 64)
 +	require.NoError(t, err)
 +	require.Equal(t, int64(4), offset)
++}
++
++func TestResumableUploadTokenIsBoundToOneTargetAndRetiredOnCompletion(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
++	token := signBetterFilesUploadToken(t, s.ID())
++	previousActivity := saveResumableUploadActivity
++	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
++	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++	total := int64(4)
++
++	first := performResumableRequest(handler, http.MethodPatch, token, "/", "bound.txt", 0, &total, false, bytes.NewBufferString("ab"))
++	require.Equal(t, http.StatusOK, first.Code)
++
++	replayed := performResumableRequest(handler, http.MethodPatch, token, "/", "other.txt", 0, &total, false, bytes.NewBufferString("xx"))
++	require.Equal(t, http.StatusNotFound, replayed.Code)
++	replayedHead := performResumableRequest(handler, http.MethodHead, token, "/", "other.txt", 0, nil, false, nil)
++	require.Equal(t, http.StatusNotFound, replayedHead.Code)
++
++	completed := performResumableRequest(handler, http.MethodPatch, token, "/", "bound.txt", 2, &total, true, bytes.NewBufferString("cd"))
++	require.Equal(t, http.StatusOK, completed.Code)
++	require.Equal(t, []byte("abcd"), readServerHTTPFixture(t, s, "/bound.txt"))
++
++	retired := performResumableRequest(handler, http.MethodHead, token, "/", "bound.txt", 0, nil, false, nil)
++	require.Equal(t, http.StatusNotFound, retired.Code)
++}
++
++func TestResumableUploadSessionsAreBoundedAndPruneExpiredEntries(t *testing.T) {
++	sessions := newResumableUploadSessionRegistry(1, 1)
++	now := time.Now()
++	first := &tokens.UploadPayload{
++		Payload:  jwt.Payload{ExpirationTime: jwt.NumericDate(now.Add(time.Hour))},
++		UniqueId: fmt.Sprintf("%s-first-%d", t.Name(), now.UnixNano()),
++	}
++	second := &tokens.UploadPayload{
++		Payload:  jwt.Payload{ExpirationTime: jwt.NumericDate(now.Add(time.Hour))},
++		UniqueId: fmt.Sprintf("%s-second-%d", t.Name(), now.UnixNano()),
++	}
++
++	require.True(t, sessions.bind(first, "server", "/first.txt"))
++	require.False(t, sessions.bind(first, "server", "/other.txt"))
++	require.False(t, sessions.bind(second, "server", "/second.txt"), "a full live registry must reject a new session")
++
++	sessions.mu.Lock()
++	expired := sessions.sessions[first.UniqueId]
++	expired.expires = now.Add(-time.Second)
++	sessions.sessions[first.UniqueId] = expired
++	sessions.nextExpiry = expired.expires
++	sessions.mu.Unlock()
++
++	require.True(t, sessions.bind(second, "server", "/second.txt"), "expired entries must be pruned before rejecting a new session")
++	require.Equal(t, 1, sessions.byServer["server"])
++}
++
++func TestResumableUploadCompletedSessionConsumesLongLivedTokenUntilJWTExpiry(t *testing.T) {
++	sessions := newResumableUploadSessionRegistry(1, 1)
++	now := time.Now()
++	expires := jwt.NumericDate(now.Add(2 * time.Hour))
++	token := &tokens.UploadPayload{
++		Payload:  jwt.Payload{ExpirationTime: expires},
++		UniqueId: fmt.Sprintf("%s-%d", t.Name(), now.UnixNano()),
++	}
++
++	require.True(t, sessions.bind(token, "server", "/file.txt"))
++	sessions.retire(token.UniqueId, "server", "/file.txt")
++
++	sessions.mu.Lock()
++	consumed := sessions.sessions[token.UniqueId]
++	sessions.mu.Unlock()
++	require.True(t, consumed.consumed)
++	require.Equal(t, "server", consumed.serverID)
++	require.Empty(t, consumed.target)
++	require.Equal(t, expires.Time, consumed.expires)
++	require.False(t, sessions.bind(token, "server", "/file.txt"))
++	require.False(t, sessions.bind(token, "server", "/other.txt"))
++}
++
++func TestResumableUploadSessionPerServerCapPreservesOtherServers(t *testing.T) {
++	sessions := newResumableUploadSessionRegistry(3, 2)
++	now := time.Now()
++	newToken := func(name string) *tokens.UploadPayload {
++		return &tokens.UploadPayload{
++			Payload:  jwt.Payload{ExpirationTime: jwt.NumericDate(now.Add(time.Hour))},
++			UniqueId: fmt.Sprintf("%s-%s-%d", t.Name(), name, now.UnixNano()),
++		}
++	}
++
++	serverATombstone := newToken("a-1")
++	require.True(t, sessions.bind(serverATombstone, "server-a", "/one.txt"))
++	sessions.retire(serverATombstone.UniqueId, "server-a", "/one.txt")
++	require.True(t, sessions.bind(newToken("a-2"), "server-a", "/two.txt"))
++	require.False(t, sessions.bind(newToken("a-3"), "server-a", "/three.txt"), "active sessions and tombstones must share the per-server cap")
++	require.True(t, sessions.bind(newToken("b-1"), "server-b", "/one.txt"), "another server must retain its own capacity")
++	require.False(t, sessions.bind(newToken("b-2"), "server-b", "/two.txt"), "the global cap must still be enforced")
++	require.Equal(t, 2, sessions.byServer["server-a"])
++	require.Equal(t, 1, sessions.byServer["server-b"])
++}
++
++func TestResumableUploadAdmissionLimitsAndReleases(t *testing.T) {
++	admissions := newResumableUploadAdmissionRegistry(3, 2, 1)
++
++	releaseA, ok := admissions.acquire("server-a", "token-a")
++	require.True(t, ok)
++	_, ok = admissions.acquire("server-a", "token-a")
++	require.False(t, ok, "the per-token limit must be enforced")
++
++	releaseB, ok := admissions.acquire("server-a", "token-b")
++	require.True(t, ok)
++	_, ok = admissions.acquire("server-a", "token-c")
++	require.False(t, ok, "the per-server limit must be enforced")
++
++	releaseC, ok := admissions.acquire("server-b", "token-c")
++	require.True(t, ok)
++	_, ok = admissions.acquire("server-c", "token-d")
++	require.False(t, ok, "the global limit must be enforced")
++
++	releaseA()
++	releaseA()
++	releaseD, ok := admissions.acquire("server-c", "token-d")
++	require.True(t, ok, "releasing a slot must permit a new upload")
++
++	releaseB()
++	releaseC()
++	releaseD()
++	require.Zero(t, admissions.global)
++	require.Empty(t, admissions.byServer)
++	require.Empty(t, admissions.byToken)
++}
++
++func TestResumableUploadPathLockDoesNotQueue(t *testing.T) {
++	locks := resumableUploadLockRegistry{active: make(map[string]struct{})}
++	release, ok := locks.acquire("server\x00/file.txt")
++	require.True(t, ok)
++	_, ok = locks.acquire("server\x00/file.txt")
++	require.False(t, ok, "a second request for the same path must fail without waiting")
++
++	release()
++	release, ok = locks.acquire("server\x00/file.txt")
++	require.True(t, ok)
++	release()
++}
++
++func TestResumableUploadDeadlineReaderFailsClosedWhenUnsupported(t *testing.T) {
++	reader := newResumableUploadDeadlineReader(httptest.NewRecorder(), bytes.NewBufferString("body"), time.Second)
++	_, err := reader.Read(make([]byte, 1))
++	require.ErrorIs(t, err, http.ErrNotSupported)
++}
++
++func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
++	token := signBetterFilesUploadToken(t, s.ID())
++	previousActivity := saveResumableUploadActivity
++	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
++	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++	timedHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
++		ctx := context.WithValue(request.Context(), resumableUploadIdleTimeoutContextKey{}, 50*time.Millisecond)
++		handler.ServeHTTP(writer, request.WithContext(ctx))
++	})
++	testServer := httptest.NewServer(timedHandler)
++	t.Cleanup(testServer.Close)
++
++	serverURL, err := url.Parse(testServer.URL)
++	require.NoError(t, err)
++	connection, err := net.DialTimeout("tcp", serverURL.Host, time.Second)
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = connection.Close() })
++	require.NoError(t, connection.SetDeadline(time.Now().Add(2*time.Second)))
++
++	query := url.Values{"token": {token}, "directory": {"/"}, "file": {"stalled.txt"}}
++	requestTarget := "/upload/file?" + query.Encode()
++	_, err = fmt.Fprintf(connection,
++		"PATCH %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/offset+octet-stream\r\nUpload-Offset: 0\r\nUpload-Length: 5\r\nContent-Length: 5\r\nConnection: close\r\n\r\n",
++		requestTarget,
++		serverURL.Host,
++	)
++	require.NoError(t, err)
++	_, err = connection.Write([]byte("he"))
++	require.NoError(t, err)
++
++	started := time.Now()
++	response, err := http.ReadResponse(bufio.NewReader(connection), &http.Request{Method: http.MethodPatch})
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = response.Body.Close() })
++	require.Equal(t, http.StatusRequestTimeout, response.StatusCode)
++	require.Less(t, time.Since(started), time.Second)
++
++	require.Eventually(t, func() bool {
++		uploadAdmissions.mu.Lock()
++		admissionsReleased := uploadAdmissions.byServer[s.ID()] == 0
++		uploadAdmissions.mu.Unlock()
++		uploadLocks.mu.Lock()
++		_, pathLocked := uploadLocks.active[s.ID()+"\x00/stalled.txt"]
++		uploadLocks.mu.Unlock()
++		return admissionsReleased && !pathLocked
++	}, time.Second, 10*time.Millisecond)
++	require.Empty(t, readServerHTTPFixture(t, s, "/stalled.txt"), "a timed-out partial chunk must be rolled back")
++
++	retryRequest, err := http.NewRequest(http.MethodPatch, testServer.URL+requestTarget, bytes.NewBufferString("hello"))
++	require.NoError(t, err)
++	retryRequest.Header.Set("Content-Type", "application/offset+octet-stream")
++	retryRequest.Header.Set("Upload-Offset", "0")
++	retryRequest.Header.Set("Upload-Length", "5")
++	retryRequest.Header.Set("Upload-Complete", "?1")
++	retryResponse, err := testServer.Client().Do(retryRequest)
++	require.NoError(t, err)
++	t.Cleanup(func() { _ = retryResponse.Body.Close() })
++	require.Equal(t, http.StatusOK, retryResponse.StatusCode)
++	require.Equal(t, []byte("hello"), readServerHTTPFixture(t, s, "/stalled.txt"))
 +}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
 new file mode 100644
@@ -5716,15 +6228,17 @@ index 0000000000000000000000000000000000000000..8f280593cf86827c202492794b35b0ba
 +}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004acfd548b1a
+index 0000000000000000000000000000000000000000..5546110625d6d63c1cf1702eef4a8cda8548cf4a
 --- /dev/null
 +++ b/router/router_server_git.go
-@@ -0,0 +1,1431 @@
+@@ -0,0 +1,1648 @@
 +package router
 +
 +import (
 +	"bytes"
 +	"context"
++	"crypto/rand"
++	"encoding/hex"
 +	"fmt"
 +	"io"
 +	"net"
@@ -5755,6 +6269,8 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +const gitHelperRoot = "/mnt/server"
 +const gitBetterFilesTrashDir = ".trash-bin"
 +const gitRootUser = "0"
++const gitMinimumMajorVersion = 2
++const gitMinimumMinorVersion = 37
 +
 +type gitCloneTargetMode int
 +
@@ -5770,7 +6286,6 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +
 +	gitHelperImages = []string{
 +		"alpine/git:2.49.1",
-+		"alpine:3.20",
 +	}
 +
 +	gitTrustedBinaries = []string{
@@ -5786,7 +6301,16 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		"GIT_CONFIG_NOSYSTEM=1",
 +		"GIT_CONFIG_GLOBAL=/dev/null",
 +		"GIT_CONFIG_SYSTEM=/dev/null",
++		"GIT_CONFIG_COUNT=0",
++		"GIT_CONFIG_PARAMETERS=",
++		"GIT_NO_LAZY_FETCH=1",
 +		"GIT_ALLOW_PROTOCOL=https",
++		"HTTP_PROXY=",
++		"HTTPS_PROXY=",
++		"ALL_PROXY=",
++		"http_proxy=",
++		"https_proxy=",
++		"all_proxy=",
 +		"HOME=/tmp",
 +	}
 +
@@ -5818,7 +6342,10 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +	gitTargetDirectoryPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 +	gitRemoteNamePattern      = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 +	gitCredentialPattern      = regexp.MustCompile(`(?i)(https://)([^/@\s]+)@`)
++	gitVersionPattern         = regexp.MustCompile(`(?i)^git version (\d+)\.(\d+)(?:\.|$)`)
 +)
++
++const gitUnsafeLocalConfigPattern = `(?i)^(filter\..*\.(process|smudge|clean)|merge\..*\.driver|diff\..*\.(command|textconv)|core\.(sshCommand|fsmonitor|alternateRefsCommand)|credential\.helper|url\..*\.(insteadOf|pushInsteadOf)|remote\..*\.(proxy|proxyauthmethod|vcs|promisor|partialCloneFilter)|extensions\.partialClone|fetch\.bundleURI|transfer\.bundleURI|gc\.auto|maintenance\.auto|include.*|http\..*)$`
 +
 +type gitCloneRequest struct {
 +	RepositoryURL   string `json:"repository_url" binding:"required"`
@@ -5859,17 +6386,19 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +}
 +
 +type gitRunner struct {
-+	env        *docker.Environment
-+	serverID   string
-+	fsRoot     string
-+	bin        string
-+	helper     bool
-+	helperUser string
++	env                   *docker.Environment
++	serverID              string
++	fsRoot                string
++	bin                   string
++	helper                bool
++	helperUser            string
++	helperNetworkDisabled bool
 +}
 +
 +type validatedGitRepositoryURL struct {
 +	URL            string
 +	CurlOptResolve string
++	RemoteName     string
 +}
 +
 +func findGitBinary(ctx context.Context, env *docker.Environment) string {
@@ -5893,42 +6422,179 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +
 +func gitBinaryWorks(ctx context.Context, env *docker.Environment, gitBin string) bool {
 +	res, err := execInContainer(ctx, env, []string{gitBin, "--version"}, gitContainerRoot)
-+	return err == nil && res.ExitCode == 0
++	return err == nil && res.ExitCode == 0 && gitVersionSupportsPinnedResolution(res.Stdout)
++}
++
++func gitVersionSupportsPinnedResolution(output string) bool {
++	matches := gitVersionPattern.FindStringSubmatch(strings.TrimSpace(output))
++	if len(matches) != 3 {
++		return false
++	}
++	major, majorErr := strconv.Atoi(matches[1])
++	minor, minorErr := strconv.Atoi(matches[2])
++	if majorErr != nil || minorErr != nil {
++		return false
++	}
++	return major > gitMinimumMajorVersion || major == gitMinimumMajorVersion && minor >= gitMinimumMinorVersion
 +}
 +
 +func newGitRunner(ctx context.Context, s *wserver.Server, env *docker.Environment) *gitRunner {
-+	if gitBin := findGitBinary(ctx, env); gitBin != "" {
-+		return &gitRunner{
-+			env: env,
-+			bin: gitBin,
-+		}
-+	}
-+
-+	return &gitRunner{
++	runner := &gitRunner{
 +		env:        env,
 +		serverID:   s.ID(),
 +		fsRoot:     s.Filesystem().Path(),
-+		bin:        "git",
-+		helper:     true,
 +		helperUser: getContainerUser(),
 +	}
++	if gitBin := findGitBinary(ctx, env); gitBin != "" {
++		runner.bin = gitBin
++		return runner
++	}
++
++	runner.bin = "git"
++	runner.helper = true
++	return runner
 +}
 +
 +func (r *gitRunner) exec(ctx context.Context, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
-+	cmd := gitBaseCommand(r.bin)
-+	for _, remote := range remotes {
-+		if remote.CurlOptResolve == "" {
-+			continue
-+		}
-+		cmd = append(cmd, "-c", "http.curloptResolve="+remote.CurlOptResolve)
++	// Network commands always run in the isolated helper. In the server container,
++	// a tenant can observe the command line and race a matching .git/config entry
++	// into place before Git reads it. The helper has its own PID namespace, keeping
++	// the per-command remote identity below secret until configuration is loaded.
++	if len(remotes) > 0 && !r.helper {
++		helperRunner := *r
++		helperRunner.bin = "git"
++		helperRunner.helper = true
++		result, err := execGitInHelperContainer(ctx, &helperRunner, gitCommand(helperRunner.bin, args, remotes...), workDir)
++		hideGitRemoteIdentities(result, remotes)
++		return result, err
 +	}
-+	cmd = append(cmd, args...)
++
++	cmd := gitCommand(r.bin, args, remotes...)
 +
 +	if r.helper {
-+		return execGitInHelperContainer(ctx, r, cmd, workDir)
++		result, err := execGitInHelperContainer(ctx, r, cmd, workDir)
++		hideGitRemoteIdentities(result, remotes)
++		return result, err
 +	}
 +
 +	return execInContainer(ctx, r.env, cmd, workDir)
++}
++
++func (r *gitRunner) execOffline(ctx context.Context, args []string, workDir string) (*gitResponse, error) {
++	helperRunner := *r
++	helperRunner.bin = "git"
++	helperRunner.helper = true
++	helperRunner.helperNetworkDisabled = true
++	return execGitInHelperContainer(ctx, &helperRunner, gitCommand(helperRunner.bin, args), workDir)
++}
++
++func hideGitRemoteIdentities(result *gitResponse, remotes []validatedGitRepositoryURL) {
++	if result == nil {
++		return
++	}
++	for _, remote := range remotes {
++		if remote.RemoteName == "" {
++			continue
++		}
++		alias := gitRemoteAlias(remote.RemoteName)
++		result.Stdout = strings.ReplaceAll(result.Stdout, alias, "[remote]")
++		result.Stderr = strings.ReplaceAll(result.Stderr, alias, "[remote]")
++		result.Stdout = strings.ReplaceAll(result.Stdout, remote.RemoteName, "[remote]")
++		result.Stderr = strings.ReplaceAll(result.Stderr, remote.RemoteName, "[remote]")
++	}
++}
++
++func gitCommand(gitBin string, args []string, remotes ...validatedGitRepositoryURL) []string {
++	cmd := gitBaseCommand(gitBin)
++	for _, remote := range remotes {
++		if remote.RemoteName != "" {
++			alias := gitRemoteAlias(remote.RemoteName)
++			cmd = append(cmd,
++				// Git applies insteadOf only once. Resolving a secret alias to the validated
++				// URL prevents a local insteadOf rule for that URL from being applied later.
++				"-c", "url."+remote.URL+".insteadOf="+alias,
++				"-c", "remote."+remote.RemoteName+".url="+alias,
++				"-c", "remote."+remote.RemoteName+".proxy=",
++			)
++		}
++		for _, requestURL := range gitRemoteConfigURLs(remote.URL) {
++			prefix := "http." + requestURL + "."
++			cmd = append(cmd,
++				"-c", prefix+"followRedirects=false",
++				"-c", prefix+"proxy=",
++				"-c", prefix+"curloptResolve=",
++			)
++			if remote.CurlOptResolve != "" {
++				cmd = append(cmd, "-c", prefix+"curloptResolve="+remote.CurlOptResolve)
++			}
++		}
++	}
++	return append(cmd, args...)
++}
++
++func newGitRemoteName() (string, error) {
++	random := make([]byte, 24)
++	if _, err := rand.Read(random); err != nil {
++		return "", fmt.Errorf("could not generate a secure Git remote identity: %w", err)
++	}
++	return hex.EncodeToString(random), nil
++}
++
++func gitRemoteAlias(remoteName string) string {
++	return remoteName + ":"
++}
++
++func gitRemoteConfigURLs(repositoryURL string) []string {
++	if strings.HasSuffix(repositoryURL, "/") {
++		return []string{repositoryURL}
++	}
++	return []string{repositoryURL, repositoryURL + "/"}
++}
++
++func gitCloneNetworkArgs(remote validatedGitRepositoryURL, targetPath string) []string {
++	return []string{
++		"clone",
++		"--depth=1",
++		"--single-branch",
++		"--no-tags",
++		"--no-recurse-submodules",
++		"--no-checkout",
++		gitRemoteAlias(remote.RemoteName),
++		targetPath,
++	}
++}
++
++func gitClonePersistRemoteArgs(remote validatedGitRepositoryURL) []string {
++	return []string{"config", "--local", "--replace-all", "remote.origin.url", remote.URL}
++}
++
++func gitCloneCheckoutArgs() []string {
++	return []string{"checkout", "--force"}
++}
++
++func gitPullFetchArgs(remote validatedGitRepositoryURL, branch string) []string {
++	// Depth is intentionally explicit: remote-curl refuses dumb HTTP when a
++	// shallow fetch is requested, preventing objects/info/http-alternates from
++	// introducing unvalidated destinations.
++	return []string{"fetch", "--deepen=1", "--no-recurse-submodules", remote.RemoteName, branch}
++}
++
++func gitPullMergeArgs() []string {
++	return []string{"merge", "--ff-only", "--no-edit", "FETCH_HEAD"}
++}
++
++func combineGitResponses(first *gitResponse, second *gitResponse) *gitResponse {
++	if first == nil {
++		return second
++	}
++	if second == nil {
++		return first
++	}
++	return &gitResponse{
++		Stdout:   first.Stdout + second.Stdout,
++		Stderr:   first.Stderr + second.Stderr,
++		ExitCode: second.ExitCode,
++	}
 +}
 +
 +func (r *gitRunner) version(ctx context.Context) string {
@@ -6200,18 +6866,29 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		}()
 +	}
 +
-+	result, err := runner.exec(ctx, []string{
-+		"clone",
-+		"--depth=1",
-+		"--single-branch",
-+		"--no-tags",
-+		"--no-recurse-submodules",
-+		repositoryURL.URL,
-+		cloneTargetPath,
-+	}, workDir, repositoryURL)
++	// Transfer objects without populating the worktree. A tenant can race local
++	// filter configuration into the new repository, so checkout happens later in
++	// a helper container that has no network namespace.
++	result, err := runner.exec(ctx, gitCloneNetworkArgs(repositoryURL, cloneTargetPath), workDir, repositoryURL)
 +	if err != nil {
 +		middleware.CaptureAndAbort(c, err)
 +		return
++	}
++	if result.ExitCode == 0 {
++		persistResult, err := runner.execOffline(ctx, gitClonePersistRemoteArgs(repositoryURL), cloneTargetPath)
++		if err != nil {
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++		result = combineGitResponses(result, persistResult)
++	}
++	if result.ExitCode == 0 {
++		checkoutResult, err := runner.execOffline(ctx, gitCloneCheckoutArgs(), cloneTargetPath)
++		if err != nil {
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++		result = combineGitResponses(result, checkoutResult)
 +	}
 +
 +	if result.ExitCode == 0 {
@@ -6351,16 +7028,21 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +	})
 +	logger.Info("starting git operation")
 +
-+	result, err := runner.exec(ctx, []string{
-+		"pull",
-+		"--ff-only",
-+		"--no-recurse-submodules",
-+		remoteURL.URL,
-+		remoteBranch,
-+	}, workDir, remoteURL)
++	// Fetch does not update the worktree, so it cannot invoke checkout filters.
++	// The fast-forward worktree update then runs without network access, containing
++	// any raced local filter process even if the config changes after validation.
++	result, err := runner.exec(ctx, gitPullFetchArgs(remoteURL, remoteBranch), workDir, remoteURL)
 +	if err != nil {
 +		middleware.CaptureAndAbort(c, err)
 +		return
++	}
++	if result.ExitCode == 0 {
++		mergeResult, err := runner.execOffline(ctx, gitPullMergeArgs(), workDir)
++		if err != nil {
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++		result = combineGitResponses(result, mergeResult)
 +	}
 +
 +	logger.WithFields(log.Fields{
@@ -6533,24 +7215,31 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +	}
 +
 +	script := strings.Join([]string{
-+		`if ! command -v git >/dev/null 2>&1 || ! command -v su-exec >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1 || [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then`,
-+		`apk add --no-cache --no-progress git openssh-client ca-certificates su-exec`,
-+		`fi`,
-+		`exec su-exec "$BFM_GIT_USER" "$@"`,
++		`if ! command -v git >/dev/null 2>&1 || [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then echo "The Git helper image is missing required HTTPS support." >&2; exit 126; fi`,
++		`git_version="$(git --version 2>/dev/null)" || exit 126`,
++		`git_version="${git_version#git version }"`,
++		`git_major="${git_version%%.*}"`,
++		`git_minor_version="${git_version#*.}"`,
++		`git_minor="${git_minor_version%%.*}"`,
++		fmt.Sprintf(`case "$git_major" in ''|*[!0-9]*) echo "Git %d.%d or newer is required." >&2; exit 126 ;; esac`, gitMinimumMajorVersion, gitMinimumMinorVersion),
++		fmt.Sprintf(`case "$git_minor" in ''|*[!0-9]*) echo "Git %d.%d or newer is required." >&2; exit 126 ;; esac`, gitMinimumMajorVersion, gitMinimumMinorVersion),
++		fmt.Sprintf(`if [ "$git_major" -lt %d ] || { [ "$git_major" -eq %d ] && [ "$git_minor" -lt %d ]; }; then echo "Git %d.%d or newer is required." >&2; exit 126; fi`, gitMinimumMajorVersion, gitMinimumMajorVersion, gitMinimumMinorVersion, gitMinimumMajorVersion, gitMinimumMinorVersion),
++		`exec "$@"`,
 +	}, "\n")
 +
 +	containerName := fmt.Sprintf("%s_bfm_git_%d", runner.serverID, time.Now().UnixNano())
 +	conf := &container.Config{
 +		Hostname:     "bfm-git",
++		User:         runner.helperUser,
 +		AttachStdout: true,
 +		AttachStderr: true,
-+		Cmd:          append([]string{"sh", "-lc", script, "bfm-git"}, helperCmd...),
++		Entrypoint:   []string{"sh", "-lc", script, "bfm-git"},
++		Cmd:          helperCmd,
 +		Image:        helperImage,
 +		WorkingDir:   gitHelperPath(workDir),
-+		Env: append(append([]string(nil), gitSafeEnv...), []string{
++		Env: append(append([]string(nil), gitSafeEnv...),
 +			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-+			"BFM_GIT_USER=" + runner.helperUser,
-+		}...),
++		),
 +		Labels: map[string]string{
 +			"Service":       "Pterodactyl",
 +			"ContainerType": "betterfiles_git_helper",
@@ -6573,7 +7262,7 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		},
 +		DNS:         cfg.Docker.Network.Dns,
 +		LogConfig:   cfg.Docker.ContainerLogConfig(),
-+		NetworkMode: container.NetworkMode(cfg.Docker.Network.Mode),
++		NetworkMode: gitHelperNetworkMode(container.NetworkMode(cfg.Docker.Network.Mode), runner.helperNetworkDisabled),
 +		UsernsMode:  container.UsernsMode(cfg.Docker.UsernsMode),
 +		Resources: container.Resources{
 +			Memory:    cfg.Docker.InstallerLimits.Memory * 1024 * 1024,
@@ -6638,6 +7327,13 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		Stderr:   errOutput,
 +		ExitCode: int(statusCode),
 +	}, nil
++}
++
++func gitHelperNetworkMode(configured container.NetworkMode, disabled bool) container.NetworkMode {
++	if disabled {
++		return container.NetworkMode("none")
++	}
++	return configured
 +}
 +
 +func ensureGitHelperImage(ctx context.Context, env *docker.Environment) (string, error) {
@@ -6706,10 +7402,20 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		"-c", "protocol.ext.allow=never",
 +		"-c", "protocol.git.allow=never",
 +		"-c", "protocol.ssh.allow=never",
++		// Redirect targets bypass the DNS validation and address pinning applied to the original remote.
++		"-c", "http.followRedirects=false",
++		"-c", "http.proxy=",
++		"-c", "http.curloptResolve=",
++		"-c", "remote.origin.proxy=",
++		"-c", "fetch.bundleURI=",
++		"-c", "transfer.bundleURI=false",
 +		"-c", "credential.helper=",
 +		"-c", "core.askPass=",
 +		"-c", "core.fsmonitor=false",
++		"-c", "core.alternateRefsCommand=/bin/true",
 +		"-c", "core.untrackedCache=false",
++		"-c", "gc.auto=0",
++		"-c", "maintenance.auto=false",
 +		"-c", "submodule.recurse=false",
 +		"-c", "diff.external=",
 +		"-c", "advice.detachedHead=false",
@@ -6721,14 +7427,14 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		"config",
 +		"--local",
 +		"--get-regexp",
-+		`^(filter\..*\.(process|smudge|clean)|merge\..*\.driver|diff\..*\.(command|textconv)|core\.sshCommand|core\.fsmonitor|credential\.helper|url\..*\.(insteadOf|pushInsteadOf)|include.*)$`,
++		gitUnsafeLocalConfigPattern,
 +	}, workDir)
 +	if err != nil {
 +		return err
 +	}
 +
 +	if result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "" {
-+		return fmt.Errorf("Repository local Git config contains unsafe helper settings.")
++		return fmt.Errorf("Repository local Git config contains unsafe settings.")
 +	}
 +
 +	return nil
@@ -6813,12 +7519,13 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
 +		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host is not allowed.")
 +	}
++	repositoryURL := gitCanonicalRepositoryURL(parsed)
 +
 +	if ip := net.ParseIP(host); ip != nil {
 +		if isBlockedGitIP(ip) {
 +			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
 +		}
-+		return validatedGitRepositoryURL{URL: parsed.String()}, nil
++		return newValidatedGitRepositoryURL(repositoryURL, gitCurlOptResolve(host, parsed.Port(), ip))
 +	}
 +
 +	lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -6840,15 +7547,37 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
 +	}
 +
++	return newValidatedGitRepositoryURL(repositoryURL, gitCurlOptResolve(host, parsed.Port(), resolved))
++}
++
++func newValidatedGitRepositoryURL(repositoryURL string, curlOptResolve string) (validatedGitRepositoryURL, error) {
++	remoteName, err := newGitRemoteName()
++	if err != nil {
++		return validatedGitRepositoryURL{}, err
++	}
 +	return validatedGitRepositoryURL{
-+		URL:            parsed.String(),
-+		CurlOptResolve: gitCurlOptResolve(host, parsed.Port(), resolved),
++		URL:            repositoryURL,
++		CurlOptResolve: curlOptResolve,
++		RemoteName:     remoteName,
 +	}, nil
++}
++
++func gitCanonicalRepositoryURL(parsed *url.URL) string {
++	escapedPath := parsed.EscapedPath()
++	if !strings.ContainsRune(escapedPath, '=') {
++		return parsed.String()
++	}
++	canonical := *parsed
++	canonical.RawPath = strings.ReplaceAll(escapedPath, "=", "%3D")
++	return canonical.String()
 +}
 +
 +func gitCurlOptResolve(host string, port string, ip net.IP) string {
 +	if port == "" {
 +		port = "443"
++	}
++	if strings.Contains(host, ":") {
++		host = "[" + host + "]"
 +	}
 +	address := ip.String()
 +	if strings.Contains(address, ":") {
@@ -7150,6 +7879,456 @@ index 0000000000000000000000000000000000000000..cc793207965a8ce6757a345882e004ac
 +		Stderr:   errOutput,
 +		ExitCode: inspect.ExitCode,
 +	}, nil
++}
+diff --git a/router/router_server_git_test.go b/router/router_server_git_test.go
+new file mode 100644
+index 0000000000000000000000000000000000000000..a0383495dc9bc85e4b156116068dea86e7fa87b5
+--- /dev/null
++++ b/router/router_server_git_test.go
+@@ -0,0 +1,444 @@
++package router
++
++import (
++	"net"
++	"net/url"
++	"os"
++	"os/exec"
++	"path/filepath"
++	"regexp"
++	"strings"
++	"testing"
++
++	"github.com/docker/docker/api/types/container"
++	"github.com/stretchr/testify/require"
++)
++
++func TestGitBaseCommandDisablesHTTPRedirects(t *testing.T) {
++	command := gitBaseCommand("git")
++
++	require.Contains(t, command, "http.followRedirects=false")
++	require.Contains(t, command, "remote.origin.proxy=")
++	require.Contains(t, command, "core.hooksPath=/dev/null")
++	require.Contains(t, command, "fetch.bundleURI=")
++	require.Contains(t, command, "transfer.bundleURI=false")
++	require.Contains(t, command, "core.alternateRefsCommand=/bin/true")
++	require.Contains(t, command, "gc.auto=0")
++	require.Contains(t, command, "maintenance.auto=false")
++}
++
++func TestGitVersionSupportsPinnedResolution(t *testing.T) {
++	tests := map[string]bool{
++		"git version 2.36.9":           false,
++		"git version 2.37":             true,
++		"git version 2.37.0":           true,
++		"git version 2.37.0.windows.1": true,
++		"git version 3.0.0":            true,
++		"git version 1.99.9":           false,
++		"git version 2.37invalid":      false,
++		"not a git version":            false,
++	}
++
++	for version, expected := range tests {
++		t.Run(version, func(t *testing.T) {
++			require.Equal(t, expected, gitVersionSupportsPinnedResolution(version))
++		})
++	}
++}
++
++func TestGitUnsafeLocalConfigPolicyRejectsHTTPSettings(t *testing.T) {
++	pattern := regexp.MustCompile(gitUnsafeLocalConfigPattern)
++
++	for _, key := range []string{
++		"http.followRedirects",
++		"http.proxy",
++		"http.https://git.example.com/repository.git.followRedirects",
++		"http.https://git.example.com/repository.git.curloptResolve",
++		"remote.origin.proxy",
++		"remote.origin.proxyauthmethod",
++		"remote.origin.vcs",
++		"remote.origin.promisor",
++		"remote.origin.partialCloneFilter",
++		"extensions.partialClone",
++		"core.alternateRefsCommand",
++		"Core.SSHCOMMAND",
++		"fetch.bundleURI",
++		"transfer.bundleURI",
++		"gc.auto",
++		"maintenance.auto",
++		"filter.assets.process",
++		"url.https://git.example.com/.insteadOf",
++	} {
++		require.Truef(t, pattern.MatchString(key), "expected %q to be rejected", key)
++	}
++
++	for _, key := range []string{"user.name", "remote.origin.url", "branch.main.merge"} {
++		require.Falsef(t, pattern.MatchString(key), "expected %q to remain allowed", key)
++	}
++}
++
++func TestGitCommandPinsExactRemoteAndDisablesProxyAndRedirects(t *testing.T) {
++	remote := validatedGitRepositoryURL{
++		URL:            "https://git.example.com/owner/repository.git",
++		CurlOptResolve: "git.example.com:443:8.8.8.8",
++		RemoteName:     "8e6df22c742447f39e91a18de42f28c646b080226ebe642f",
++	}
++	command := gitCommand("git", []string{"ls-remote", remote.RemoteName}, remote)
++	alias := gitRemoteAlias(remote.RemoteName)
++
++	requireGitCommandConfig(t, command, "url."+remote.URL+".insteadOf="+alias)
++	requireGitCommandConfig(t, command, "remote."+remote.RemoteName+".url="+alias)
++	requireGitCommandConfig(t, command, "remote."+remote.RemoteName+".proxy=")
++
++	for _, requestURL := range []string{
++		remote.URL,
++		remote.URL + "/",
++	} {
++		prefix := "http." + requestURL + "."
++		requireGitCommandConfig(t, command, prefix+"followRedirects=false")
++		requireGitCommandConfig(t, command, prefix+"proxy=")
++		requireGitCommandConfig(t, command, prefix+"curloptResolve=")
++		requireGitCommandConfig(t, command, prefix+"curloptResolve="+remote.CurlOptResolve)
++	}
++	require.Equal(t, []string{"ls-remote", remote.RemoteName}, command[len(command)-2:])
++}
++
++func TestGitRemoteNameIsUnpredictableAndConfigSafe(t *testing.T) {
++	first, err := newGitRemoteName()
++	require.NoError(t, err)
++	second, err := newGitRemoteName()
++	require.NoError(t, err)
++
++	require.Regexp(t, `^[0-9a-f]{48}$`, first)
++	require.Regexp(t, `^[0-9a-f]{48}$`, second)
++	require.NotEqual(t, first, second)
++	require.Equal(t, first+":", gitRemoteAlias(first))
++}
++
++func TestHideGitRemoteIdentities(t *testing.T) {
++	remote := validatedGitRepositoryURL{RemoteName: "8e6df22c742447f39e91a18de42f28c646b080226ebe642f"}
++	result := &gitResponse{
++		Stdout: "fetching " + remote.RemoteName,
++		Stderr: "failed " + gitRemoteAlias(remote.RemoteName),
++	}
++
++	hideGitRemoteIdentities(result, []validatedGitRepositoryURL{remote})
++	require.NotContains(t, result.Stdout, remote.RemoteName)
++	require.NotContains(t, result.Stderr, remote.RemoteName)
++	require.Contains(t, result.Stdout, "[remote]")
++	require.Contains(t, result.Stderr, "[remote]")
++}
++
++func TestGitOpaqueRemoteCannotBeReplacedByKnownLocalMappings(t *testing.T) {
++	gitBin, err := exec.LookPath("git")
++	if err != nil {
++		t.Skip("Git is not installed")
++	}
++
++	repository := t.TempDir()
++	runGitTestCommand(t, repository, gitBin, "init", "--quiet")
++
++	validatedURL := "https://git.example.com/owner/repository.git"
++	maliciousURL := "https://127.0.0.1/internal.git"
++	runGitTestCommand(t, repository, gitBin, "config", "--local", "url."+maliciousURL+".insteadOf", validatedURL)
++	runGitTestCommand(t, repository, gitBin, "config", "--local", "url.https://127.0.0.2/.insteadOf", "https://")
++	runGitTestCommand(t, repository, gitBin, "config", "--local", "remote."+validatedURL+".url", maliciousURL)
++	runGitTestCommand(t, repository, gitBin, "config", "--local", "remote.origin.url", maliciousURL)
++
++	remote, err := newValidatedGitRepositoryURL(validatedURL, "git.example.com:443:8.8.8.8")
++	require.NoError(t, err)
++	command := gitCommand(gitBin, []string{"remote", "-v"}, remote)
++	cmd := exec.Command(command[0], command[1:]...)
++	cmd.Dir = repository
++	cmd.Env = append(os.Environ(), gitSafeEnv...)
++	output, err := cmd.CombinedOutput()
++	require.NoError(t, err, string(output))
++	remoteOutput := strings.TrimSpace(string(output))
++	require.Contains(t, remoteOutput, remote.RemoteName+"\t"+validatedURL+" (fetch)")
++	require.NotContains(t, remoteOutput, remote.RemoteName+"\t"+maliciousURL)
++}
++
++func TestGitFetchDoesNotRunWorkingTreeFilters(t *testing.T) {
++	gitBin, err := exec.LookPath("git")
++	if err != nil {
++		t.Skip("Git is not installed")
++	}
++	falseBin, err := exec.LookPath("false")
++	if err != nil {
++		t.Skip("a failing filter command is not available")
++	}
++
++	source := t.TempDir()
++	runGitTestCommand(t, source, gitBin, "init", "--quiet", "--initial-branch=main")
++	require.NoError(t, os.WriteFile(filepath.Join(source, ".gitattributes"), []byte("*.txt filter=race\n"), 0o600))
++	require.NoError(t, os.WriteFile(filepath.Join(source, "data.txt"), []byte("first\n"), 0o600))
++	runGitTestCommand(t, source, gitBin, "add", ".")
++	runGitTestCommand(t, source, gitBin, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "initial")
++
++	cloneParent := t.TempDir()
++	clone := filepath.Join(cloneParent, "clone")
++	runGitTestCommand(t, cloneParent, gitBin, "clone", "--quiet", source, clone)
++	runGitTestCommand(t, clone, gitBin, "config", "--local", "filter.race.required", "true")
++	runGitTestCommand(t, clone, gitBin, "config", "--local", "filter.race.smudge", falseBin)
++
++	require.NoError(t, os.WriteFile(filepath.Join(source, "data.txt"), []byte("second\n"), 0o600))
++	runGitTestCommand(t, source, gitBin, "add", "data.txt")
++	runGitTestCommand(t, source, gitBin, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "update")
++
++	// Fetch only transfers objects and updates FETCH_HEAD; it must not invoke the
++	// deliberately failing worktree filter. Checkout proves the filter is armed.
++	remote, err := newValidatedGitRepositoryURL(source, "")
++	require.NoError(t, err)
++	fetchArgs := append([]string{"-c", "protocol.file.allow=always", "--no-pager"}, gitPullFetchArgs(remote, "main")...)
++	command := gitCommand(gitBin, fetchArgs, remote)
++	cmd := exec.Command(command[0], command[1:]...)
++	cmd.Dir = clone
++	cmd.Env = gitTestEnvironment()
++	output, err := cmd.CombinedOutput()
++	require.NoError(t, err, string(output))
++	runGitTestCommandMustFail(t, clone, gitBin, "checkout", "FETCH_HEAD", "--", "data.txt")
++}
++
++func TestGitCloneFinalizationPersistsValidatedURL(t *testing.T) {
++	gitBin, err := exec.LookPath("git")
++	if err != nil {
++		t.Skip("Git is not installed")
++	}
++
++	source := t.TempDir()
++	runGitTestCommand(t, source, gitBin, "init", "--quiet", "--initial-branch=main")
++	require.NoError(t, os.WriteFile(filepath.Join(source, "README.md"), []byte("test\n"), 0o600))
++	runGitTestCommand(t, source, gitBin, "add", "README.md")
++	runGitTestCommand(t, source, gitBin, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "initial")
++
++	remote, err := newValidatedGitRepositoryURL("https://git.example.com/owner/repository.git", "git.example.com:443:8.8.8.8")
++	require.NoError(t, err)
++	cloneParent := t.TempDir()
++	clone := filepath.Join(cloneParent, "clone")
++	alias := gitRemoteAlias(remote.RemoteName)
++	runGitTestCommand(t, cloneParent, gitBin,
++		"-c", "url."+source+".insteadOf="+alias,
++		"clone", "--quiet", "--no-checkout", alias, clone,
++	)
++	runGitTestCommand(t, clone, gitBin, gitClonePersistRemoteArgs(remote)...)
++	runGitTestCommand(t, clone, gitBin, gitCloneCheckoutArgs()...)
++
++	config, err := os.ReadFile(filepath.Join(clone, ".git", "config"))
++	require.NoError(t, err)
++	require.Contains(t, string(config), remote.URL)
++	require.NotContains(t, string(config), alias)
++	require.NotContains(t, string(config), remote.RemoteName)
++	_, err = os.Stat(filepath.Join(clone, "README.md"))
++	require.NoError(t, err)
++}
++
++func TestGitFetchThenFastForwardMerge(t *testing.T) {
++	for _, test := range []struct {
++		name    string
++		shallow bool
++	}{
++		{name: "shallow clone", shallow: true},
++		{name: "complete clone", shallow: false},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			testGitFetchThenFastForwardMerge(t, test.shallow)
++		})
++	}
++}
++
++func testGitFetchThenFastForwardMerge(t *testing.T, shallow bool) {
++	gitBin, err := exec.LookPath("git")
++	if err != nil {
++		t.Skip("Git is not installed")
++	}
++
++	source := t.TempDir()
++	runGitTestCommand(t, source, gitBin, "init", "--quiet", "--initial-branch=main")
++	require.NoError(t, os.WriteFile(filepath.Join(source, "data.txt"), []byte("first\n"), 0o600))
++	runGitTestCommand(t, source, gitBin, "add", "data.txt")
++	runGitTestCommand(t, source, gitBin, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", "initial")
++
++	remoteURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(source)}).String()
++	cloneParent := t.TempDir()
++	clone := filepath.Join(cloneParent, "clone")
++	cloneArgs := []string{"-c", "protocol.file.allow=always", "clone", "--quiet"}
++	if shallow {
++		cloneArgs = append(cloneArgs, "--depth=1")
++	}
++	cloneArgs = append(cloneArgs, remoteURL, clone)
++	runGitTestCommand(t, cloneParent, gitBin, cloneArgs...)
++
++	for _, content := range []string{"second\n", "third\n", "fourth\n"} {
++		require.NoError(t, os.WriteFile(filepath.Join(source, "data.txt"), []byte(content), 0o600))
++		runGitTestCommand(t, source, gitBin, "add", "data.txt")
++		runGitTestCommand(t, source, gitBin, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--quiet", "-m", strings.TrimSpace(content))
++	}
++
++	remote, err := newValidatedGitRepositoryURL(remoteURL, "")
++	require.NoError(t, err)
++	fetchArgs := append([]string{"-c", "protocol.file.allow=always"}, gitPullFetchArgs(remote, "main")...)
++	runGitCommandVector(t, clone, gitCommand(gitBin, fetchArgs, remote))
++	runGitCommandVector(t, clone, gitCommand(gitBin, gitPullMergeArgs()))
++
++	data, err := os.ReadFile(filepath.Join(clone, "data.txt"))
++	require.NoError(t, err)
++	require.Equal(t, "fourth\n", string(data))
++}
++
++func runGitTestCommand(t *testing.T, workDir string, gitBin string, args ...string) {
++	t.Helper()
++	cmd := exec.Command(gitBin, args...)
++	cmd.Dir = workDir
++	cmd.Env = gitTestEnvironment()
++	output, err := cmd.CombinedOutput()
++	require.NoError(t, err, string(output))
++}
++
++func runGitTestCommandMustFail(t *testing.T, workDir string, gitBin string, args ...string) {
++	t.Helper()
++	cmd := exec.Command(gitBin, args...)
++	cmd.Dir = workDir
++	cmd.Env = gitTestEnvironment()
++	output, err := cmd.CombinedOutput()
++	require.Error(t, err, string(output))
++}
++
++func runGitCommandVector(t *testing.T, workDir string, command []string) {
++	t.Helper()
++	cmd := exec.Command(command[0], command[1:]...)
++	cmd.Dir = workDir
++	cmd.Env = gitTestEnvironment()
++	output, err := cmd.CombinedOutput()
++	require.NoError(t, err, string(output))
++}
++
++func gitTestEnvironment() []string {
++	return append(os.Environ(),
++		"GIT_CONFIG_NOSYSTEM=1",
++		"GIT_CONFIG_GLOBAL=/dev/null",
++		"GIT_CONFIG_SYSTEM=/dev/null",
++	)
++}
++
++func TestGitRemoteConfigURLsCoverNormalizedTrailingSlash(t *testing.T) {
++	require.Equal(t, []string{
++		"https://git.example.com/owner/repository.git",
++		"https://git.example.com/owner/repository.git/",
++	}, gitRemoteConfigURLs("https://git.example.com/owner/repository.git"))
++	require.Equal(t, []string{
++		"https://git.example.com/owner/repository.git/",
++	}, gitRemoteConfigURLs("https://git.example.com/owner/repository.git/"))
++}
++
++func TestGitNetworkAndOfflineCommandShapes(t *testing.T) {
++	remote := validatedGitRepositoryURL{
++		URL:        "https://git.example.com/owner/repository.git",
++		RemoteName: "8e6df22c742447f39e91a18de42f28c646b080226ebe642f",
++	}
++
++	clone := gitCloneNetworkArgs(remote, "/home/container/repository")
++	require.Equal(t, "clone", clone[0])
++	require.Contains(t, clone, "--no-checkout")
++	require.Contains(t, clone, gitRemoteAlias(remote.RemoteName))
++	require.NotContains(t, clone, remote.URL)
++
++	persist := gitClonePersistRemoteArgs(remote)
++	require.Equal(t, []string{"config", "--local", "--replace-all", "remote.origin.url", remote.URL}, persist)
++	require.NotContains(t, persist, gitRemoteAlias(remote.RemoteName))
++	require.Equal(t, []string{"checkout", "--force"}, gitCloneCheckoutArgs())
++
++	fetch := gitPullFetchArgs(remote, "main")
++	require.Equal(t, "fetch", fetch[0])
++	require.Contains(t, fetch, "--deepen=1")
++	require.Contains(t, fetch, "--no-recurse-submodules")
++	require.Equal(t, []string{remote.RemoteName, "main"}, fetch[len(fetch)-2:])
++	require.NotContains(t, fetch, "pull")
++
++	merge := gitPullMergeArgs()
++	require.Equal(t, []string{"merge", "--ff-only", "--no-edit", "FETCH_HEAD"}, merge)
++	require.Equal(t, container.NetworkMode("none"), gitHelperNetworkMode(container.NetworkMode("bridge"), true))
++	require.Equal(t, container.NetworkMode("bridge"), gitHelperNetworkMode(container.NetworkMode("bridge"), false))
++}
++
++func TestCombineGitResponsesUsesFinalExitCode(t *testing.T) {
++	combined := combineGitResponses(
++		&gitResponse{Stdout: "fetch stdout\n", Stderr: "fetch stderr\n", ExitCode: 0},
++		&gitResponse{Stdout: "merge stdout\n", Stderr: "merge stderr\n", ExitCode: 1},
++	)
++	require.Equal(t, "fetch stdout\nmerge stdout\n", combined.Stdout)
++	require.Equal(t, "fetch stderr\nmerge stderr\n", combined.Stderr)
++	require.Equal(t, 1, combined.ExitCode)
++}
++
++func TestGitSafeEnvironmentClearsConfigAndProxyInjection(t *testing.T) {
++	for _, setting := range []string{
++		"GIT_CONFIG_COUNT=0",
++		"GIT_CONFIG_PARAMETERS=",
++		"GIT_NO_LAZY_FETCH=1",
++		"HTTP_PROXY=",
++		"HTTPS_PROXY=",
++		"ALL_PROXY=",
++		"http_proxy=",
++		"https_proxy=",
++		"all_proxy=",
++	} {
++		require.Contains(t, gitSafeEnv, setting)
++	}
++}
++
++func TestGitCanonicalRepositoryURLEscapesCommandConfigDelimiter(t *testing.T) {
++	parsed, err := url.Parse("https://git.example.com/owner/repository=name.git")
++	require.NoError(t, err)
++	require.Equal(t, "https://git.example.com/owner/repository%3Dname.git", gitCanonicalRepositoryURL(parsed))
++
++	alreadyEscaped, err := url.Parse("https://git.example.com/owner/repository%3Dname.git")
++	require.NoError(t, err)
++	require.Equal(t, "https://git.example.com/owner/repository%3Dname.git", gitCanonicalRepositoryURL(alreadyEscaped))
++}
++
++func requireGitCommandConfig(t *testing.T, command []string, expected string) {
++	t.Helper()
++	for index := 1; index < len(command); index++ {
++		if command[index-1] == "-c" && command[index] == expected {
++			return
++		}
++	}
++	t.Fatalf("Git command does not contain config %q: %#v", expected, command)
++}
++
++func TestGitCurlOptResolvePinsValidatedAddress(t *testing.T) {
++	tests := map[string]struct {
++		host     string
++		port     string
++		ip       net.IP
++		expected string
++	}{
++		"default HTTPS port": {
++			host:     "git.example.com",
++			ip:       net.ParseIP("8.8.8.8"),
++			expected: "git.example.com:443:8.8.8.8",
++		},
++		"explicit port": {
++			host:     "git.example.com",
++			port:     "8443",
++			ip:       net.ParseIP("8.8.8.8"),
++			expected: "git.example.com:8443:8.8.8.8",
++		},
++		"IPv6 address": {
++			host:     "git.example.com",
++			ip:       net.ParseIP("2001:4860:4860::8888"),
++			expected: "git.example.com:443:[2001:4860:4860::8888]",
++		},
++		"IPv6 literal host": {
++			host:     "2001:4860:4860::8888",
++			ip:       net.ParseIP("2001:4860:4860::8888"),
++			expected: "[2001:4860:4860::8888]:443:[2001:4860:4860::8888]",
++		},
++	}
++
++	for name, test := range tests {
++		t.Run(name, func(t *testing.T) {
++			require.Equal(t, test.expected, gitCurlOptResolve(test.host, test.port, test.ip))
++		})
++	}
 +}
 diff --git a/router/router_server_ws.go b/router/router_server_ws.go
 index b0ba3a4c254ac16a1edd4e0af9d0725a43454738..15d0a31f32d68392bd35c9d1231d1558b4ddf855 100644

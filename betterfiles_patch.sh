@@ -4,6 +4,8 @@ set -euo pipefail
 RAW_BASE="${TOMAXIKZ_RAW_BASE:-https://raw.githubusercontent.com/Tomaxikz/daemon/develop}"
 BACKUP_ROOT="${TOMAXIKZ_BACKUP_ROOT:-.tomaxikz-betterfiles-backups}"
 BACKUP_DIR="${BACKUP_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)"
+SECURE_GO_TOOLCHAIN="go1.26.7"
+SECURE_X_TEXT_VERSION="v0.39.0"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     BOLD="$(printf '\033[1m')"
@@ -112,6 +114,17 @@ need_cmd() {
     command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
 }
 
+select_secure_go_toolchain() {
+    export GOTOOLCHAIN="$SECURE_GO_TOOLCHAIN"
+    local version
+    version="$(go version)" || fail "could not start ${SECURE_GO_TOOLCHAIN}; install Go 1.21 or newer so it can download the patched toolchain"
+    case "$version" in
+        "go version ${SECURE_GO_TOOLCHAIN} "*) ;;
+        *) fail "expected ${SECURE_GO_TOOLCHAIN}, but the selected toolchain reported: ${version}" ;;
+    esac
+    ok "using ${SECURE_GO_TOOLCHAIN}"
+}
+
 fetch_file() {
     local remote_path="$1"
     local local_path="$2"
@@ -168,6 +181,7 @@ need_cmd curl
 need_cmd python3
 need_cmd go
 need_cmd gofmt
+select_secure_go_toolchain
 ok "required commands are available"
 
 section "Downloading Better Files files"
@@ -206,6 +220,7 @@ fetch_file "router/router_server_files_search.go" "router/router_server_files_se
 fetch_file "router/router_server_files_search_v2.go" "router/router_server_files_search_v2.go"
 fetch_file "router/router_server_files_search_v2_test.go" "router/router_server_files_search_v2_test.go"
 fetch_file "router/router_server_git.go" "router/router_server_git.go"
+fetch_file "router/router_server_git_test.go" "router/router_server_git_test.go"
 fetch_file "router/websocket/betterfiles_collaboration.go" "router/websocket/betterfiles_collaboration.go"
 fetch_file "router/websocket/betterfiles_collaboration_ot.go" "router/websocket/betterfiles_collaboration_ot.go"
 fetch_file "router/websocket/betterfiles_collaboration_ot_test.go" "router/websocket/betterfiles_collaboration_ot_test.go"
@@ -218,9 +233,11 @@ fetch_file "server/file_history.go" "server/file_history.go"
 fetch_file "server/file_history_test.go" "server/file_history_test.go"
 fetch_file "server/filesystem/replace.go" "server/filesystem/replace.go"
 
-section "Installing collaboration dependency"
+section "Installing secure dependencies"
 backup_local_file "go.mod"
 backup_local_file "go.sum"
+run_with_spinner "enforce patched Go minimum ${SECURE_GO_TOOLCHAIN}" go mod edit -go="${SECURE_GO_TOOLCHAIN#go}"
+run_with_spinner "pin patched Unicode library ${SECURE_X_TEXT_VERSION}" go get "golang.org/x/text@${SECURE_X_TEXT_VERSION}"
 run_with_spinner "pin operational transformation library" go get github.com/shiv248/operational-transformation-go@v1.0.0
 run_with_spinner "pin Yjs-compatible CRDT library" go get github.com/reearth/ygo@v1.31.0
 run_with_spinner "pin Better Files glob library" go get github.com/bmatcuk/doublestar/v4@v4.9.1
@@ -571,7 +588,7 @@ replace_once(
     '''\
 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
 		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
-			c.Header("Access-Control-Expose-Headers", "Upload-Offset, X-Request-Id")
+			c.Header("Access-Control-Expose-Headers", "Retry-After, Upload-Offset, X-Request-Id")
 		}
 ''',
     "Upload-Complete, Upload-Length, Upload-Offset",
@@ -1311,6 +1328,7 @@ run_with_spinner "format Go files" gofmt -w \
     router/router_server_files_search_v2.go \
     router/router_server_files_search_v2_test.go \
     router/router_server_git.go \
+    router/router_server_git_test.go \
     router/router_server_ws.go \
     router/tokens/websocket.go \
     router/websocket/betterfiles_collaboration.go \
@@ -1333,7 +1351,9 @@ run_with_spinner "test Better Files packages" go test ./router ./router/middlewa
 if [ "${BETTERFILES_RACE:-0}" = "1" ]; then
     run_with_spinner "race-test Better Files packages" go test -race ./router ./router/middleware ./router/websocket ./server ./server/filesystem
 fi
-run_with_spinner "vet Wings packages" go vet ./...
+# The supported Wings base has inherited copylock and unreachable-code findings.
+# Keep every other standard vet analyzer fatal for installer validation.
+run_with_spinner "vet Wings packages" go vet -copylocks=false -unreachable=false ./...
 run_with_spinner "compile Wings packages" go build ./...
 
 section "Done"

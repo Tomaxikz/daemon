@@ -1,6 +1,6 @@
 module github.com/pterodactyl/wings
 
-go 1.25.0
+go 1.26.7
 
 require (
 	emperror.dev/errors v0.8.1
@@ -134,7 +134,7 @@ require (
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
-	golang.org/x/text v0.38.0 // indirect
+	golang.org/x/text v0.39.0 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gotest.tools/v3 v3.0.2 // indirect

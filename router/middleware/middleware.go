@@ -102,7 +102,7 @@ func SetAccessControlHeaders() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
 		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
-			c.Header("Access-Control-Expose-Headers", "Upload-Offset, X-Request-Id")
+			c.Header("Access-Control-Expose-Headers", "Retry-After, Upload-Offset, X-Request-Id")
 		}
 
 		if isStreamDownloadRequest(c) {

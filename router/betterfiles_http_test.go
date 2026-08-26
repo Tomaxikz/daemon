@@ -104,8 +104,16 @@ func performResumableRequest(handler http.Handler, method, token, directory, fil
 		}
 	}
 	recorder := httptest.NewRecorder()
-	handler.ServeHTTP(recorder, request)
+	handler.ServeHTTP(&deadlineResponseRecorder{ResponseRecorder: recorder}, request)
 	return recorder
+}
+
+type deadlineResponseRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (*deadlineResponseRecorder) SetReadDeadline(time.Time) error {
+	return nil
 }
 
 func readServerHTTPFixture(t *testing.T, s *server.Server, name string) []byte {

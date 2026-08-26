@@ -36,4 +36,12 @@ func TestOpenAPIBetterFilesCapabilitiesMatchRuntimeMethods(t *testing.T) {
 			require.Contains(t, document.Paths[path], method, "%s %s", method, path)
 		}
 	}
+
+	patch, ok := document.Paths["/upload/file"]["patch"].(map[string]interface{})
+	require.True(t, ok)
+	responses, ok := patch["responses"].(map[string]interface{})
+	require.True(t, ok)
+	for _, status := range []string{"200", "408", "409", "413", "429"} {
+		require.Contains(t, responses, status)
+	}
 }

@@ -3,6 +3,8 @@ package router
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -33,6 +35,8 @@ const gitContainerRoot = "/home/container"
 const gitHelperRoot = "/mnt/server"
 const gitBetterFilesTrashDir = ".trash-bin"
 const gitRootUser = "0"
+const gitMinimumMajorVersion = 2
+const gitMinimumMinorVersion = 37
 
 type gitCloneTargetMode int
 
@@ -48,7 +52,6 @@ var (
 
 	gitHelperImages = []string{
 		"alpine/git:2.49.1",
-		"alpine:3.20",
 	}
 
 	gitTrustedBinaries = []string{
@@ -64,7 +67,16 @@ var (
 		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_CONFIG_GLOBAL=/dev/null",
 		"GIT_CONFIG_SYSTEM=/dev/null",
+		"GIT_CONFIG_COUNT=0",
+		"GIT_CONFIG_PARAMETERS=",
+		"GIT_NO_LAZY_FETCH=1",
 		"GIT_ALLOW_PROTOCOL=https",
+		"HTTP_PROXY=",
+		"HTTPS_PROXY=",
+		"ALL_PROXY=",
+		"http_proxy=",
+		"https_proxy=",
+		"all_proxy=",
 		"HOME=/tmp",
 	}
 
@@ -96,7 +108,10 @@ var (
 	gitTargetDirectoryPattern = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 	gitRemoteNamePattern      = regexp.MustCompile(`^[A-Za-z0-9._-]{1,128}$`)
 	gitCredentialPattern      = regexp.MustCompile(`(?i)(https://)([^/@\s]+)@`)
+	gitVersionPattern         = regexp.MustCompile(`(?i)^git version (\d+)\.(\d+)(?:\.|$)`)
 )
+
+const gitUnsafeLocalConfigPattern = `(?i)^(filter\..*\.(process|smudge|clean)|merge\..*\.driver|diff\..*\.(command|textconv)|core\.(sshCommand|fsmonitor|alternateRefsCommand)|credential\.helper|url\..*\.(insteadOf|pushInsteadOf)|remote\..*\.(proxy|proxyauthmethod|vcs|promisor|partialCloneFilter)|extensions\.partialClone|fetch\.bundleURI|transfer\.bundleURI|gc\.auto|maintenance\.auto|include.*|http\..*)$`
 
 type gitCloneRequest struct {
 	RepositoryURL   string `json:"repository_url" binding:"required"`
@@ -137,17 +152,19 @@ type gitPackageManager struct {
 }
 
 type gitRunner struct {
-	env        *docker.Environment
-	serverID   string
-	fsRoot     string
-	bin        string
-	helper     bool
-	helperUser string
+	env                   *docker.Environment
+	serverID              string
+	fsRoot                string
+	bin                   string
+	helper                bool
+	helperUser            string
+	helperNetworkDisabled bool
 }
 
 type validatedGitRepositoryURL struct {
 	URL            string
 	CurlOptResolve string
+	RemoteName     string
 }
 
 func findGitBinary(ctx context.Context, env *docker.Environment) string {
@@ -171,42 +188,179 @@ func findGitBinary(ctx context.Context, env *docker.Environment) string {
 
 func gitBinaryWorks(ctx context.Context, env *docker.Environment, gitBin string) bool {
 	res, err := execInContainer(ctx, env, []string{gitBin, "--version"}, gitContainerRoot)
-	return err == nil && res.ExitCode == 0
+	return err == nil && res.ExitCode == 0 && gitVersionSupportsPinnedResolution(res.Stdout)
+}
+
+func gitVersionSupportsPinnedResolution(output string) bool {
+	matches := gitVersionPattern.FindStringSubmatch(strings.TrimSpace(output))
+	if len(matches) != 3 {
+		return false
+	}
+	major, majorErr := strconv.Atoi(matches[1])
+	minor, minorErr := strconv.Atoi(matches[2])
+	if majorErr != nil || minorErr != nil {
+		return false
+	}
+	return major > gitMinimumMajorVersion || major == gitMinimumMajorVersion && minor >= gitMinimumMinorVersion
 }
 
 func newGitRunner(ctx context.Context, s *wserver.Server, env *docker.Environment) *gitRunner {
-	if gitBin := findGitBinary(ctx, env); gitBin != "" {
-		return &gitRunner{
-			env: env,
-			bin: gitBin,
-		}
-	}
-
-	return &gitRunner{
+	runner := &gitRunner{
 		env:        env,
 		serverID:   s.ID(),
 		fsRoot:     s.Filesystem().Path(),
-		bin:        "git",
-		helper:     true,
 		helperUser: getContainerUser(),
 	}
+	if gitBin := findGitBinary(ctx, env); gitBin != "" {
+		runner.bin = gitBin
+		return runner
+	}
+
+	runner.bin = "git"
+	runner.helper = true
+	return runner
 }
 
 func (r *gitRunner) exec(ctx context.Context, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
-	cmd := gitBaseCommand(r.bin)
-	for _, remote := range remotes {
-		if remote.CurlOptResolve == "" {
-			continue
-		}
-		cmd = append(cmd, "-c", "http.curloptResolve="+remote.CurlOptResolve)
+	// Network commands always run in the isolated helper. In the server container,
+	// a tenant can observe the command line and race a matching .git/config entry
+	// into place before Git reads it. The helper has its own PID namespace, keeping
+	// the per-command remote identity below secret until configuration is loaded.
+	if len(remotes) > 0 && !r.helper {
+		helperRunner := *r
+		helperRunner.bin = "git"
+		helperRunner.helper = true
+		result, err := execGitInHelperContainer(ctx, &helperRunner, gitCommand(helperRunner.bin, args, remotes...), workDir)
+		hideGitRemoteIdentities(result, remotes)
+		return result, err
 	}
-	cmd = append(cmd, args...)
+
+	cmd := gitCommand(r.bin, args, remotes...)
 
 	if r.helper {
-		return execGitInHelperContainer(ctx, r, cmd, workDir)
+		result, err := execGitInHelperContainer(ctx, r, cmd, workDir)
+		hideGitRemoteIdentities(result, remotes)
+		return result, err
 	}
 
 	return execInContainer(ctx, r.env, cmd, workDir)
+}
+
+func (r *gitRunner) execOffline(ctx context.Context, args []string, workDir string) (*gitResponse, error) {
+	helperRunner := *r
+	helperRunner.bin = "git"
+	helperRunner.helper = true
+	helperRunner.helperNetworkDisabled = true
+	return execGitInHelperContainer(ctx, &helperRunner, gitCommand(helperRunner.bin, args), workDir)
+}
+
+func hideGitRemoteIdentities(result *gitResponse, remotes []validatedGitRepositoryURL) {
+	if result == nil {
+		return
+	}
+	for _, remote := range remotes {
+		if remote.RemoteName == "" {
+			continue
+		}
+		alias := gitRemoteAlias(remote.RemoteName)
+		result.Stdout = strings.ReplaceAll(result.Stdout, alias, "[remote]")
+		result.Stderr = strings.ReplaceAll(result.Stderr, alias, "[remote]")
+		result.Stdout = strings.ReplaceAll(result.Stdout, remote.RemoteName, "[remote]")
+		result.Stderr = strings.ReplaceAll(result.Stderr, remote.RemoteName, "[remote]")
+	}
+}
+
+func gitCommand(gitBin string, args []string, remotes ...validatedGitRepositoryURL) []string {
+	cmd := gitBaseCommand(gitBin)
+	for _, remote := range remotes {
+		if remote.RemoteName != "" {
+			alias := gitRemoteAlias(remote.RemoteName)
+			cmd = append(cmd,
+				// Git applies insteadOf only once. Resolving a secret alias to the validated
+				// URL prevents a local insteadOf rule for that URL from being applied later.
+				"-c", "url."+remote.URL+".insteadOf="+alias,
+				"-c", "remote."+remote.RemoteName+".url="+alias,
+				"-c", "remote."+remote.RemoteName+".proxy=",
+			)
+		}
+		for _, requestURL := range gitRemoteConfigURLs(remote.URL) {
+			prefix := "http." + requestURL + "."
+			cmd = append(cmd,
+				"-c", prefix+"followRedirects=false",
+				"-c", prefix+"proxy=",
+				"-c", prefix+"curloptResolve=",
+			)
+			if remote.CurlOptResolve != "" {
+				cmd = append(cmd, "-c", prefix+"curloptResolve="+remote.CurlOptResolve)
+			}
+		}
+	}
+	return append(cmd, args...)
+}
+
+func newGitRemoteName() (string, error) {
+	random := make([]byte, 24)
+	if _, err := rand.Read(random); err != nil {
+		return "", fmt.Errorf("could not generate a secure Git remote identity: %w", err)
+	}
+	return hex.EncodeToString(random), nil
+}
+
+func gitRemoteAlias(remoteName string) string {
+	return remoteName + ":"
+}
+
+func gitRemoteConfigURLs(repositoryURL string) []string {
+	if strings.HasSuffix(repositoryURL, "/") {
+		return []string{repositoryURL}
+	}
+	return []string{repositoryURL, repositoryURL + "/"}
+}
+
+func gitCloneNetworkArgs(remote validatedGitRepositoryURL, targetPath string) []string {
+	return []string{
+		"clone",
+		"--depth=1",
+		"--single-branch",
+		"--no-tags",
+		"--no-recurse-submodules",
+		"--no-checkout",
+		gitRemoteAlias(remote.RemoteName),
+		targetPath,
+	}
+}
+
+func gitClonePersistRemoteArgs(remote validatedGitRepositoryURL) []string {
+	return []string{"config", "--local", "--replace-all", "remote.origin.url", remote.URL}
+}
+
+func gitCloneCheckoutArgs() []string {
+	return []string{"checkout", "--force"}
+}
+
+func gitPullFetchArgs(remote validatedGitRepositoryURL, branch string) []string {
+	// Depth is intentionally explicit: remote-curl refuses dumb HTTP when a
+	// shallow fetch is requested, preventing objects/info/http-alternates from
+	// introducing unvalidated destinations.
+	return []string{"fetch", "--deepen=1", "--no-recurse-submodules", remote.RemoteName, branch}
+}
+
+func gitPullMergeArgs() []string {
+	return []string{"merge", "--ff-only", "--no-edit", "FETCH_HEAD"}
+}
+
+func combineGitResponses(first *gitResponse, second *gitResponse) *gitResponse {
+	if first == nil {
+		return second
+	}
+	if second == nil {
+		return first
+	}
+	return &gitResponse{
+		Stdout:   first.Stdout + second.Stdout,
+		Stderr:   first.Stderr + second.Stderr,
+		ExitCode: second.ExitCode,
+	}
 }
 
 func (r *gitRunner) version(ctx context.Context) string {
@@ -478,18 +632,29 @@ func postServerGitClone(c *gin.Context) {
 		}()
 	}
 
-	result, err := runner.exec(ctx, []string{
-		"clone",
-		"--depth=1",
-		"--single-branch",
-		"--no-tags",
-		"--no-recurse-submodules",
-		repositoryURL.URL,
-		cloneTargetPath,
-	}, workDir, repositoryURL)
+	// Transfer objects without populating the worktree. A tenant can race local
+	// filter configuration into the new repository, so checkout happens later in
+	// a helper container that has no network namespace.
+	result, err := runner.exec(ctx, gitCloneNetworkArgs(repositoryURL, cloneTargetPath), workDir, repositoryURL)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
+	}
+	if result.ExitCode == 0 {
+		persistResult, err := runner.execOffline(ctx, gitClonePersistRemoteArgs(repositoryURL), cloneTargetPath)
+		if err != nil {
+			middleware.CaptureAndAbort(c, err)
+			return
+		}
+		result = combineGitResponses(result, persistResult)
+	}
+	if result.ExitCode == 0 {
+		checkoutResult, err := runner.execOffline(ctx, gitCloneCheckoutArgs(), cloneTargetPath)
+		if err != nil {
+			middleware.CaptureAndAbort(c, err)
+			return
+		}
+		result = combineGitResponses(result, checkoutResult)
 	}
 
 	if result.ExitCode == 0 {
@@ -629,16 +794,21 @@ func postServerGitPull(c *gin.Context) {
 	})
 	logger.Info("starting git operation")
 
-	result, err := runner.exec(ctx, []string{
-		"pull",
-		"--ff-only",
-		"--no-recurse-submodules",
-		remoteURL.URL,
-		remoteBranch,
-	}, workDir, remoteURL)
+	// Fetch does not update the worktree, so it cannot invoke checkout filters.
+	// The fast-forward worktree update then runs without network access, containing
+	// any raced local filter process even if the config changes after validation.
+	result, err := runner.exec(ctx, gitPullFetchArgs(remoteURL, remoteBranch), workDir, remoteURL)
 	if err != nil {
 		middleware.CaptureAndAbort(c, err)
 		return
+	}
+	if result.ExitCode == 0 {
+		mergeResult, err := runner.execOffline(ctx, gitPullMergeArgs(), workDir)
+		if err != nil {
+			middleware.CaptureAndAbort(c, err)
+			return
+		}
+		result = combineGitResponses(result, mergeResult)
 	}
 
 	logger.WithFields(log.Fields{
@@ -811,24 +981,31 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 	}
 
 	script := strings.Join([]string{
-		`if ! command -v git >/dev/null 2>&1 || ! command -v su-exec >/dev/null 2>&1 || ! command -v ssh >/dev/null 2>&1 || [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then`,
-		`apk add --no-cache --no-progress git openssh-client ca-certificates su-exec`,
-		`fi`,
-		`exec su-exec "$BFM_GIT_USER" "$@"`,
+		`if ! command -v git >/dev/null 2>&1 || [ ! -e /etc/ssl/certs/ca-certificates.crt ]; then echo "The Git helper image is missing required HTTPS support." >&2; exit 126; fi`,
+		`git_version="$(git --version 2>/dev/null)" || exit 126`,
+		`git_version="${git_version#git version }"`,
+		`git_major="${git_version%%.*}"`,
+		`git_minor_version="${git_version#*.}"`,
+		`git_minor="${git_minor_version%%.*}"`,
+		fmt.Sprintf(`case "$git_major" in ''|*[!0-9]*) echo "Git %d.%d or newer is required." >&2; exit 126 ;; esac`, gitMinimumMajorVersion, gitMinimumMinorVersion),
+		fmt.Sprintf(`case "$git_minor" in ''|*[!0-9]*) echo "Git %d.%d or newer is required." >&2; exit 126 ;; esac`, gitMinimumMajorVersion, gitMinimumMinorVersion),
+		fmt.Sprintf(`if [ "$git_major" -lt %d ] || { [ "$git_major" -eq %d ] && [ "$git_minor" -lt %d ]; }; then echo "Git %d.%d or newer is required." >&2; exit 126; fi`, gitMinimumMajorVersion, gitMinimumMajorVersion, gitMinimumMinorVersion, gitMinimumMajorVersion, gitMinimumMinorVersion),
+		`exec "$@"`,
 	}, "\n")
 
 	containerName := fmt.Sprintf("%s_bfm_git_%d", runner.serverID, time.Now().UnixNano())
 	conf := &container.Config{
 		Hostname:     "bfm-git",
+		User:         runner.helperUser,
 		AttachStdout: true,
 		AttachStderr: true,
-		Cmd:          append([]string{"sh", "-lc", script, "bfm-git"}, helperCmd...),
+		Entrypoint:   []string{"sh", "-lc", script, "bfm-git"},
+		Cmd:          helperCmd,
 		Image:        helperImage,
 		WorkingDir:   gitHelperPath(workDir),
-		Env: append(append([]string(nil), gitSafeEnv...), []string{
+		Env: append(append([]string(nil), gitSafeEnv...),
 			"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-			"BFM_GIT_USER=" + runner.helperUser,
-		}...),
+		),
 		Labels: map[string]string{
 			"Service":       "Pterodactyl",
 			"ContainerType": "betterfiles_git_helper",
@@ -851,7 +1028,7 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 		},
 		DNS:         cfg.Docker.Network.Dns,
 		LogConfig:   cfg.Docker.ContainerLogConfig(),
-		NetworkMode: container.NetworkMode(cfg.Docker.Network.Mode),
+		NetworkMode: gitHelperNetworkMode(container.NetworkMode(cfg.Docker.Network.Mode), runner.helperNetworkDisabled),
 		UsernsMode:  container.UsernsMode(cfg.Docker.UsernsMode),
 		Resources: container.Resources{
 			Memory:    cfg.Docker.InstallerLimits.Memory * 1024 * 1024,
@@ -916,6 +1093,13 @@ func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []stri
 		Stderr:   errOutput,
 		ExitCode: int(statusCode),
 	}, nil
+}
+
+func gitHelperNetworkMode(configured container.NetworkMode, disabled bool) container.NetworkMode {
+	if disabled {
+		return container.NetworkMode("none")
+	}
+	return configured
 }
 
 func ensureGitHelperImage(ctx context.Context, env *docker.Environment) (string, error) {
@@ -984,10 +1168,20 @@ func gitBaseCommand(gitBin string) []string {
 		"-c", "protocol.ext.allow=never",
 		"-c", "protocol.git.allow=never",
 		"-c", "protocol.ssh.allow=never",
+		// Redirect targets bypass the DNS validation and address pinning applied to the original remote.
+		"-c", "http.followRedirects=false",
+		"-c", "http.proxy=",
+		"-c", "http.curloptResolve=",
+		"-c", "remote.origin.proxy=",
+		"-c", "fetch.bundleURI=",
+		"-c", "transfer.bundleURI=false",
 		"-c", "credential.helper=",
 		"-c", "core.askPass=",
 		"-c", "core.fsmonitor=false",
+		"-c", "core.alternateRefsCommand=/bin/true",
 		"-c", "core.untrackedCache=false",
+		"-c", "gc.auto=0",
+		"-c", "maintenance.auto=false",
 		"-c", "submodule.recurse=false",
 		"-c", "diff.external=",
 		"-c", "advice.detachedHead=false",
@@ -999,14 +1193,14 @@ func ensureNoDangerousLocalGitConfig(ctx context.Context, runner *gitRunner, wor
 		"config",
 		"--local",
 		"--get-regexp",
-		`^(filter\..*\.(process|smudge|clean)|merge\..*\.driver|diff\..*\.(command|textconv)|core\.sshCommand|core\.fsmonitor|credential\.helper|url\..*\.(insteadOf|pushInsteadOf)|include.*)$`,
+		gitUnsafeLocalConfigPattern,
 	}, workDir)
 	if err != nil {
 		return err
 	}
 
 	if result.ExitCode == 0 && strings.TrimSpace(result.Stdout) != "" {
-		return fmt.Errorf("Repository local Git config contains unsafe helper settings.")
+		return fmt.Errorf("Repository local Git config contains unsafe settings.")
 	}
 
 	return nil
@@ -1091,12 +1285,13 @@ func validateGitRepositoryURL(ctx context.Context, raw string) (validatedGitRepo
 	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
 		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host is not allowed.")
 	}
+	repositoryURL := gitCanonicalRepositoryURL(parsed)
 
 	if ip := net.ParseIP(host); ip != nil {
 		if isBlockedGitIP(ip) {
 			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
 		}
-		return validatedGitRepositoryURL{URL: parsed.String()}, nil
+		return newValidatedGitRepositoryURL(repositoryURL, gitCurlOptResolve(host, parsed.Port(), ip))
 	}
 
 	lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -1118,15 +1313,37 @@ func validateGitRepositoryURL(ctx context.Context, raw string) (validatedGitRepo
 		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
 	}
 
+	return newValidatedGitRepositoryURL(repositoryURL, gitCurlOptResolve(host, parsed.Port(), resolved))
+}
+
+func newValidatedGitRepositoryURL(repositoryURL string, curlOptResolve string) (validatedGitRepositoryURL, error) {
+	remoteName, err := newGitRemoteName()
+	if err != nil {
+		return validatedGitRepositoryURL{}, err
+	}
 	return validatedGitRepositoryURL{
-		URL:            parsed.String(),
-		CurlOptResolve: gitCurlOptResolve(host, parsed.Port(), resolved),
+		URL:            repositoryURL,
+		CurlOptResolve: curlOptResolve,
+		RemoteName:     remoteName,
 	}, nil
+}
+
+func gitCanonicalRepositoryURL(parsed *url.URL) string {
+	escapedPath := parsed.EscapedPath()
+	if !strings.ContainsRune(escapedPath, '=') {
+		return parsed.String()
+	}
+	canonical := *parsed
+	canonical.RawPath = strings.ReplaceAll(escapedPath, "=", "%3D")
+	return canonical.String()
 }
 
 func gitCurlOptResolve(host string, port string, ip net.IP) string {
 	if port == "" {
 		port = "443"
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
 	}
 	address := ip.String()
 	if strings.Contains(address, ":") {
