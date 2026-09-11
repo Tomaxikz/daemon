@@ -10,6 +10,7 @@
             ::-webkit-scrollbar { height: 8px; }
             ::-webkit-scrollbar-track { background-color: #57534e; border-radius: 10px; }
             ::-webkit-scrollbar-thumb { background-color: #b8aca1; border-radius: 10px; }
+            .default-line { border: 1px solid #78716c; color: #e7e5e4 !important; }
         </style>
     </head>
     <body class="bg-stone-800">
@@ -36,6 +37,20 @@
                     <button onclick="copyButton(this)" class="bg-blue-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-blue-800 transition duration-200 shrink-0">
                         <i class="fa-solid fa-copy"></i>
                     </button>
+                </div>
+            </div>
+
+            <div class="w-full max-w-[1420px] bg-sky-500/10 border border-sky-500/50 border-l-4 rounded-lg p-4 mt-6">
+                <div class="flex items-start gap-3">
+                    <i class="fa-solid fa-language text-sky-300 mt-1"></i>
+                    <div class="min-w-0 w-full">
+                        <h2 class="text-sky-100 font-bold text-lg">Optional Better Files translation</h2>
+                        <p class="text-sky-100/90 mt-2">
+                            A Better Files translation file is included at
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-sky-200 text-sm">translations/en/betterfilesmanager.php</code>.
+                            Upload or place this file according to the translation instructions for the Panel theme you use, because the required location and setup can differ between themes.
+                        </p>
+                    </div>
                 </div>
             </div>
             <div class="flex items-center gap-4 w-[200px] mt-5">
@@ -247,10 +262,31 @@ php artisan optimize</code></pre>
                         <div>
                             <h2 class="text-emerald-100 font-bold text-lg">Recommended Wings install</h2>
                             <p class="text-emerald-100/90 mt-2">
-                                We recommend using the pre-built Wings binary or applying the full patch file. The full patched daemon also includes fixes for Pterodactyl Wings bugs that may not be patched upstream yet.
+                                We recommend using the pre-built Wings binary or the smart Better Files script from this guide. The smart script is the recommended automatic source-patching method for clean upstream Wings, repeat runs, and compatible older Better Files source installs.
                             </p>
                             <p class="text-emerald-100/90 mt-2">
-                                If you need to apply Wings edits from other addons, apply this patch first or clone our daemon repo first, then add the other addon changes on top.
+                                Full daemon patches touch many more Wings files and have a higher chance of conflicting with other addons. Use the full patch only when you want every Tomaxikz daemon feature.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-red-500/10 border border-red-500/50 border-l-4 rounded-lg p-4 mb-5">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-shield-halved text-red-300 mt-1"></i>
+                        <div>
+                            <h2 class="text-red-100 font-bold text-lg">Security rebuild required</h2>
+                            <p class="text-red-100/90 mt-2">
+                                Build Wings with Go <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">1.26.7</code> or newer and <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">golang.org/x/text v0.39.0</code> or newer. These versions contain the runtime, archive, and Unicode fixes used by this Better Files update.
+                            </p>
+                            <p class="text-red-100/90 mt-2">
+                                Updating only the Panel or source files does not patch a running Wings process. Existing source installations must download the current script or patch again, rebuild, replace <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">/usr/local/bin/wings</code>, and restart the service. Pre-built installations must replace the binary and restart Wings. The existing upload endpoint and request-header names remain unchanged.
+                            </p>
+                            <p class="text-red-100/90 mt-2">
+                                Each resumable file must now use its own signed upload token; all chunks, retries, and <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">HEAD</code> checks for that token must keep the same server and file path. Git clone/pull URLs must be their final HTTPS address because redirects, proxies, and repository-local HTTP overrides now fail closed. Network transfers always use the isolated Git 2.49.1 helper; clone checkout and pull merge then run in a separate helper with networking disabled. The helper image may download on first use.
+                            </p>
+                            <p class="text-red-100/90 mt-2">
+                                Resumable <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">PATCH</code> can now return <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">408</code> for an idle request body, <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">409</code> for an active same-file writer or an offset/length mismatch, and <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">429</code> when an admission limit is full. Honor <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">Retry-After</code> on 429. A successful <code class="bg-stone-900 rounded-lg px-2 py-1 text-red-200 text-sm">Upload-Complete: ?1</code> retires that token, so mint a fresh token for another file or any request after completion.
                             </p>
                         </div>
                     </div>
@@ -260,8 +296,11 @@ php artisan optimize</code></pre>
                     <button type="button" data-wings-tab="prebuilt" onclick="setWingsOption('prebuilt')" class="w-full md:w-auto bg-emerald-600 text-white font-bold px-4 py-2 rounded-md cursor-pointer transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="true" aria-controls="wings-prebuilt">
                         Pre-built
                     </button>
+                    <button type="button" data-wings-tab="script" onclick="setWingsOption('script')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-script">
+                        Smart script
+                    </button>
                     <button type="button" data-wings-tab="patch" onclick="setWingsOption('patch')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-patch">
-                        Patch file
+                        Patch options
                     </button>
                     <button type="button" data-wings-tab="manual" onclick="setWingsOption('manual')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-manual">
                         Manual edits
@@ -280,9 +319,10 @@ php artisan optimize</code></pre>
                         <div class="overflow-x-auto">
                             <pre><code class="text-white text-sm">sudo mkdir -p /etc/pterodactyl
 ARCH="$([[ "$(uname -m)" == "x86_64" ]] &amp;&amp; echo "amd64" || echo "arm64")"
-sudo curl -L -o /usr/local/bin/wings \
+curl -fL --retry 3 -o /tmp/wings \
   "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${ARCH}"
-sudo chmod u+x /usr/local/bin/wings
+file /tmp/wings
+sudo install -m 0755 /tmp/wings /usr/local/bin/wings
 sudo systemctl restart wings</code></pre>
                         </div>
                     </div>
@@ -292,53 +332,155 @@ sudo systemctl restart wings</code></pre>
                     </p>
                 </div>
 
-                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
-                    <h1 class="text-white font-bold text-xl">Apply the patch from the Wings root</h1>
+                <div id="wings-script" data-wings-panel="script" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Run the smart Better Files script</h1>
                     <p class="text-stone-300 mt-3">
-                        Run this inside the root folder of the Wings source repo, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                        Use this if you want to patch and build a Wings source tree yourself. The script downloads the Better Files daemon files, applies the required original-file edits by content anchors, skips edits that are already installed, formats the Go files, and builds Wings.
                     </p>
-                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                    <p class="text-emerald-100 bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-3 mt-3">
+                        Run this from the Wings source root, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>. This is more reliable than a raw patch file if your tree already has some compatible edits.
+                    </p>
+                    <p class="text-amber-100 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-3">
+                        Before running it, commit or back up your current source tree. The script can upgrade clean installs, repeat its current edits, and migrate source shapes it explicitly recognizes. It cannot guarantee an automatic upgrade from every old or third-party-modified Wings tree. If an expected anchor is different, it stops instead of guessing; files changed earlier in that run may still need to be restored from Git or <code class="bg-stone-900 rounded-lg px-2 py-1 text-amber-200 text-sm">.tomaxikz-betterfiles-backups</code>.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-3 border-l-4 border-emerald-500">
                         <div class="flex justify-end mb-2">
                             <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
                                 <i class="fa-solid fa-copy"></i> Copy
                             </button>
                         </div>
                         <div class="overflow-x-auto">
-                            <pre><code class="text-white text-sm">curl -L -o tomaxikz.patch \
-  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/tomaxikz.patch"
-git apply tomaxikz.patch
-go build
+                            <pre><code class="text-white text-sm">curl -fL -o betterfiles_patch.sh \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/betterfiles_patch.sh"
+chmod +x betterfiles_patch.sh
+./betterfiles_patch.sh</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-300 mt-3">
+                        A successful run creates and validates a buildable source tree. Its package-wide build check does not leave a deployable binary behind, and it does not replace or restart the running Wings service automatically. After the script reports success, compile and install the binary:
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-3 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">go version  # must report go1.26.7 or newer
+go build -o wings .
 sudo systemctl stop wings
-sudo mv wings /usr/local/bin/wings
-sudo systemctl start wings</code></pre>
+sudo install -m 0755 ./wings /usr/local/bin/wings
+sudo systemctl start wings
+sudo systemctl is-active wings</code></pre>
                         </div>
                     </div>
                     <p class="text-stone-400 mt-3 text-sm">
-                        Patch file:
-                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch">https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch</a>
+                        Script file:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/betterfiles_patch.sh">https://github.com/Tomaxikz/daemon/blob/develop/betterfiles_patch.sh</a>
                     </p>
+                    <p class="text-stone-400 mt-2 text-sm">
+                        The script selects the patched Go 1.26.7 toolchain, pins <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">golang.org/x/text v0.39.0</code>, installs the native Yjs collaboration transport while retaining the legacy OT transport for older panels, pins the remaining Go dependencies, writes backups under <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">.tomaxikz-betterfiles-backups</code>, formats the changed Go files, and verifies that Wings builds. If it stops with an error, it found a source shape that needs manual review instead of guessing.
+                    </p>
+                </div>
+
+                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Apply a Wings patch</h1>
+                    <p class="text-stone-300 mt-3">
+                        Run these commands inside the root folder of the Wings source repo, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                    </p>
+                    <p class="text-amber-200 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-3">
+                        Use the addon patch when you only need Better Files daemon features. Use the full patch only when you want every Tomaxikz daemon feature, because it touches more Wings files and is more likely to conflict with other addons.
+                    </p>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+                        <div class="bg-stone-800 rounded-lg p-4 border border-emerald-500/50">
+                            <h2 class="text-white font-bold text-lg">Recommended: addon patch</h2>
+                            <p class="text-stone-300 mt-2">Only applies the Better Files Wings changes.</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-3 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2">
+                                    <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                        <i class="fa-solid fa-copy"></i> Copy
+                                    </button>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <pre><code class="text-white text-sm">curl -fL -o betterfiles.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/betterfiles.patch"
+git apply --3way betterfiles.patch
+go version  # must report go1.26.7 or newer
+go build
+sudo systemctl stop wings
+sudo install -m 0755 wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                                </div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm">
+                                Addon patch:
+                                <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/betterfiles.patch">https://github.com/Tomaxikz/daemon/blob/develop/betterfiles.patch</a>
+                            </p>
+                        </div>
+                        <div class="bg-stone-800 rounded-lg p-4 border border-amber-500/40">
+                            <h2 class="text-white font-bold text-lg">Full daemon patch</h2>
+                            <p class="text-stone-300 mt-2">Applies all Tomaxikz Wings features, not only Better Files.</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-3 border-l-4 border-amber-500">
+                                <div class="flex justify-end mb-2">
+                                    <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                        <i class="fa-solid fa-copy"></i> Copy
+                                    </button>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <pre><code class="text-white text-sm">curl -fL -o tomaxikz.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/tomaxikz.patch"
+git apply --3way tomaxikz.patch
+go version  # must report go1.26.7 or newer
+go build
+sudo systemctl stop wings
+sudo install -m 0755 wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                                </div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm">
+                                Full patch:
+                                <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch">https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch</a>
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="wings-manual" data-wings-panel="manual" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
                     <h1 class="text-white font-bold text-xl">Edit Wings by hand</h1>
                     <p class="text-stone-300 mt-3">
-                        Run every command in this tab from the root of the Wings source repo, where <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code> exists. The manual install has two parts: first download the new files, then add the small wiring snippets to the existing Wings files. Do not edit <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/router_download.go</code>; normal downloads stay unchanged.
+                        Run every command in this tab from the root of the Wings source repo, where <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code> exists. The manual install has three parts: download the new files, add the wiring snippets to the existing Wings files, and run the focused validation commands before installing the binary. Do not edit <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/router_download.go</code>; normal single-file downloads and multipart uploads stay available alongside the new routes.
                     </p>
+                    <p class="text-amber-100 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-3">
+                        Commit or back up the Wings source tree first. The snippets below match the current <code class="bg-stone-900 rounded-lg px-2 py-1 text-amber-200 text-sm">develop</code> branch. If your Wings version has different surrounding code, use the addon patch as the source of truth and review each hunk instead of creating duplicate routes.
+                    </p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                        <p class="text-stone-300 bg-stone-800 rounded-lg p-3">
+                            <code class="default-line bg-stone-900 rounded px-2 py-1 text-sm">Default Wings line</code>
+                            has a gray border and already exists; find or replace it.
+                        </p>
+                        <p class="text-stone-300 bg-stone-800 rounded-lg p-3 border-l-4 border-emerald-500">
+                            <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">New Better Files code</code>
+                            has a green border; add it as instructed.
+                        </p>
+                    </div>
                     <div class="bg-stone-800 rounded-lg p-4 mt-4 border border-stone-600">
                         <h2 class="text-white font-bold text-lg">Manual edit order</h2>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">1.</span> Download the new Go files.</p>
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">2.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router.go</code> for routes.</p>
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">3.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/websocket/websocket.go</code> for live collaboration.</p>
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">4.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">config/config.go</code> for file history settings.</p>
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">5.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router_server_files.go</code> for revision tracking.</p>
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">6.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/middleware/middleware.go</code> for stream-only CORS.</p>
-                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">7.</span> Build and restart Wings.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">1.</span> Download the Go files and pin every listed dependency.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">2.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router_server_ws.go</code> to preserve collaboration message order.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">3.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router.go</code> for all public and server routes.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">4.</span> Wire the bounded operation manager into <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">server/server.go</code>.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">5.</span> Add operation events in <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">server/events.go</code> and <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/websocket/listeners.go</code>.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">6.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/websocket/websocket.go</code> for live collaboration.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">7.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">config/config.go</code> for history and collaboration limits.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">8.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/router_server_files.go</code> for revision hooks.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">9.</span> Edit <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">router/middleware/middleware.go</code> for uploads and archive streams.</p>
+                            <p class="text-stone-300"><span class="text-emerald-400 font-bold">10.</span> Format, test, build, install, and verify Wings.</p>
                         </div>
                     </div>
                     <h2 class="text-white font-bold text-lg mt-6">Download the new Go files</h2>
                     <p class="text-stone-300 mt-3">
-                        This creates the missing folders and downloads the new Better Files, file history, archive, stream, Git, collaboration, and Docker helper files.
+                        This creates the missing folders and downloads the Better Files, file history, archive, stream, Git, collaboration, resumable upload, safe path, search, fingerprint, operation, and Docker helper files. Keep the test files: they validate traversal protection, archive formats, resumable offsets, cancellation, Unicode search, fingerprints, and atomic copy behavior before deployment.
                     </p>
                     <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                         <div class="flex justify-end mb-2">
@@ -347,17 +489,29 @@ sudo systemctl start wings</code></pre>
                             </button>
                         </div>
                         <div class="overflow-x-auto">
-                            <pre><code class="text-white text-sm">mkdir -p router/websocket environment/docker server
+                            <pre><code class="text-white text-sm">mkdir -p router/websocket router/middleware environment/docker server/filesystem
 curl -L -o router/websocket/limiter.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/limiter.go"
 curl -L -o router/websocket/betterfiles_collaboration.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/betterfiles_collaboration.go"
+curl -L -o router/websocket/betterfiles_collaboration_ot.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/betterfiles_collaboration_ot.go"
+curl -L -o router/websocket/betterfiles_collaboration_ot_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/betterfiles_collaboration_ot_test.go"
+curl -L -o router/websocket/file_collaboration_yjs.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/file_collaboration_yjs.go"
+curl -L -o router/websocket/file_collaboration_yjs_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/file_collaboration_yjs_test.go"
 curl -L -o server/file_history.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/file_history.go"
+curl -L -o server/file_history_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/file_history_test.go"
 curl -L -o router/router_server_files_revisions.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_revisions.go"
 curl -L -o router/router_server_git.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_git.go"
+curl -L -o router/router_server_git_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_git_test.go"
 curl -L -o router/router_server_files_search.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_search.go"
 curl -L -o router/router_server_betterfiles_collaboration.go \
@@ -368,9 +522,220 @@ curl -L -o router/router_cdn_stream.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_cdn_stream.go"
 curl -L -o router/router_download_helpers.go \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_download_helpers.go"
+curl -L -o router/router_download_helpers_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_download_helpers_test.go"
+curl -L -o router/router_system_config.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_system_config.go"
+curl -L -o router/router_system_config_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_system_config_test.go"
 curl -L -o environment/docker/client_accessor.go \
-  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/environment/docker/client_accessor.go"</code></pre>
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/environment/docker/client_accessor.go"
+curl -L -o router/betterfiles_entry.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/betterfiles_entry.go"
+curl -L -o router/betterfiles_paths.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/betterfiles_paths.go"
+curl -L -o router/betterfiles_paths_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/betterfiles_paths_test.go"
+curl -L -o router/betterfiles_test_helpers_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/betterfiles_test_helpers_test.go"
+curl -L -o router/betterfiles_http_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/betterfiles_http_test.go"
+curl -L -o router/middleware/middleware_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/middleware/middleware_test.go"
+curl -L -o router/router_openapi.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_openapi.go"
+curl -L -o router/router_openapi_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_openapi_test.go"
+curl -L -o router/router_resumable_upload.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_resumable_upload.go"
+curl -L -o router/router_resumable_upload_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_resumable_upload_test.go"
+curl -L -o router/router_download_directory.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_download_directory.go"
+curl -L -o router/router_download_directory_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_download_directory_test.go"
+curl -L -o router/router_download_directory_http_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_download_directory_http_test.go"
+curl -L -o router/router_file_operations.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_file_operations.go"
+curl -L -o router/router_file_operations_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_file_operations_test.go"
+curl -L -o router/router_server_files_copy_many.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_copy_many.go"
+curl -L -o router/router_server_files_copy_many_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_copy_many_test.go"
+curl -L -o router/router_server_files_fingerprints.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_fingerprints.go"
+curl -L -o router/router_server_files_fingerprints_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_fingerprints_test.go"
+curl -L -o router/router_server_files_largest.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_largest.go"
+curl -L -o router/router_server_files_largest_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_largest_test.go"
+curl -L -o router/router_server_files_rename.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_rename.go"
+curl -L -o router/router_server_files_search_v2.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_search_v2.go"
+curl -L -o router/router_server_files_search_v2_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/router_server_files_search_v2_test.go"
+curl -L -o router/websocket/listeners_operation_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/listeners_operation_test.go"
+curl -L -o server/file_operations.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/file_operations.go"
+curl -L -o server/file_operations_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/file_operations_test.go"
+curl -L -o server/filesystem/replace.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/filesystem/replace.go"
+go get golang.org/x/text@v0.39.0
+go get github.com/shiv248/operational-transformation-go@v1.0.0
+go get github.com/reearth/ygo@v1.31.0
+go get github.com/bmatcuk/doublestar/v4@v4.9.1
+go get github.com/dsnet/compress@v0.0.2-0.20230904184137-39efe44ab707
+go get github.com/ulikunitz/xz@v0.5.15
+go mod tidy</code></pre>
                         </div>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit router/router_server_ws.go</h2>
+                        <p class="text-stone-300 mt-3">
+                            Apply the three manual edits below. Gray blocks are original Wings code to find; green blocks are the Better Files replacements. These edits keep authentication, legacy <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">betterfiles:collab:*</code>, and Wings-rs-compatible <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">file collab *</code> events in wire order.
+                        </p>
+
+                        <h3 class="text-white font-bold mt-5">1. Replace the WebSocket limiter setup</h3>
+                        <p class="text-stone-300 mt-2"><span class="text-stone-200 font-bold">Original Wings code — replace this entire gray block:</span></p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-stone-200 text-sm">// There is a separate rate limiter that applies to individual message types
+// within the actual websocket logic handler. _This_ rate limiter just exists
+// to avoid enormous floods of data through the socket since we need to parse
+// JSON each time. This rate limit realistically should never be hit since this
+// would require sending 50+ messages a second over the websocket (no more than
+// 10 per 200ms).
+var throttled bool
+rl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3"><span class="text-emerald-300 font-bold">Better Files replacement — paste this green block in the same location:</span></p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">// There is a separate rate limiter that applies to individual message types
+// within the actual websocket logic handler. This limiter protects ordinary
+// control traffic. Stateful collaboration events bypass both limiters and are
+// processed synchronously below, matching Wings-rs behavior. Silently dropping
+// one collaboration chunk would desynchronize the document.
+var throttled bool
+rl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)
+allowOrdinaryMessage := func() bool {
+    if !rl.Allow() {
+        if !throttled {
+            throttled = true
+            _ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
+        }
+        return false
+    }
+
+    throttled = false
+    return true
+}
+handleMessage := func(msg websocket.Message) {
+    if err := handler.HandleInbound(ctx, msg); err != nil {
+        if errors.Is(err, server.ErrSuspended) {
+            cancel()
+        } else {
+            _ = handler.SendErrorJson(msg, err)
+        }
+    }
+}</code></pre>
+                            </div>
+                        </div>
+
+                        <h3 class="text-white font-bold mt-5">2. Remove the old pre-decode limiter</h3>
+                        <p class="text-stone-300 mt-2"><span class="text-stone-200 font-bold">Original Wings code — delete this entire gray block and do not replace it here:</span></p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-stone-200 text-sm">if !rl.Allow() {
+    if !throttled {
+        throttled = true
+        _ = handler.Connection.WriteJSON(websocket.Message{Event: websocket.ThrottledEvent, Args: []string{"global"}})
+    }
+    continue
+}
+
+throttled = false</code></pre>
+                            </div>
+                        </div>
+
+                        <h3 class="text-white font-bold mt-5">3. Replace the message decode and dispatch block</h3>
+                        <p class="text-stone-300 mt-2"><span class="text-stone-200 font-bold">Original Wings code — replace this entire gray block:</span></p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-stone-200 text-sm">var j websocket.Message
+if err := json.Unmarshal(p, &amp;j); err != nil {
+    continue
+}
+
+go func(msg websocket.Message) {
+    if err := handler.HandleInbound(ctx, msg); err != nil {
+        if errors.Is(err, server.ErrSuspended) {
+            cancel()
+        } else {
+            _ = handler.SendErrorJson(msg, err)
+        }
+    }
+}(j)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3"><span class="text-emerald-300 font-bold">Better Files replacement — paste this green block in the same location:</span></p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">var j websocket.Message
+if err := json.Unmarshal(p, &amp;j); err != nil {
+    allowOrdinaryMessage()
+    continue
+}
+
+if !websocket.IsFileCollaborationEvent(j.Event) &amp;&amp; !allowOrdinaryMessage() {
+    continue
+}
+
+// Authentication and collaboration messages are stateful protocols. Keep
+// their WebSocket wire order instead of racing them in separate goroutines.
+if j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {
+    handleMessage(j)
+    continue
+}
+go handleMessage(j)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-amber-100 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-4">
+                            Do not leave the original per-message goroutine in place. Authentication and collaboration messages must use the synchronous branch above; ordinary events still use <code class="bg-stone-900 rounded-lg px-2 py-1 text-amber-200 text-sm">go handleMessage(j)</code>.
+                        </p>
                     </div>
 
                     <div class="border-t border-stone-600 mt-6 pt-5">
@@ -380,7 +745,33 @@ curl -L -o environment/docker/client_accessor.go \
                             <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/router.go</code>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Find the authenticated server routes block. Put this Git block after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server.POST("/commands", postServerCommands)</code> and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server.POST("/install", postServerInstall)</code>.
+                            First, find <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">router.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))</code> and add the public capability document directly after it. The Panel uses this route for exact feature detection.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">router.GET("/openapi.json", getOpenAPI)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Find <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">protected.GET("/api/system", getSystemInformation)</code> and put this capability route directly after it. This authenticated endpoint is required for the Panel to select native Yjs instead of legacy OT.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">protected.GET("/api/system/config", getSystemConfiguration)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Find the authenticated server routes block. Put this Git block after <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">server.POST("/commands", postServerCommands)</code> and before <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">server.POST("/install", postServerInstall)</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -392,6 +783,7 @@ curl -L -o environment/docker/client_accessor.go \
                                 <pre><code class="text-white text-sm">git := server.Group("/git")
 {
     git.GET("/status", getServerGitStatus)
+    git.POST("/install", postServerGitInstall)
     git.POST("/clone", postServerGitClone)
     git.POST("/pull", postServerGitPull)
     git.POST("/diff", postServerGitDiff)
@@ -399,7 +791,7 @@ curl -L -o environment/docker/client_accessor.go \
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            In the same file, find <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">files := server.Group("/files")</code>. Put these lines inside that block, right after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">files.GET("/contents", getServerFileContents)</code>.
+                            In the same file, find <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">files := server.Group("/files")</code>. Put these lines inside that block, right after <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">files.GET("/contents", getServerFileContents)</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -412,13 +804,32 @@ curl -L -o environment/docker/client_accessor.go \
 files.GET("/revisions/:revision", getServerFileRevision)
 files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
 files.GET("/search", getServerFilesSearch)
+files.POST("/search", postServerFilesSearch)
 files.GET("/archive/list", getServerArchiveList)
 files.POST("/archive/extract", postServerArchiveExtract)
+files.GET("/list-directory", getServerListDirectory)
+files.POST("/copy-many", postServerCopyMany)
+files.GET("/largest-directories", getServerLargestDirectories)
+files.GET("/fingerprints", getServerFileFingerprints)
+files.DELETE("/operations/:operation", deleteServerFileOperation)
 files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</code></pre>
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Still in <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/router.go</code>, put this near the top public download routes, directly after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router.GET("/download/file", getDownloadFile)</code>.
+                            In that same files group, replace this default Wings registration:
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-stone-200 text-sm">files.PUT("/rename", putServerRenameFiles)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Replace it with the safe Better Files handler below. Do not add a second <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">PUT /rename</code> route. This keeps the request API unchanged while adding atomic no-overwrite and symlink protection.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -427,11 +838,148 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                                 </button>
                             </div>
                             <div class="overflow-x-auto">
-                                <pre><code class="text-white text-sm">router.GET("/download/stream", getDownloadStream)</code></pre>
+                                <pre><code class="text-white text-sm">files.PUT("/rename", putServerRenameFilesSafe)</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Still in <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/router.go</code>, keep the existing single-file download and multipart upload routes. Add the stream and directory routes beside <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">router.GET("/download/file", getDownloadFile)</code>, then add <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">HEAD</code> and <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">PATCH</code> beside the existing <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">router.POST("/upload/file", postServerUploadFiles)</code> route.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">router.GET("/download/stream", getDownloadStream)
+router.GET("/download/directory", getDownloadDirectory)
+router.HEAD("/upload/file", headServerUploadFile)
+router.PATCH("/upload/file", patchServerUploadFile)</code></pre>
                             </div>
                         </div>
                         <p class="text-yellow-100/90 mt-3">
-                            Leave <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router.GET("/download/file", getDownloadFile)</code> and <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router/router_download.go</code> alone. The media player uses the new <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">/download/stream</code> route.
+                            Leave <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router.GET("/download/file", getDownloadFile)</code>, <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router.POST("/upload/file", postServerUploadFiles)</code>, and <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">router/router_download.go</code> alone. The new APIs are additive: media uses <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">/download/stream</code>, directories use <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">/download/directory</code>, and resumable clients use the same signed upload URL with <code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">HEAD</code>/<code class="bg-stone-900 rounded-lg px-2 py-1 text-yellow-200 text-sm">PATCH</code>.
+                        </p>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit server/server.go</h2>
+                        <p class="text-stone-300 mt-3">
+                            The new background copy API needs one bounded operation manager per server. In the <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">Server</code> struct, add the manager beside the filesystem field:
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">fileOperations *FileOperationManager</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            In <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">New</code>, initialize it after the resource state and before returning the server. Then cancel outstanding work in <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">CleanupForDestroy</code> immediately after <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">s.CtxCancel()</code>.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">s.fileOperations = NewFileOperationManager(&amp;s)
+
+if s.fileOperations != nil {
+    s.fileOperations.CancelAll()
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">Add this accessor outside the constructor and cleanup functions:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">func (s *Server) FileOperations() *FileOperationManager {
+    return s.fileOperations
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-400 mt-3 text-sm">
+                            <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">server/file_operations.go</code> enforces the 64-operation per-server limit, cancellation, atomic counters, safe terminal errors, and roughly one progress event per second. Do not create a global manager shared by multiple servers.
+                        </p>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Edit server/events.go and router/websocket/listeners.go</h2>
+                        <p class="text-stone-300 mt-3">
+                            Add these constants to the server event list. They are the exact event names expected by compatible clients.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">OperationProgressEvent  = "operation progress"
+OperationErrorEvent     = "operation error"
+OperationCompletedEvent = "operation completed"</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Append all three constants to the allowed event slice in <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/websocket/listeners.go</code>. In the event forwarding branch, check for a string argument list before the existing string and byte cases:
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">if args, ok := websocketEventArgs(e.Data); ok {
+    message.Args = args
+} else if str, ok := e.Data.(string); ok {
+    message.Args = []string{str}
+} else if b, ok := e.Data.([]byte); ok {
+    message.Args = []string{string(b)}
+} else {
+    b, sendErr = json.Marshal(e.Data)
+    if sendErr == nil {
+        message.Args = []string{string(b)}
+    }
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">Finally, add this helper outside <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">listenForServerEvents</code>:</p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">func websocketEventArgs(data interface{}) ([]string, bool) {
+    values, ok := data.([]interface{})
+    if !ok {
+        return nil, false
+    }
+    args := make([]string, len(values))
+    for i, value := range values {
+        arg, ok := value.(string)
+        if !ok {
+            return nil, false
+        }
+        args[i] = arg
+    }
+    return args, true
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-400 mt-3 text-sm">
+                            Preserving multiple arguments is required: progress sends <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">[operation_id, JSON snapshot]</code>, errors send <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">[operation_id, safe message]</code>, and completion sends <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">[operation_id]</code>.
                         </p>
                     </div>
 
@@ -442,7 +990,7 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                             <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/websocket/websocket.go</code>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Find <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">func (h *Handler) HandleInbound(ctx context.Context, m Message) error</code>. Paste this after the non-auth token validation block and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">switch m.Event</code>.
+                            Find <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">func (h *Handler) HandleInbound(ctx context.Context, m Message) error</code>. Paste this after the non-auth token validation block and before <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">switch m.Event</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -453,9 +1001,15 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                             <div class="overflow-x-auto">
                                 <pre><code class="text-white text-sm">if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
     return err
+}
+if handled, err := h.HandleNativeFileCollaboration(ctx, m); handled {
+    return err
 }</code></pre>
                             </div>
                         </div>
+                        <p class="text-stone-300 mt-3">
+                            Also apply the <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/websocket/websocket.go</code> and <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">router/tokens/websocket.go</code> hunks from <a class="text-emerald-400 hover:text-emerald-300 underline" href="https://github.com/Tomaxikz/daemon/blob/develop/betterfiles.patch">betterfiles.patch</a>. They add disconnect cleanup, the bounded 32 KiB chunk frame limit, and optional trusted <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">user_name</code>/<code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">user_avatar</code> JWT claims used by the Wings-rs-compatible participant payload.
+                        </p>
                     </div>
 
                     <div class="border-t border-stone-600 mt-6 pt-5">
@@ -465,7 +1019,7 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                             <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/config/config.go</code>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Find <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">type SystemConfiguration struct</code>. Add this field near the other directory/config fields, for example after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">BackupDirectory</code>.
+                            Find <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">type SystemConfiguration struct</code>. Add this field near the other directory/config fields, for example after <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">BackupDirectory</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -474,11 +1028,12 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                                 </button>
                             </div>
                             <div class="overflow-x-auto">
-                                <pre><code class="text-white text-sm">FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`</code></pre>
+                                <pre><code class="text-white text-sm">FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
+FileCollaboration FileCollaborationConfiguration `json:"-" yaml:"file_collaboration"`</code></pre>
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Then add this type below the end of <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">SystemConfiguration</code>, outside of that struct.
+                            Then add this type below the end of <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">SystemConfiguration</code>, outside of that struct.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -495,7 +1050,27 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
     FileSizeCap         uint64 `default:"1048576" yaml:"file_size_cap"`
     PerFileDiskBudget   uint64 `default:"5242880" yaml:"per_file_disk_budget"`
     PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
+}
+
+type FileCollaborationConfiguration struct {
+    Enabled     bool   `default:"true" yaml:"enabled"`
+    FileSizeCap uint64 `default:"10485760" yaml:"file_size_cap"`
 }</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Native collaboration defaults to 10 MiB per file. Wings reports the effective byte limit through <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">/api/system/config</code>. To configure it explicitly, add this under <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">system</code> in <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">config.yml</code>:
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">file_collaboration:
+  enabled: true
+  file_size_cap: 10485760</code></pre>
                             </div>
                         </div>
                     </div>
@@ -507,7 +1082,7 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                             <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/router_server_files.go</code>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">putServerRenameFiles</code>, add this immediately after the successful <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">fs.Rename(pf, pt)</code> call and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">return nil</code>.
+                            In <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">putServerRenameFiles</code>, add this immediately after the successful <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">fs.Rename(pf, pt)</code> call and before <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">return nil</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -520,7 +1095,7 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">postServerDeleteFiles</code>, change the delete branch so it calls this after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">s.Filesystem().Delete(pi)</code> succeeds.
+                            In <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">postServerDeleteFiles</code>, change the delete branch so it calls this after <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">s.Filesystem().Delete(pi)</code> succeeds.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -533,7 +1108,7 @@ files.POST("/collaboration/revoke", postServerBetterFilesCollaborationRevoke)</c
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">postServerWriteFile</code>, add this after the <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">Missing Content-Length</code> check and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">s.Filesystem().Write</code>.
+                            In <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">postServerWriteFile</code>, add this after the <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">Missing Content-Length</code> check and before <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">s.Filesystem().Write</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -550,7 +1125,7 @@ if trackRevision {
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Then add this after <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">s.Filesystem().Write</code> succeeds and before <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">c.Status(http.StatusNoContent)</code>.
+                            Then add this after <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">s.Filesystem().Write</code> succeeds and before <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">c.Status(http.StatusNoContent)</code>.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -581,7 +1156,24 @@ if trackRevision {
                             <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm break-all">/usr/local/dev/wings/router/middleware/middleware.go</code>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            In <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">SetAccessControlHeaders</code>, keep the normal <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">Access-Control-Allow-Headers</code> line, then add this block directly after it. This is only for <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">/download/stream</code>.
+                            In <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">SetAccessControlHeaders</code>, replace the existing allow-methods and allow-headers lines with this block. Resumable uploads require <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">HEAD</code>, <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">PATCH</code>, and browser access to the offset headers.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">c.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS")
+c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
+if c.Request != nil &amp;&amp; c.Request.URL != nil &amp;&amp; c.Request.URL.Path == "/upload/file" {
+    c.Header("Access-Control-Expose-Headers", "Retry-After, Upload-Offset, X-Request-Id")
+}</code></pre>
+                            </div>
+                        </div>
+                        <p class="text-stone-300 mt-3">
+                            Keep the normal CORS flow, then add this block directly after the upload headers. It applies to both media streams and streamed directory archives.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -598,7 +1190,7 @@ if trackRevision {
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            In the same function, replace the existing private network CORS block with this version so the corrected header is only used by the stream route.
+                            In the same function, replace the existing private-network CORS block with this version so the corrected header is used by both streaming routes.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -617,7 +1209,7 @@ if trackRevision {
                             </div>
                         </div>
                         <p class="text-stone-300 mt-3">
-                            Add this helper below <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">SetAccessControlHeaders</code> and before the next middleware function.
+                            Add this helper below <code class="default-line bg-stone-900 rounded-lg px-2 py-1 text-sm">SetAccessControlHeaders</code> and before the next middleware function.
                         </p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
@@ -627,7 +1219,10 @@ if trackRevision {
                             </div>
                             <div class="overflow-x-auto">
                                 <pre><code class="text-white text-sm">func isStreamDownloadRequest(c *gin.Context) bool {
-    return c.Request != nil &amp;&amp; c.Request.URL != nil &amp;&amp; c.Request.URL.Path == "/download/stream"
+    if c.Request == nil || c.Request.URL == nil {
+        return false
+    }
+    return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
 }</code></pre>
                             </div>
                         </div>
@@ -635,7 +1230,7 @@ if trackRevision {
 
                     <div class="border-t border-stone-600 mt-6 pt-5">
                         <h2 class="text-white font-bold text-lg">Build and restart Wings</h2>
-                        <p class="text-stone-300 mt-3">Execute:</p>
+                        <p class="text-stone-300 mt-3">Format the touched packages, run the focused tests, and build the service before replacing the running binary:</p>
                         <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                             <div class="flex justify-end mb-2">
                                 <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
@@ -643,12 +1238,51 @@ if trackRevision {
                                 </button>
                             </div>
                             <div class="overflow-x-auto">
-                                <pre><code class="text-white text-sm">go build
+                                <pre><code class="text-white text-sm">go version  # must report go1.26.7 or newer
+gofmt -w router/*.go router/middleware/*.go router/websocket/*.go \
+  server/*.go server/filesystem/*.go config/*.go environment/docker/*.go
+go test ./router ./router/middleware ./router/websocket ./server ./server/filesystem
+go build -o wings .
 sudo systemctl stop wings
-sudo mv wings /usr/local/bin/wings
-sudo systemctl start wings</code></pre>
+sudo install -m 0755 ./wings /usr/local/bin/wings
+sudo systemctl start wings
+sudo systemctl is-active wings</code></pre>
                             </div>
                         </div>
+                        <p class="text-stone-400 mt-3 text-sm">
+                            If the host has a working C compiler, also run <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go test -race ./router ./router/middleware ./router/websocket ./server ./server/filesystem</code> before installing a release binary.
+                        </p>
+                    </div>
+
+                    <div class="border-t border-stone-600 mt-6 pt-5">
+                        <h2 class="text-white font-bold text-lg">Verify the new Better Files capabilities</h2>
+                        <p class="text-stone-300 mt-3">
+                            Query the public capability document and inspect the service log. Replace the URL if Wings listens on another address or uses TLS.
+                        </p>
+                        <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                            <div class="flex justify-end mb-2">
+                                <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                    <i class="fa-solid fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <pre><code class="text-white text-sm">curl -fsS "http://127.0.0.1:8080/openapi.json"
+sudo journalctl -u wings -n 100 --no-pager</code></pre>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">HEAD/PATCH /upload/file</code> — resumable uploads with offset checks, bounded concurrency, fail-fast file locking, and idle-body timeouts.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">GET /download/directory</code> — streamed <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">tar</code>, <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">tar_gz</code>, <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">tar_xz</code>, <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">tar_bz2</code>, <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">tar_zstd</code>, and <code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">zip</code>.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">POST /files/search</code> — structured V2 path, size, and content search.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">POST /files/copy-many</code> — foreground or cancellable background bulk copy.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">PUT /files/rename</code> — atomic no-overwrite mass rename.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">GET /files/largest-directories</code> — bounded disk-usage analysis.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">GET /files/fingerprints</code> — checksums and CurseForge fingerprints.</p>
+                            <p class="text-stone-300"><code class="bg-stone-900 rounded px-1 text-emerald-400 text-sm">DELETE /files/operations/:operation</code> — background-operation cancellation.</p>
+                        </div>
+                        <p class="text-amber-100 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-4">
+                            Upload, download, and server-file routes use signed tokens or Panel authentication. Verify those flows from Better Files in the Panel; do not treat an unauthenticated <code class="bg-stone-900 rounded-lg px-2 py-1 text-amber-200 text-sm">401</code>/<code class="bg-stone-900 rounded-lg px-2 py-1 text-amber-200 text-sm">403</code> from a copied route URL as an installation failure.
+                        </p>
                     </div>
                 </div>
             </div>

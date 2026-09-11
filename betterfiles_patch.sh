@@ -28,6 +28,7 @@ else
 fi
 
 SPINNER_PID=""
+BFM_UPLOAD_REFERENCE=""
 
 log() {
     printf '%s[betterfiles]%s %s\n' "$CYAN" "$RESET" "$*"
@@ -105,6 +106,9 @@ cleanup_spinner() {
     if [ -n "${SPINNER_PID:-}" ]; then
         kill "$SPINNER_PID" >/dev/null 2>&1 || true
         wait "$SPINNER_PID" 2>/dev/null || true
+    fi
+    if [ -n "$BFM_UPLOAD_REFERENCE" ]; then
+        rm -f -- "$BFM_UPLOAD_REFERENCE"
     fi
 }
 
@@ -202,6 +206,7 @@ fetch_file "router/router_file_operations.go" "router/router_file_operations.go"
 fetch_file "router/router_file_operations_test.go" "router/router_file_operations_test.go"
 fetch_file "router/router_openapi.go" "router/router_openapi.go"
 fetch_file "router/router_openapi_test.go" "router/router_openapi_test.go"
+fetch_file "router/router_upload_batch_test.go" "router/router_upload_batch_test.go"
 fetch_file "router/router_resumable_upload.go" "router/router_resumable_upload.go"
 fetch_file "router/router_resumable_upload_test.go" "router/router_resumable_upload_test.go"
 fetch_file "router/router_system_config.go" "router/router_system_config.go"
@@ -232,6 +237,14 @@ fetch_file "server/file_operations_test.go" "server/file_operations_test.go"
 fetch_file "server/file_history.go" "server/file_history.go"
 fetch_file "server/file_history_test.go" "server/file_history_test.go"
 fetch_file "server/filesystem/replace.go" "server/filesystem/replace.go"
+fetch_file "server/filesystem/upload.go" "server/filesystem/upload.go"
+fetch_file "server/filesystem/upload_test.go" "server/filesystem/upload_test.go"
+
+# Read the canonical upload implementation without overwriting unrelated routes.
+BFM_UPLOAD_REFERENCE="$(mktemp)"
+export BFM_UPLOAD_REFERENCE
+curl -fsSL --retry 3 --retry-delay 1 -o "$BFM_UPLOAD_REFERENCE" "${RAW_BASE%/}/router/router_server_files.go"
+gofmt -w "$BFM_UPLOAD_REFERENCE"
 
 section "Installing secure dependencies"
 backup_local_file "go.mod"
@@ -251,6 +264,7 @@ export BFM_COLOR_RED="$RED"
 export BFM_COLOR_CYAN="$CYAN"
 python3 - "$BACKUP_DIR" <<'PY'
 from pathlib import Path
+import hashlib
 import os
 import shutil
 import sys
@@ -1171,120 +1185,40 @@ insert_after(
     "X-File-Revision-Id",
     "file history write post-image",
 )
-replace_once(
-    "router/router_server_files.go",
-    '	if !ok || !token.HasScope(tokens.FileUpload) {\n',
-    '	if !ok || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {\n',
-    "token.IsUniqueRequest()",
-    "single-use upload token validation",
-)
-replace_once(
-    "router/router_server_files.go",
-    '	directory := c.Query("directory")\n',
-    '''\
-	directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))
-	if directory == "." {
-		directory = "/"
-	}
-''',
-    'directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))',
-    "upload directory normalization",
-)
-insert_after(
-    "router/router_server_files.go",
-    '	maxFileSize := config.Get().Api.UploadLimit\n',
-    '''\
-	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
-	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Upload limit is not configured correctly.",
-		})
-		return
-	}
-''',
-    "maxUploadLimitMB",
-    "upload limit validation",
-)
-replace_once(
-    "router/router_server_files.go",
-    '		if header.Size > maxFileSizeBytes {\n',
-    '		if header.Size < 0 || header.Size > maxFileSizeBytes {\n',
-    "header.Size < 0",
-    "negative upload size validation",
-)
-insert_after(
-    "router/router_server_files.go",
-    '''\
-		totalSize += header.Size
-''',
-    '''\
-		if totalSize > maxFileSizeBytes {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "Total upload size is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
-			})
-			return
-		}
-''',
-    "Total upload size is larger",
-    "total upload size validation",
-)
-insert_after(
-	    "router/router_server_files.go",
-	    '''\
-	for _, header := range headers {
-		// We run this in a different method so I can use defer without any of
-		// the consequences caused by calling it in a loop.
-''',
-	    '''\
-		filename, ok := cleanUploadFilename(header.Filename)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "Invalid upload filename.",
-			})
-			return
-		}
 
-		// We run this in a different method so I can use defer without any of
-		// the consequences caused by calling it in a loop.
-''',
-    "cleanUploadFilename(header.Filename)",
-    "upload filename validation",
-)
-replace_once(
-    "router/router_server_files.go",
-    "		if err := handleFileUpload(filepath.Join(directory, header.Filename), s, header); err != nil {\n",
-    "		if err := handleFileUpload(path.Join(directory, filename), s, header); err != nil {\n",
-    "path.Join(directory, filename)",
-    "safe upload target path",
-)
-replace_once(
-    "router/router_server_files.go",
-    '''\
-				"file":      header.Filename,
-				"directory": filepath.Clean(directory),
-''',
-    '''\
-				"file":      filename,
-				"directory": directory,
-''',
-    '"file":      filename',
-    "safe upload activity metadata",
-)
-insert_before(
-    "router/router_server_files.go",
-    "func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {\n",
-    '''\
-func cleanUploadFilename(name string) (string, bool) {
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\\`) {
-		return "", false
-	}
-	return name, true
+# Upgrade only the known upload tail; all other routes and revision hooks stay
+# in place. Unknown custom upload implementations require a reviewed merge.
+upload_path, upload_text = read_text("router/router_server_files.go")
+reference = Path(os.environ["BFM_UPLOAD_REFERENCE"]).read_text()
+marker = "const (\n\tmaxMultipartUploadFiles"
+if marker not in reference or "func multipartUploadTargets(" not in reference:
+    fail("downloaded upload reference does not contain folder batch support")
+replacement = reference[reference.index(marker):].rstrip() + "\n"
+start_marker = marker if marker in upload_text else "func postServerUploadFiles("
+if start_marker not in upload_text:
+    fail("could not find the multipart upload implementation")
+upload_start = upload_text.index(start_marker)
+old_tail = upload_text[upload_start:].rstrip() + "\n"
+supported_upload_tails = {
+    "156069f889ec7d4d9620fdbb62dad60612550d6182de894e4245fa1ef542079d",  # upstream 6987d5e
+    "48a9395f79ff7222c6ec5c2a3036058f7d3b4fcd0bb75a0358a01bfd1d731253",  # fork 60f5d30
+    "29bd47fe8a93d57490cc39391adfa89d530c2c728dd13fa49af2483722083620",  # previous addon-only patch
 }
+if old_tail != replacement and hashlib.sha256(old_tail.encode()).hexdigest() not in supported_upload_tails:
+    fail("custom multipart upload source differs from supported versions; review the folder batch patch")
+write_text(upload_path, upload_text, upload_text[:upload_start] + replacement, "folder batch uploads")
+_, upload_text = read_text("router/router_server_files.go")
+if "models." not in upload_text:
+    remove_once("router/router_server_files.go", '\t"github.com/pterodactyl/wings/internal/models"\n', "unused upload activity import")
+for import_path in ("encoding/json", "io/fs", "unicode/utf8", "github.com/pterodactyl/wings/internal/ufs"):
+    insert_after(
+        "router/router_server_files.go",
+        "import (\n",
+        '\t"' + import_path + '"\n',
+        '"' + import_path + '"',
+        "folder batch upload import " + import_path,
+    )
 
-''',
-    "func cleanUploadFilename",
-    "upload filename helper",
-)
 PY
 
 section "Formatting and building"
@@ -1309,6 +1243,7 @@ run_with_spinner "format Go files" gofmt -w \
     router/router_file_operations_test.go \
     router/router_openapi.go \
     router/router_openapi_test.go \
+    router/router_upload_batch_test.go \
     router/router_resumable_upload.go \
     router/router_resumable_upload_test.go \
     router/router_system_config.go \
@@ -1346,6 +1281,8 @@ run_with_spinner "format Go files" gofmt -w \
     server/file_history.go \
     server/file_history_test.go \
     server/filesystem/replace.go \
+    server/filesystem/upload.go \
+    server/filesystem/upload_test.go \
     server/server.go
 run_with_spinner "test Better Files packages" go test ./router ./router/middleware ./router/websocket ./server ./server/filesystem
 if [ "${BETTERFILES_RACE:-0}" = "1" ]; then

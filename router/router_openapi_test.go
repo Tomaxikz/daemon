@@ -44,4 +44,18 @@ func TestOpenAPIBetterFilesCapabilitiesMatchRuntimeMethods(t *testing.T) {
 	for _, status := range []string{"200", "408", "409", "413", "429"} {
 		require.Contains(t, responses, status)
 	}
+	post := document.Paths["/upload/file"]["post"].(map[string]interface{})
+	capability := post["x-betterfiles-folder-upload"].(map[string]interface{})
+	require.Equal(t, float64(1), capability["version"])
+	require.Equal(t, "paths", capability["paths_field"])
+	require.Equal(t, float64(maxMultipartUploadFiles), capability["max_files"])
+	content := post["requestBody"].(map[string]interface{})["content"].(map[string]interface{})
+	schema := content["multipart/form-data"].(map[string]interface{})["schema"].(map[string]interface{})
+	properties := schema["properties"].(map[string]interface{})
+	require.Contains(t, properties, "files")
+	require.Contains(t, properties, "paths")
+	postResponses := post["responses"].(map[string]interface{})
+	for _, status := range []string{"200", "400", "403", "404", "409", "413"} {
+		require.Contains(t, postResponses, status)
+	}
 }

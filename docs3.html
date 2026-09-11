@@ -59,10 +59,10 @@
                         <div>
                             <h2 class="text-emerald-100 font-bold text-lg">Recommended Wings install</h2>
                             <p class="text-emerald-100/90 mt-2">
-                                Use the pre-built Wings binary or apply the full patch file.
+                                Use the pre-built Wings binary for the lowest-conflict install. If you build from source, use the smart Better Console script for the most reliable automatic source patching.
                             </p>
                             <p class="text-emerald-100/90 mt-2">
-                                If you need Wings edits from other addons, apply this patch first or clone our daemon repo first, then add the other addon changes on top.
+                                Raw patch files and manual edits are fallback methods for source trees that need review or conflict resolution.
                             </p>
                         </div>
                     </div>
@@ -72,8 +72,17 @@
                     <button type="button" data-wings-tab="prebuilt" onclick="setWingsOption('prebuilt')" class="w-full md:w-auto bg-emerald-600 text-white font-bold px-4 py-2 rounded-md cursor-pointer transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="true" aria-controls="wings-prebuilt">
                         Pre-built
                     </button>
+                    <button type="button" data-wings-tab="script" onclick="setWingsOption('script')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-script">
+                        Smart script
+                    </button>
                     <button type="button" data-wings-tab="patch" onclick="setWingsOption('patch')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-patch">
-                        Patch file
+                        Full patch
+                    </button>
+                    <button type="button" data-wings-tab="betterconsole" onclick="setWingsOption('betterconsole')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-betterconsole">
+                        Better Console patch
+                    </button>
+                    <button type="button" data-wings-tab="manual" onclick="setWingsOption('manual')" class="w-full md:w-auto bg-stone-800 text-stone-300 font-bold px-4 py-2 rounded-md cursor-pointer hover:bg-stone-600 transition duration-200 focus:outline-none focus:ring-2 focus:ring-emerald-300" role="tab" aria-selected="false" aria-controls="wings-manual">
+                        Manual fallback
                     </button>
                 </div>
 
@@ -89,9 +98,10 @@
                         <div class="overflow-x-auto">
                             <pre><code class="text-white text-sm">sudo mkdir -p /etc/pterodactyl
 ARCH="$([[ "$(uname -m)" == "x86_64" ]] &amp;&amp; echo "amd64" || echo "arm64")"
-sudo curl -L -o /usr/local/bin/wings \
+curl -fL --retry 3 -o /tmp/wings \
   "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${ARCH}"
-sudo chmod u+x /usr/local/bin/wings
+file /tmp/wings
+sudo install -m 0755 /tmp/wings /usr/local/bin/wings
 sudo systemctl restart wings</code></pre>
                         </div>
                     </div>
@@ -101,10 +111,43 @@ sudo systemctl restart wings</code></pre>
                     </p>
                 </div>
 
-                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
-                    <h1 class="text-white font-bold text-xl">Apply the patch from the Wings root</h1>
+                <div id="wings-script" data-wings-panel="script" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Run the smart Better Console script</h1>
                     <p class="text-stone-300 mt-3">
-                        Run this inside the root folder of the Wings source repo, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                        Use this when you want to patch and build a Wings source tree yourself. The script downloads the Better Console daemon files, applies the required original-file edits by content anchors, skips edits that are already installed, formats the Go files, and builds Wings.
+                    </p>
+                    <p class="text-emerald-100 bg-emerald-500/10 border border-emerald-500/50 rounded-lg p-3 mt-3">
+                        Run this from the Wings source root, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>. This is more reliable than a raw patch file if your tree already has compatible edits.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-3 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -fL -o betterconsolepatch.sh \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/betterconsolepatch.sh"
+chmod +x betterconsolepatch.sh
+./betterconsolepatch.sh</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Script file:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/betterconsolepatch.sh">https://github.com/Tomaxikz/daemon/blob/develop/betterconsolepatch.sh</a>
+                    </p>
+                    <p class="text-stone-400 mt-2 text-sm">
+                        The script writes backups under <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">.tomaxikz-betterconsole-backups</code> when it changes an existing file. If it stops with an error, it found a source shape that needs manual review instead of guessing.
+                    </p>
+                </div>
+
+                <div id="wings-patch" data-wings-panel="patch" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Apply the full Tomaxikz patch from the Wings root</h1>
+                    <p class="text-stone-300 mt-3">
+                        Use this for all daemon features. Run it only inside a clean original Pterodactyl Wings source repo, in the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                    </p>
+                    <p class="text-amber-200 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-3">
+                        Do not use this if this source tree already had our Wings edits before. Git patches are not incremental installers; they can fail if files already exist or were changed by another addon.
                     </p>
                     <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
                         <div class="flex justify-end mb-2">
@@ -113,12 +156,12 @@ sudo systemctl restart wings</code></pre>
                             </button>
                         </div>
                         <div class="overflow-x-auto">
-                            <pre><code class="text-white text-sm">curl -L -o tomaxikz.patch \
+                            <pre><code class="text-white text-sm">curl -fL -o tomaxikz.patch \
   "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/tomaxikz.patch"
-git apply tomaxikz.patch
+git apply --3way tomaxikz.patch
 go build
 sudo systemctl stop wings
-sudo mv wings /usr/local/bin/wings
+sudo install -m 0755 wings /usr/local/bin/wings
 sudo systemctl start wings</code></pre>
                         </div>
                     </div>
@@ -126,6 +169,662 @@ sudo systemctl start wings</code></pre>
                         Patch file:
                         <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch">https://github.com/Tomaxikz/daemon/blob/develop/tomaxikz.patch</a>
                     </p>
+                </div>
+
+                <div id="wings-betterconsole" data-wings-panel="betterconsole" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Apply only the Better Console Wings patch</h1>
+                    <p class="text-stone-300 mt-3">
+                        Use this when you only need Better Console daemon changes and do not want the full Tomaxikz Wings feature set. Run it from the Wings source root, the same folder that contains <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code>.
+                    </p>
+                    <p class="text-amber-200 bg-amber-500/10 border border-amber-500/50 rounded-lg p-3 mt-3">
+                        Apply this before other addon patches when possible. If another addon already changed the same files, use the manual fallback below.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -fL -o betterconsole.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/betterconsole.patch"
+git apply --3way betterconsole.patch
+go build
+sudo systemctl stop wings
+sudo install -m 0755 wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        Patch file:
+                        <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/betterconsole.patch">https://github.com/Tomaxikz/daemon/blob/develop/betterconsole.patch</a>
+                    </p>
+                </div>
+
+                <div id="wings-manual" data-wings-panel="manual" class="bg-stone-700 rounded-lg p-4 min-w-0" role="tabpanel" hidden>
+                    <h1 class="text-white font-bold text-xl">Manual fallback for Better Console Wings edits</h1>
+                    <p class="text-stone-300 mt-3">
+                        Use this only when both patch options conflict with another addon. Let Git apply every hunk it can, then manually fix only the rejected hunks instead of pasting every edit by hand.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">curl -fL -o betterconsole.patch \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/betterconsole.patch"
+git apply --reject --whitespace=nowarn betterconsole.patch || true
+find . -name "*.rej" -print
+go build</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-300 mt-3">
+                        If <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">find</code> prints no <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">.rej</code> files and <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">go build</code> passes, install the built Wings binary. If rejects exist, open only those <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">.rej</code> files and use the advanced paste map below as a reference.
+                    </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">gofmt -w config/config.go environment/docker/container.go server/install.go server/listeners.go router/websocket/listeners.go router/websocket/websocket.go router/websocket/betterconsole_events.go server/betterconsole_events.go sftp/server.go
+go build
+sudo systemctl stop wings
+sudo install -m 0755 wings /usr/local/bin/wings
+sudo systemctl start wings</code></pre>
+                        </div>
+                    </div>
+                    <details class="bg-stone-800 rounded-lg p-3 mt-4">
+                        <summary class="text-white font-bold cursor-pointer">Advanced paste map for rejected hunks</summary>
+                        <p class="text-stone-300 mt-3 text-sm">
+                            Use this section only when <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">git apply --reject</code> creates <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400 text-sm">.rej</code> files. Most installs should not need these manual snippets.
+                        </p>
+                    <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                        <div class="flex justify-end mb-2">
+                            <button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm">
+                                <i class="fa-solid fa-copy"></i> Copy
+                            </button>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <pre><code class="text-white text-sm">mkdir -p environment/docker server sftp router/websocket
+curl -fL -o environment/docker/betterconsole_pull_progress.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/environment/docker/betterconsole_pull_progress.go"
+curl -fL -o environment/docker/betterconsole_pull_progress_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/environment/docker/betterconsole_pull_progress_test.go"
+curl -fL -o server/betterconsole_pull_progress.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/betterconsole_pull_progress.go"
+curl -fL -o server/betterconsole_events.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/betterconsole_events.go"
+curl -fL -o server/betterconsole_pull_progress_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/server/betterconsole_pull_progress_test.go"
+curl -fL -o router/websocket/betterconsole_events.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/betterconsole_events.go"
+curl -fL -o router/websocket/listeners_test.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/router/websocket/listeners_test.go"
+curl -fL -o sftp/betterconsole_shell.go \
+  "https://raw.githubusercontent.com/Tomaxikz/daemon/develop/sftp/betterconsole_shell.go"</code></pre>
+                        </div>
+                    </div>
+                    <p class="text-stone-400 mt-3 text-sm">
+                        The test files are not needed for runtime, but they keep <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go test ./...</code> aligned with our patched Wings tree. Better Console does not require <code class="bg-stone-900 rounded-lg px-2 py-1 text-emerald-400 text-sm">go.mod</code> edits.
+                    </p>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
+                        <div class="bg-stone-800 rounded-lg p-3">
+                            <h2 class="text-white font-bold">Core files to edit</h2>
+                            <ul class="text-stone-300 mt-2 space-y-2 text-sm">
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">config/config.go</code>: add <code class="text-emerald-400">SftpConfiguration.Shell</code> and the <code class="text-emerald-400">SftpShellConfiguration</code> type.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">environment/docker/container.go</code>: replace Docker pull status parsing with <code class="text-emerald-400">betterConsoleDockerPullProgress</code>.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">server/betterconsole_events.go</code>: downloaded file that provides the image pull event constants.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">server/install.go</code>: publish image pull progress while installer images are pulled.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">server/listeners.go</code>: forward Docker image pull events to the server event stream.</li>
+                            </ul>
+                        </div>
+                        <div class="bg-stone-800 rounded-lg p-3">
+                            <h2 class="text-white font-bold">Websocket and SFTP edits</h2>
+                            <ul class="text-stone-300 mt-2 space-y-2 text-sm">
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">router/websocket/betterconsole_events.go</code>: downloaded file that lists Better Console websocket events and the install-output permission predicate.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">router/websocket/listeners.go</code>: call the downloaded event list, block unknown internal events, and only subscribe to install output when the websocket token has install-output permission.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">router/websocket/websocket.go</code>: call the downloaded permission predicate for install output and image pull events.</li>
+                                <li><code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">sftp/server.go</code>: add shell request handling and call <code class="text-emerald-400">serveBetterConsoleCli</code> when <code class="text-emerald-400">system.sftp.shell.enabled</code> is true.</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <p class="text-stone-300 mt-4">
+                        Use <a class="text-emerald-400 hover:text-emerald-300 underline break-all" href="https://github.com/Tomaxikz/daemon/blob/develop/betterconsole.patch">betterconsole.patch</a> as the exact reference for those hunks. Manual mode is for conflict resolution; if this feels unclear, use the pre-built binary instead.
+                    </p>
+                    <p class="text-stone-300 mt-2 text-sm">
+                        Open each file below, paste the shown code at the described location, and skip any block that is already present.
+                    </p>
+
+                    <div class="space-y-3 mt-4">
+                        <details class="bg-stone-800 rounded-lg p-3">
+                            <summary class="text-white font-bold cursor-pointer">config/config.go</summary>
+                            <p class="text-stone-300 mt-3 text-sm">Inside <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">type SftpConfiguration struct</code>, paste this after <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ReadOnly</code>. Then paste the new type right after the struct.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original block:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">type SftpConfiguration struct {
+    // The bind address of the SFTP server.
+    Address string `default:"0.0.0.0" json:"bind_address" yaml:"bind_address"`
+    // The bind port of the SFTP server.
+    Port int `default:"2022" json:"bind_port" yaml:"bind_port"`
+    // If set to true, no write actions will be allowed on the SFTP server.
+    ReadOnly bool `default:"false" yaml:"read_only"`
+}
+
+// ApiConfiguration defines the configuration for the internal API that is
+// exposed by the Wings webserver.</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Paste the field before the closing brace:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">// Shell controls the optional interactive SSH shell exposed through the SFTP listener.
+Shell SftpShellConfiguration `yaml:"shell"`</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Then paste this new type between <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">SftpConfiguration</code> and <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ApiConfiguration</code>:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+<div class="overflow-x-auto"><pre><code class="text-white text-sm">type SftpShellConfiguration struct {
+    // Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
+    Enabled bool `default:"true" yaml:"enabled"`
+}</code></pre></div>
+                            </div>
+                        </details>
+
+                        <details class="bg-stone-800 rounded-lg p-3">
+                            <summary class="text-white font-bold cursor-pointer">environment/docker/container.go</summary>
+                            <p class="text-stone-300 mt-3 text-sm">Remove this import if it exists:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">"github.com/buger/jsonparser"</code></pre></div>
+                            </div>
+                            <p class="text-stone-300 mt-3 text-sm">Inside <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ensureImageExists</code>, remove the old start/completed publish lines at the top of the function if present, then replace the image-pull result handling and scanner block with this shape.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original part near the top of <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ensureImageExists</code> and remove it from there:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">func (e *Environment) ensureImageExists(img string) error {
+    e.Events().Publish(environment.DockerImagePullStarted, "")
+    defer e.Events().Publish(environment.DockerImagePullCompleted, "")
+
+    // Images prefixed with a ~ are local images that we do not need to try and pull.</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Then find this original pull/scanner block:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">out, err := e.client.ImagePull(ctx, img, imagePullOptions)
+if err != nil {
+    images, ierr := e.client.ImageList(ctx, image.ListOptions{})
+    if ierr != nil {
+        return errors.Wrap(ierr, "environment/docker: failed to list images")
+    }
+
+    // existing local-image fallback stays here
+
+    return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", img)
+}
+defer out.Close()
+
+log.WithField("image", img).Debug("pulling docker image... this could take a bit of time")
+scanner := bufio.NewScanner(out)
+
+for scanner.Scan() {
+    b := scanner.Bytes()
+    status, _ := jsonparser.GetString(b, "status")
+    progress, _ := jsonparser.GetString(b, "progress")
+
+    e.Events().Publish(environment.DockerImagePullStatus, status+" "+progress)
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Replace that pull/scanner block with this:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">out, err := e.client.ImagePull(ctx, img, imagePullOptions)
+safeImage := betterConsoleDockerPullSafeImageRef(img)
+if err != nil {
+    images, ierr := e.client.ImageList(ctx, image.ListOptions{})
+    if ierr != nil {
+        return errors.Wrap(ierr, "environment/docker: failed to list images")
+    }
+
+    for _, img2 := range images {
+        for _, t := range img2.RepoTags {
+            if t != img {
+                continue
+            }
+
+            log.WithFields(log.Fields{
+                "image":        safeImage,
+                "container_id": e.Id,
+                "err":          err.Error(),
+            }).Warn("unable to pull requested image from remote source, however the image exists locally")
+            return nil
+        }
+    }
+
+    return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", safeImage)
+}
+defer out.Close()
+
+e.Events().Publish(environment.DockerImagePullStarted, "")
+defer e.Events().Publish(environment.DockerImagePullCompleted, "")
+
+log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
+scanner := bufio.NewScanner(out)
+
+for scanner.Scan() {
+    if payload := betterConsoleDockerPullProgress(img, scanner.Bytes()); payload != "" {
+        e.Events().Publish(environment.DockerImagePullStatus, payload)
+    }
+}
+
+if err := scanner.Err(); err != nil {
+    return err
+}
+
+log.WithField("image", safeImage).Debug("completed docker image pull")</code></pre></div>
+                            </div>
+                        </details>
+
+                        <details class="bg-stone-800 rounded-lg p-3">
+                            <summary class="text-white font-bold cursor-pointer">server/install.go</summary>
+                            <p class="text-stone-300 mt-3 text-sm">In <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">pullInstallationImage</code>, add <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">safeImage</code> after <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ImagePull</code>, use it in image logs, and replace the pull scanner loop with this.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original line in <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">pullInstallationImage</code>:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">r, err := ip.client.ImagePull(ip.Server.Context(), ip.Script.ContainerImage, imagePullOptions)
+if err != nil {</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Add this between those two lines, then use <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">safeImage</code> in the pull logs:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">safeImage := betterConsoleDockerPullSafeImageRef(ip.Script.ContainerImage)</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original scanner block:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">log.WithField("image", ip.Script.ContainerImage).Debug("pulling docker image... this could take a bit of time")
+
+// Block continuation until the image has been pulled successfully.
+scanner := bufio.NewScanner(r)
+for scanner.Scan() {
+    log.Debug(scanner.Text())
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Replace it with this:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
+ip.Server.Events().Publish(ImagePullStartedEvent, "")
+defer ip.Server.Events().Publish(ImagePullCompletedEvent, "")
+
+scanner := bufio.NewScanner(r)
+for scanner.Scan() {
+    log.Debug(betterConsoleDockerPullSafeText(scanner.Text()))
+    payload := betterConsoleDockerPullProgress(ip.Script.ContainerImage, scanner.Bytes())
+    if payload != "" {
+        ip.Server.Events().Publish(ImagePullProgressEvent, payload)
+    }
+    if line := betterConsoleDockerPullInstallLine(scanner.Bytes()); line != "" {
+        ip.Server.Sink(system.InstallSink).Push([]byte(line))
+    }
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-300 mt-3 text-sm">In <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">StreamOutput</code>, replace <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">system.ScanReader(...)</code> with:</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original line:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">err = system.ScanReader(reader, ip.Server.Sink(system.InstallSink).Push)</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Replace it with:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">err = ip.streamRawInstallOutput(reader)</code></pre></div>
+                            </div>
+                            <p class="text-stone-300 mt-3 text-sm">Then paste this function below <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">StreamOutput</code>.</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">func (ip *InstallationProcess) streamRawInstallOutput(reader io.Reader) error {
+    buf := make([]byte, 4096)
+    for {
+        n, err := reader.Read(buf)
+        if n > 0 {
+            chunk := make([]byte, n)
+            copy(chunk, buf[:n])
+            ip.Server.Sink(system.InstallSink).Push(chunk)
+        }
+        if err != nil {
+            if errors.Is(err, io.EOF) {
+                return nil
+            }
+
+            return err
+        }
+    }
+}</code></pre></div>
+                            </div>
+                        </details>
+
+                        <details class="bg-stone-800 rounded-lg p-3">
+                            <summary class="text-white font-bold cursor-pointer">server/listeners.go</summary>
+                            <p class="text-stone-300 mt-3 text-sm">Remove the old <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">dockerEvents</code> variable if it exists. Then replace the Docker image pull cases in <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">StartEventListeners</code> with this.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find these original cases inside the <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">switch e.Topic</code> block:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">case environment.DockerImagePullStatus:
+    s.Events().Publish(InstallOutputEvent, e.Data)
+case environment.DockerImagePullStarted:
+    s.PublishConsoleOutputFromDaemon("Pulling Docker container image, this could take a few minutes to complete...")
+case environment.DockerImagePullCompleted:
+    s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Replace those cases with:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">case environment.DockerImagePullStatus:
+    s.Events().Publish(ImagePullProgressEvent, e.Data)
+    if str, ok := e.Data.(string); ok {
+        if line := betterConsoleDockerPullInstallLine([]byte(str)); line != "" {
+            s.Sink(system.LogSink).Push([]byte(line))
+        }
+    }
+case environment.DockerImagePullStarted:
+    s.Events().Publish(ImagePullStartedEvent, "")
+    s.PublishConsoleOutputFromDaemon("Pulling Docker container image, this could take a few minutes to complete...")
+case environment.DockerImagePullCompleted:
+    s.Events().Publish(ImagePullCompletedEvent, "")
+    s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")</code></pre></div>
+                            </div>
+                        </details>
+
+                        <details class="bg-stone-800 rounded-lg p-3">
+                            <summary class="text-white font-bold cursor-pointer">router/websocket/listeners.go and websocket.go</summary>
+                            <p class="text-stone-300 mt-3 text-sm">The downloaded <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">router/websocket/betterconsole_events.go</code> file owns the Better Console event list and permission helper. The original websocket files only need the hooks below.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">In <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">listeners.go</code>, add <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">strings</code> to imports:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">import (
+    "context"
+    "encoding/json"
+    "sync"
+    "time"
+)</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Change the event list from this:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">var e = []string{
+    server.StatsEvent,
+    server.StatusEvent,
+    server.ConsoleOutputEvent,
+    server.InstallOutputEvent,
+    server.InstallStartedEvent,
+    server.InstallCompletedEvent,
+    server.DaemonMessageEvent,</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">To this, so it appends the downloaded Better Console event list:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">var e = append([]string{
+    server.StatsEvent,
+    server.StatusEvent,
+    server.ConsoleOutputEvent,
+    server.InstallOutputEvent,
+    server.InstallStartedEvent,
+    server.InstallCompletedEvent,
+    server.DaemonMessageEvent,
+    server.BackupCompletedEvent,
+    server.BackupRestoreCompletedEvent,
+    server.TransferLogsEvent,
+    server.TransferStatusEvent,
+}, betterConsoleListenerEvents...)
+
+var allowedServerEvents = func() map[string]struct{} {
+    events := make(map[string]struct{}, len(e))
+    for _, event := range e {
+        events[event] = struct{}{}
+    }
+    return events
+}()</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">In <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">listenForServerEvents</code>, replace the original sink setup:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">eventChan := make(chan []byte)
+logOutput := make(chan []byte, 8)
+installOutput := make(chan []byte, 4)
+
+h.server.Events().On(eventChan)
+h.server.Sink(system.LogSink).On(logOutput)
+h.server.Sink(system.InstallSink).On(installOutput)</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">With this permission-aware setup:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">canReceiveInstall := false
+if jwt := h.GetJwt(); jwt != nil {
+    canReceiveInstall = jwt.HasPermission(PermissionReceiveInstall)
+}
+
+h.server.Events().On(eventChan)
+h.server.Sink(system.LogSink).On(logOutput)
+if canReceiveInstall {
+    h.server.Sink(system.InstallSink).On(installOutput)
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">After <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">events.DecodeTo</code> succeeds, guard unknown event topics:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">if _, ok := allowedServerEvents[e.Topic]; !ok &amp;&amp; !strings.HasPrefix(e.Topic, server.BackupCompletedEvent+":") {
+    continue
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">At the cleanup section near the bottom of <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">listenForServerEvents</code>, replace the unconditional install sink removal with:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">if canReceiveInstall {
+    h.server.Sink(system.InstallSink).Off(installOutput)
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">In <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">websocket.go</code>, replace the original install-output permission check:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">if v.Event == server.InstallOutputEvent {
+    if !j.HasPermission(PermissionReceiveInstall) {
+        return nil
+    }
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">With the downloaded helper call:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">if isBetterConsoleInstallOutputEvent(v.Event) {
+    if !j.HasPermission(PermissionReceiveInstall) {
+        return nil
+    }
+}</code></pre></div>
+                            </div>
+                        </details>
+
+                        <details class="bg-stone-800 rounded-lg p-3">
+                            <summary class="text-white font-bold cursor-pointer">sftp/server.go</summary>
+                            <p class="text-stone-300 mt-3 text-sm">Add <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">time</code> to imports. Then paste these near the existing username regex and server types.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find the original imports and add <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">time</code> after <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">strings</code>:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">import (
+    "context"
+    "crypto/rand"
+    "crypto/x509"
+    "encoding/pem"
+    "io"
+    "net"
+    "os"
+    "path"
+    "regexp"
+    "strconv"
+    "strings"
+)</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original area:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">var validUsernameRegexp = regexp.MustCompile(`^(?i)(.+)\.([a-z0-9]{8})$`)
+
+//goland:noinspection GoNameStartsWithPackageName
+type SFTPServer struct {</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Paste these between the username regex and <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">type SFTPServer struct</code>:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">const sshHandshakeTimeout = 10 * time.Second</code></pre></div>
+                            </div>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">type sshPtyRequest struct {
+    Term   string
+    Cols   uint32
+    Rows   uint32
+    Width  uint32
+    Height uint32
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-300 mt-3 text-sm">In <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">AcceptInbound</code>, set a handshake deadline before <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ssh.NewServerConn</code> and clear it after. Keep the global <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">go ssh.DiscardRequests(reqs)</code> line, but replace the old per-session request discard and direct <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">c.Handle(...)</code> block with <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">go c.handleSession(...)</code>.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find the original handshake block:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">// Before beginning a handshake must be performed on the incoming net.Conn
+sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
+if err != nil {
+    return errors.WithStack(err)
+}
+defer sconn.Close()
+go ssh.DiscardRequests(reqs)</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Replace only the <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">ssh.NewServerConn</code> part with this, then keep <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">defer sconn.Close()</code> and <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">go ssh.DiscardRequests(reqs)</code> below it:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
+sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
+if err != nil {
+    return errors.WithStack(err)
+}
+_ = conn.SetDeadline(time.Time{})</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find this original per-session block inside the channel loop:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">go func(in &lt;-chan *ssh.Request) {
+    for req := range in {
+        ok := req.Type == "subsystem" &amp;&amp; len(req.Payload) &gt;= 4 &amp;&amp; string(req.Payload[4:]) == "sftp"
+        _ = req.Reply(ok, nil)
+    }
+}(requests)
+
+if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
+    if err := c.Handle(sconn, srv, channel); err != nil {
+        return err
+    }
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Replace that whole block with:</p>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">if srv, ok := c.manager.Get(sconn.Permissions.Extensions["uuid"]); ok {
+    go c.handleSession(sconn, srv, channel, requests)
+} else {
+    _ = channel.Close()
+}</code></pre></div>
+                            </div>
+                            <p class="text-stone-300 mt-3 text-sm">Paste these two functions before <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">generateED25519PrivateKey</code>.</p>
+                            <p class="text-stone-400 mt-3 text-sm font-semibold">Find the end of <code class="bg-stone-900 rounded px-2 py-1 text-emerald-400">Handle</code>; paste the functions after it and before this comment:</p>
+                            <div class="code-block bg-stone-950 rounded-lg p-3 mt-2 border-l-4 border-stone-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">return nil
+}
+
+// Generates a new ED25519 private key that is used for host authentication when
+// a user connects to the SFTP server.
+func (c *SFTPServer) generateED25519PrivateKey() error {</code></pre></div>
+                            </div>
+                            <div class="code-block bg-stone-900 rounded-lg p-3 mt-2 border-l-4 border-emerald-500">
+                                <div class="flex justify-end mb-2"><button onclick="copyButton(this)" class="bg-stone-700 text-white px-3 py-1 rounded cursor-pointer hover:bg-stone-600 transition duration-200 text-sm"><i class="fa-solid fa-copy"></i> Copy</button></div>
+                                <div class="overflow-x-auto"><pre><code class="text-white text-sm">func (c *SFTPServer) handleSession(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests &lt;-chan *ssh.Request) {
+    var requestedPty sshPtyRequest
+
+    for req := range requests {
+        switch req.Type {
+        case "subsystem":
+            ok := len(req.Payload) &gt;= 4 &amp;&amp; string(req.Payload[4:]) == "sftp"
+            _ = req.Reply(ok, nil)
+            if ok {
+                if err := c.Handle(conn, srv, channel); err != nil {
+                    srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle session")
+                }
+                return
+            }
+        case "pty-req":
+            ok := config.Get().System.Sftp.Shell.Enabled
+            if ok {
+                handler, err := NewHandler(conn, srv)
+                ok = err == nil &amp;&amp; handler.can("control.console")
+                if ok {
+                    _ = ssh.Unmarshal(req.Payload, &amp;requestedPty)
+                }
+            }
+            _ = req.Reply(ok, nil)
+        case "shell":
+            ok := config.Get().System.Sftp.Shell.Enabled
+            if ok {
+                handler, err := NewHandler(conn, srv)
+                if err != nil || !handler.can("control.console") {
+                    _ = req.Reply(false, nil)
+                    _ = channel.Close()
+                    return
+                }
+                _ = req.Reply(true, nil)
+                if err := c.HandleShell(conn, srv, channel, requests, requestedPty, handler); err != nil {
+                    srv.Log().WithField("user", conn.User()).WithError(err).Warn("sftp: failed to handle shell session")
+                }
+                return
+            }
+            _ = req.Reply(false, nil)
+        default:
+            _ = req.Reply(false, nil)
+        }
+    }
+
+    _ = channel.Close()
+}
+
+func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests &lt;-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
+    defer channel.Close()
+
+    if !handler.can("control.console") {
+        _, _ = io.WriteString(channel, "Permission denied: control.console\r\n")
+        return nil
+    }
+
+    go func() {
+        for req := range requests {
+            if req.WantReply {
+                _ = req.Reply(false, nil)
+            }
+        }
+    }()
+
+    c.serveBetterConsoleCli(channel, srv, handler, conn.RemoteAddr().String())
+
+    return nil
+}</code></pre></div>
+                            </div>
+                        </details>
+                    </div>
+                    </details>
                 </div>
             </div>
         </div>

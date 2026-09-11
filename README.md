@@ -44,6 +44,71 @@ I would like to extend my sincere thanks to the following sponsors for helping f
 
 ## Documentation
 
+### Multipart folder uploads (Better Files)
+
+`POST /upload/file` accepts the existing signed upload URL and `directory` query
+parameter. A request without a `paths` field keeps the normal flat-upload behavior.
+Resumable `HEAD`/`PATCH` uploads keep their existing contract.
+
+Folder batches add **one multipart text field named `paths`**, containing a JSON
+array of relative paths. Its entries match the repeated `files` parts **in order**.
+The field may appear before or after the file parts. Do not rely on a filename such
+as `mods/a/config.yml`: Go's multipart parser strips its directory components.
+
+```javascript
+const form = new FormData();
+form.append('files', firstConfigFile, 'config.yml');
+form.append('files', secondConfigFile, 'config.yml');
+form.append('paths', JSON.stringify(['mods/a/config.yml', 'mods/b/config.yml']));
+
+const url = new URL(signedUploadUrl);
+url.searchParams.set('directory', '/uploads');
+await fetch(url, { method: 'POST', body: form });
+// Let the browser supply Content-Type and its multipart boundary.
+```
+
+This writes `/uploads/mods/a/config.yml` and `/uploads/mods/b/config.yml`. Missing
+parent directories are created with server ownership. Paths use `/`, are relative
+to `directory`, and must have the same basename as the corresponding file part.
+They must not contain empty, `.` or `..` components, backslashes, NUL, a leading
+slash, or a Windows drive prefix. Paths are literal JSON strings, not URL-encoded
+values. Invalid UTF-8, paths over 4096 bytes, components over 255 bytes, duplicate
+destinations, and file/directory conflicts are rejected. Duplicate basenames in
+different directories are supported.
+
+Folder batches accept at most **512 files per request**. File bytes must fit both
+the configured upload limit (per file and in total) and the server's disk quota.
+The HTTP body is additionally bounded by the upload limit plus 8 MiB for multipart
+metadata. The client-supplied `total_size` does not override these checks. Ignored
+files and directories are enforced, and writes refuse symlinks, hardlinks and
+non-regular targets. Disk growth is reserved before overwriting each file.
+
+Use **one fresh single-use upload token for the entire POST request**. Tokens are
+consumed even when validation fails; never reuse one for a retry or for resumable
+uploads. Success remains an empty `200` response. Invalid input/limits return
+`400`, denied paths `403`, unavailable/consumed tokens `404`, an active same-file
+upload `409`, and an oversized HTTP body `413`. Batch writes are not transactional:
+validation is performed before writing, but a runtime failure may leave earlier
+files written. Retry with a fresh token after inspecting the error.
+
+BFM must detect support from `GET /openapi.json` before sending `paths`:
+
+```javascript
+const support = openapi.paths?.['/upload/file']?.post?.['x-betterfiles-folder-upload'];
+const canUploadFolders = support?.version === 1 && support.paths_field === 'paths';
+// support.max_files is 512; split larger selections into separate requests/tokens.
+```
+
+Checking for `POST /upload/file` alone is insufficient: older Wings versions may
+ignore `paths` and flatten the batch. If the capability is absent, keep the
+existing per-directory multipart uploads or per-file resumable uploads.
+
+Source installations can use `betterfiles_patch.sh`, `betterfiles.patch`, or the
+full `tomaxikz.patch`, then rebuild and replace Wings. The smart installer updates
+recognized upload implementations in place; custom upload modifications require
+a reviewed merge. The new supporting files are `server/filesystem/upload.go`,
+`server/filesystem/upload_test.go`, and `router/router_upload_batch_test.go`.
+
 * [Panel Documentation](https://pterodactyl.io/panel/1.0/getting_started.html)
 * [Wings Documentation](https://pterodactyl.io/wings/1.0/installing.html)
 * [Community Guides](https://pterodactyl.io/community/about.html)

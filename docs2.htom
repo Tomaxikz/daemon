@@ -280,9 +280,10 @@ php artisan optimize</code></pre>
                         <div class="overflow-x-auto">
                             <pre><code class="text-white text-sm">sudo mkdir -p /etc/pterodactyl
 ARCH="$([[ "$(uname -m)" == "x86_64" ]] &amp;&amp; echo "amd64" || echo "arm64")"
-sudo curl -L -o /usr/local/bin/wings \
+curl -fL --retry 3 -o /tmp/wings \
   "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${ARCH}"
-sudo chmod u+x /usr/local/bin/wings
+file /tmp/wings
+sudo install -m 0755 /tmp/wings /usr/local/bin/wings
 sudo systemctl restart wings</code></pre>
                         </div>
                     </div>
@@ -370,6 +371,7 @@ curl -L -o environment/docker/client_accessor.go \
                                 <pre><code class="text-white text-sm">git := server.Group("/git")
 {
     git.GET("/status", getServerGitStatus)
+    git.POST("/install", postServerGitInstall)
     git.POST("/clone", postServerGitClone)
     git.POST("/pull", postServerGitPull)
     git.POST("/diff", postServerGitDiff)

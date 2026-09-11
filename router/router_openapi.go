@@ -17,6 +17,21 @@ func getOpenAPI(c *gin.Context) {
 		}
 		return gin.H{"summary": summary, "responses": responses}
 	}
+	multipartUpload := operation("Upload flat files or a folder batch using multipart form data", "200", "400", "403", "404", "409", "413", "500")
+	multipartUpload["x-betterfiles-folder-upload"] = gin.H{
+		"version": 1, "paths_field": "paths", "max_files": maxMultipartUploadFiles,
+	}
+	multipartUpload["description"] = "Uses the existing signed upload URL and directory query parameter. Optional paths is one JSON string array in a multipart text field, matched to files parts in order. Paths are canonical relative paths, not URL-encoded; each basename must match its files part. Without paths, filenames remain flat. One single-use token authorizes the whole request, including failures. Invalid manifests/paths/limits are preflighted; runtime failures may leave earlier files written, so obtain a fresh token before retrying."
+	multipartUpload["requestBody"] = gin.H{
+		"required": true,
+		"content": gin.H{"multipart/form-data": gin.H{"schema": gin.H{
+			"type": "object", "required": []string{"files"},
+			"properties": gin.H{
+				"files": gin.H{"type": "array", "minItems": 1, "items": gin.H{"type": "string", "format": "binary"}},
+				"paths": gin.H{"type": "string", "description": "Optional JSON array with exactly one relative path for each files part, in the same order.", "example": `["mods/a/config.yml","mods/b/config.yml"]`},
+			},
+		}}},
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"openapi": "3.1.0",
@@ -26,7 +41,7 @@ func getOpenAPI(c *gin.Context) {
 		},
 		"paths": gin.H{
 			"/upload/file": gin.H{
-				"post":  operation("Upload files using multipart form data", "200"),
+				"post":  multipartUpload,
 				"head":  operation("Read the current resumable upload offset", "200", "404"),
 				"patch": operation("Append a resumable upload chunk", "200", "408", "409", "413", "429"),
 			},
@@ -68,6 +83,8 @@ func statusCode(value string) int {
 		return http.StatusBadRequest
 	case "404":
 		return http.StatusNotFound
+	case "403":
+		return http.StatusForbidden
 	case "408":
 		return http.StatusRequestTimeout
 	case "409":

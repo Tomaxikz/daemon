@@ -28,9 +28,9 @@ func TestResumableUploadBehavior(t *testing.T) {
 	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 	token := signBetterFilesUploadToken(t, s.ID())
 	var activities atomic.Int64
-	previousActivity := saveResumableUploadActivity
-	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) { activities.Add(1) }
-	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
+	previousActivity := saveUploadActivity
+	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) { activities.Add(1) }
+	t.Cleanup(func() { saveUploadActivity = previousActivity })
 
 	total := int64(11)
 	first := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "hello.txt", 0, &total, false, bytes.NewBufferString("hello "))
@@ -58,9 +58,9 @@ func TestResumableUploadBehavior(t *testing.T) {
 func TestResumableUploadIncorrectOffsetAndFinalLengthRollback(t *testing.T) {
 	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 	token := signBetterFilesUploadToken(t, s.ID())
-	previousActivity := saveResumableUploadActivity
-	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
+	previousActivity := saveUploadActivity
+	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
+	t.Cleanup(func() { saveUploadActivity = previousActivity })
 
 	total := int64(4)
 	require.Equal(t, http.StatusOK, performResumableRequest(handler, http.MethodPatch, token, "/", "offset.txt", 0, &total, false, bytes.NewBufferString("ab")).Code)
@@ -138,9 +138,9 @@ func TestResumableUploadOffsetHeaderIsDecimalBytes(t *testing.T) {
 func TestResumableUploadTokenIsBoundToOneTargetAndRetiredOnCompletion(t *testing.T) {
 	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 	token := signBetterFilesUploadToken(t, s.ID())
-	previousActivity := saveResumableUploadActivity
-	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
+	previousActivity := saveUploadActivity
+	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
+	t.Cleanup(func() { saveUploadActivity = previousActivity })
 	total := int64(4)
 
 	first := performResumableRequest(handler, http.MethodPatch, token, "/", "bound.txt", 0, &total, false, bytes.NewBufferString("ab"))
@@ -283,9 +283,9 @@ func TestResumableUploadDeadlineReaderFailsClosedWhenUnsupported(t *testing.T) {
 func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
 	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 	token := signBetterFilesUploadToken(t, s.ID())
-	previousActivity := saveResumableUploadActivity
-	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
+	previousActivity := saveUploadActivity
+	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
+	t.Cleanup(func() { saveUploadActivity = previousActivity })
 	timedHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		ctx := context.WithValue(request.Context(), resumableUploadIdleTimeoutContextKey{}, 50*time.Millisecond)
 		handler.ServeHTTP(writer, request.WithContext(ctx))

@@ -85,7 +85,7 @@ var uploadBufferPool = sync.Pool{New: func() interface{} {
 	return &buffer
 }}
 
-var saveResumableUploadActivity = func(s *server.Server, user, ip, filename, directory string) {
+var saveUploadActivity = func(s *server.Server, user, ip, filename, directory string) {
 	s.SaveActivity(s.NewRequestActivity(user, ip), server.ActivityFileUploaded, models.ActivityMeta{
 		"file":      filename,
 		"directory": directory,
@@ -390,7 +390,7 @@ func patchServerUploadFile(c *gin.Context) {
 
 	if complete {
 		uploadSessions.retire(token.UniqueId, s.ID(), target)
-		saveResumableUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
+		saveUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
 	}
 
 	c.Header("Upload-Offset", strconv.FormatInt(newOffset, 10))

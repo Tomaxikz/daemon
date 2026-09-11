@@ -1,5 +1,5 @@
 diff --git a/config/config.go b/config/config.go
-index 230062f54242573ebcbf7105eff4d6831cbe05a1..3e482e9fb3a99442282e63e45e7d87240ba687d2 100644
+index 230062f5..3e482e9f 100644
 --- a/config/config.go
 +++ b/config/config.go
 @@ -138,6 +138,11 @@ type SystemConfiguration struct {
@@ -38,7 +38,7 @@ index 230062f54242573ebcbf7105eff4d6831cbe05a1..3e482e9fb3a99442282e63e45e7d8724
  	CrashDetectionEnabled bool `default:"true" yaml:"enabled"`
 diff --git a/environment/docker/client_accessor.go b/environment/docker/client_accessor.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f543654187eee676
+index 00000000..f8eea154
 --- /dev/null
 +++ b/environment/docker/client_accessor.go
 @@ -0,0 +1,7 @@
@@ -50,7 +50,7 @@ index 0000000000000000000000000000000000000000..f8eea1548871a0242dbeb071f5436541
 +	return e.client
 +}
 diff --git a/go.mod b/go.mod
-index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..44c218d83ec95bf132c93a183fd7ade2ab0def4d 100644
+index 6ed6d60f..44c218d8 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -1,8 +1,6 @@
@@ -125,7 +125,7 @@ index 6ed6d60f46df8bc3b768ecee20e98d97939654d3..44c218d83ec95bf132c93a183fd7ade2
  	google.golang.org/protobuf v1.36.5 // indirect
  	gotest.tools/v3 v3.0.2 // indirect
 diff --git a/go.sum b/go.sum
-index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..f38a2fb24418ea68b52608be06fc6e9b86ee5b5f 100644
+index 9e2465a9..f38a2fb2 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -51,6 +51,8 @@ github.com/aws/aws-sdk-go v1.20.6/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN
@@ -207,7 +207,7 @@ index 9e2465a943367f70fcbad23e3a1db91ee4a1a3d0..f38a2fb24418ea68b52608be06fc6e9b
  golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 diff --git a/router/betterfiles_entry.go b/router/betterfiles_entry.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..74ccb8f6a9f9008898e5c1fee74019001c669c28
+index 00000000..74ccb8f6
 --- /dev/null
 +++ b/router/betterfiles_entry.go
 @@ -0,0 +1,70 @@
@@ -283,7 +283,7 @@ index 0000000000000000000000000000000000000000..74ccb8f6a9f9008898e5c1fee7401900
 +}
 diff --git a/router/betterfiles_http_test.go b/router/betterfiles_http_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8f75b755798ae70d5077603d884349a3b8f001b9
+index 00000000..8f75b755
 --- /dev/null
 +++ b/router/betterfiles_http_test.go
 @@ -0,0 +1,124 @@
@@ -413,7 +413,7 @@ index 0000000000000000000000000000000000000000..8f75b755798ae70d5077603d884349a3
 +}
 diff --git a/router/betterfiles_paths.go b/router/betterfiles_paths.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..81085fefcbe8eadc71371eb80c2f0f7e58835532
+index 00000000..81085fef
 --- /dev/null
 +++ b/router/betterfiles_paths.go
 @@ -0,0 +1,170 @@
@@ -589,7 +589,7 @@ index 0000000000000000000000000000000000000000..81085fefcbe8eadc71371eb80c2f0f7e
 +}
 diff --git a/router/betterfiles_paths_test.go b/router/betterfiles_paths_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..5742f97a8236dd531f6f0e380c902198b514caa5
+index 00000000..5742f97a
 --- /dev/null
 +++ b/router/betterfiles_paths_test.go
 @@ -0,0 +1,32 @@
@@ -627,7 +627,7 @@ index 0000000000000000000000000000000000000000..5742f97a8236dd531f6f0e380c902198
 +}
 diff --git a/router/betterfiles_test_helpers_test.go b/router/betterfiles_test_helpers_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..25a8e740984614a4a4c5dfb1a5766320b7efb010
+index 00000000..25a8e740
 --- /dev/null
 +++ b/router/betterfiles_test_helpers_test.go
 @@ -0,0 +1,41 @@
@@ -673,7 +673,7 @@ index 0000000000000000000000000000000000000000..25a8e740984614a4a4c5dfb1a5766320
 +	return data
 +}
 diff --git a/router/middleware/middleware.go b/router/middleware/middleware.go
-index 190871149a34778f688b62a62f2ca093614809c7..a236b62c9944f2f6742175c8b7f6cfb05847c6ae 100644
+index 19087114..a236b62c 100644
 --- a/router/middleware/middleware.go
 +++ b/router/middleware/middleware.go
 @@ -99,13 +99,26 @@ func SetAccessControlHeaders() gin.HandlerFunc {
@@ -722,7 +722,7 @@ index 190871149a34778f688b62a62f2ca093614809c7..a236b62c9944f2f6742175c8b7f6cfb0
  // the request context, and the logger for the context is also updated to include
 diff --git a/router/middleware/middleware_test.go b/router/middleware/middleware_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..320dbfa2d6d3620762cb371c91cb682af8805641
+index 00000000..320dbfa2
 --- /dev/null
 +++ b/router/middleware/middleware_test.go
 @@ -0,0 +1,115 @@
@@ -842,7 +842,7 @@ index 0000000000000000000000000000000000000000..320dbfa2d6d3620762cb371c91cb682a
 +	})
 +}
 diff --git a/router/router.go b/router/router.go
-index bdac76065242c834f37f74a68fdba2211df96125..53f831cfe631333e0fe231755e43ce6b87f8dd9f 100644
+index bdac7606..53f831cf 100644
 --- a/router/router.go
 +++ b/router/router.go
 @@ -27,6 +27,7 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
@@ -919,7 +919,7 @@ index bdac76065242c834f37f74a68fdba2211df96125..53f831cfe631333e0fe231755e43ce6b
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..b9f5258b63263980d7e44f04de3b37c1e4d72ede
+index 00000000..b9f5258b
 --- /dev/null
 +++ b/router/router_cdn_stream.go
 @@ -0,0 +1,48 @@
@@ -973,7 +973,7 @@ index 0000000000000000000000000000000000000000..b9f5258b63263980d7e44f04de3b37c1
 +}
 diff --git a/router/router_download_directory.go b/router/router_download_directory.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ebaca70d8937927435e33a0431845d2a357b183
+index 00000000..7ebaca70
 --- /dev/null
 +++ b/router/router_download_directory.go
 @@ -0,0 +1,312 @@
@@ -1291,7 +1291,7 @@ index 0000000000000000000000000000000000000000..7ebaca70d8937927435e33a0431845d2
 +}
 diff --git a/router/router_download_directory_http_test.go b/router/router_download_directory_http_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..b6e0cb8476c922e98cc9f051c5d60bf0fb770e16
+index 00000000..b6e0cb84
 --- /dev/null
 +++ b/router/router_download_directory_http_test.go
 @@ -0,0 +1,59 @@
@@ -1356,7 +1356,7 @@ index 0000000000000000000000000000000000000000..b6e0cb8476c922e98cc9f051c5d60bf0
 +}
 diff --git a/router/router_download_directory_test.go b/router/router_download_directory_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..913fac3e58ea501ec7107a1a0c13b421deb60b56
+index 00000000..913fac3e
 --- /dev/null
 +++ b/router/router_download_directory_test.go
 @@ -0,0 +1,99 @@
@@ -1461,7 +1461,7 @@ index 0000000000000000000000000000000000000000..913fac3e58ea501ec7107a1a0c13b421
 +}
 diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828f18c68dd
+index 00000000..ff4dcb44
 --- /dev/null
 +++ b/router/router_download_helpers.go
 @@ -0,0 +1,206 @@
@@ -1673,7 +1673,7 @@ index 0000000000000000000000000000000000000000..ff4dcb44047d5cf92acdec71e7722828
 +}
 diff --git a/router/router_download_helpers_test.go b/router/router_download_helpers_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26df8101e2d
+index 00000000..7ed8d5a4
 --- /dev/null
 +++ b/router/router_download_helpers_test.go
 @@ -0,0 +1,164 @@
@@ -1843,7 +1843,7 @@ index 0000000000000000000000000000000000000000..7ed8d5a434418f608a31ab3d5812c26d
 +}
 diff --git a/router/router_file_operations.go b/router/router_file_operations.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..574085745c8f1cc18d1d3f7cae617ba210a0cfc6
+index 00000000..57408574
 --- /dev/null
 +++ b/router/router_file_operations.go
 @@ -0,0 +1,25 @@
@@ -1874,7 +1874,7 @@ index 0000000000000000000000000000000000000000..574085745c8f1cc18d1d3f7cae617ba2
 +}
 diff --git a/router/router_file_operations_test.go b/router/router_file_operations_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..5b89b4f8688d035aea0b101d2ee934316e1ea512
+index 00000000..5b89b4f8
 --- /dev/null
 +++ b/router/router_file_operations_test.go
 @@ -0,0 +1,39 @@
@@ -1918,11 +1918,11 @@ index 0000000000000000000000000000000000000000..5b89b4f8688d035aea0b101d2ee93431
 +	require.Equal(t, http.StatusNotFound, request(operation.Identifier()).Code)
 +}
 diff --git a/router/router_openapi.go b/router/router_openapi.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..7fdea72693403d42dda0227a13cc02a9bb983b38
+new file mode 100755
+index 00000000..7015cf38
 --- /dev/null
 +++ b/router/router_openapi.go
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,101 @@
 +package router
 +
 +import (
@@ -1942,6 +1942,21 @@ index 0000000000000000000000000000000000000000..7fdea72693403d42dda0227a13cc02a9
 +		}
 +		return gin.H{"summary": summary, "responses": responses}
 +	}
++	multipartUpload := operation("Upload flat files or a folder batch using multipart form data", "200", "400", "403", "404", "409", "413", "500")
++	multipartUpload["x-betterfiles-folder-upload"] = gin.H{
++		"version": 1, "paths_field": "paths", "max_files": maxMultipartUploadFiles,
++	}
++	multipartUpload["description"] = "Uses the existing signed upload URL and directory query parameter. Optional paths is one JSON string array in a multipart text field, matched to files parts in order. Paths are canonical relative paths, not URL-encoded; each basename must match its files part. Without paths, filenames remain flat. One single-use token authorizes the whole request, including failures. Invalid manifests/paths/limits are preflighted; runtime failures may leave earlier files written, so obtain a fresh token before retrying."
++	multipartUpload["requestBody"] = gin.H{
++		"required": true,
++		"content": gin.H{"multipart/form-data": gin.H{"schema": gin.H{
++			"type": "object", "required": []string{"files"},
++			"properties": gin.H{
++				"files": gin.H{"type": "array", "minItems": 1, "items": gin.H{"type": "string", "format": "binary"}},
++				"paths": gin.H{"type": "string", "description": "Optional JSON array with exactly one relative path for each files part, in the same order.", "example": `["mods/a/config.yml","mods/b/config.yml"]`},
++			},
++		}}},
++	}
 +
 +	c.JSON(http.StatusOK, gin.H{
 +		"openapi": "3.1.0",
@@ -1951,7 +1966,7 @@ index 0000000000000000000000000000000000000000..7fdea72693403d42dda0227a13cc02a9
 +		},
 +		"paths": gin.H{
 +			"/upload/file": gin.H{
-+				"post":  operation("Upload files using multipart form data", "200"),
++				"post":  multipartUpload,
 +				"head":  operation("Read the current resumable upload offset", "200", "404"),
 +				"patch": operation("Append a resumable upload chunk", "200", "408", "409", "413", "429"),
 +			},
@@ -1993,6 +2008,8 @@ index 0000000000000000000000000000000000000000..7fdea72693403d42dda0227a13cc02a9
 +		return http.StatusBadRequest
 +	case "404":
 +		return http.StatusNotFound
++	case "403":
++		return http.StatusForbidden
 +	case "408":
 +		return http.StatusRequestTimeout
 +	case "409":
@@ -2008,11 +2025,11 @@ index 0000000000000000000000000000000000000000..7fdea72693403d42dda0227a13cc02a9
 +	}
 +}
 diff --git a/router/router_openapi_test.go b/router/router_openapi_test.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..28c793cbe83b270121dee4176ced71a531f561de
+new file mode 100755
+index 00000000..38aa4e02
 --- /dev/null
 +++ b/router/router_openapi_test.go
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,61 @@
 +package router
 +
 +import (
@@ -2059,10 +2076,24 @@ index 0000000000000000000000000000000000000000..28c793cbe83b270121dee4176ced71a5
 +	for _, status := range []string{"200", "408", "409", "413", "429"} {
 +		require.Contains(t, responses, status)
 +	}
++	post := document.Paths["/upload/file"]["post"].(map[string]interface{})
++	capability := post["x-betterfiles-folder-upload"].(map[string]interface{})
++	require.Equal(t, float64(1), capability["version"])
++	require.Equal(t, "paths", capability["paths_field"])
++	require.Equal(t, float64(maxMultipartUploadFiles), capability["max_files"])
++	content := post["requestBody"].(map[string]interface{})["content"].(map[string]interface{})
++	schema := content["multipart/form-data"].(map[string]interface{})["schema"].(map[string]interface{})
++	properties := schema["properties"].(map[string]interface{})
++	require.Contains(t, properties, "files")
++	require.Contains(t, properties, "paths")
++	postResponses := post["responses"].(map[string]interface{})
++	for _, status := range []string{"200", "400", "403", "404", "409", "413"} {
++		require.Contains(t, postResponses, status)
++	}
 +}
 diff --git a/router/router_resumable_upload.go b/router/router_resumable_upload.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..dddb9bd4d9cbfdf6fab4c85e061ffdc086d87a31
+new file mode 100755
+index 00000000..3cad86dc
 --- /dev/null
 +++ b/router/router_resumable_upload.go
 @@ -0,0 +1,571 @@
@@ -2153,7 +2184,7 @@ index 0000000000000000000000000000000000000000..dddb9bd4d9cbfdf6fab4c85e061ffdc0
 +	return &buffer
 +}}
 +
-+var saveResumableUploadActivity = func(s *server.Server, user, ip, filename, directory string) {
++var saveUploadActivity = func(s *server.Server, user, ip, filename, directory string) {
 +	s.SaveActivity(s.NewRequestActivity(user, ip), server.ActivityFileUploaded, models.ActivityMeta{
 +		"file":      filename,
 +		"directory": directory,
@@ -2458,7 +2489,7 @@ index 0000000000000000000000000000000000000000..dddb9bd4d9cbfdf6fab4c85e061ffdc0
 +
 +	if complete {
 +		uploadSessions.retire(token.UniqueId, s.ID(), target)
-+		saveResumableUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
++		saveUploadActivity(s, token.UserUuid, c.ClientIP(), c.Query("file"), directory)
 +	}
 +
 +	c.Header("Upload-Offset", strconv.FormatInt(newOffset, 10))
@@ -2638,8 +2669,8 @@ index 0000000000000000000000000000000000000000..dddb9bd4d9cbfdf6fab4c85e061ffdc0
 +	return value[:index]
 +}
 diff --git a/router/router_resumable_upload_test.go b/router/router_resumable_upload_test.go
-new file mode 100644
-index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f4d1ee3d0
+new file mode 100755
+index 00000000..67860ee0
 --- /dev/null
 +++ b/router/router_resumable_upload_test.go
 @@ -0,0 +1,343 @@
@@ -2673,9 +2704,9 @@ index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f
 +	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 +	token := signBetterFilesUploadToken(t, s.ID())
 +	var activities atomic.Int64
-+	previousActivity := saveResumableUploadActivity
-+	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) { activities.Add(1) }
-+	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++	previousActivity := saveUploadActivity
++	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) { activities.Add(1) }
++	t.Cleanup(func() { saveUploadActivity = previousActivity })
 +
 +	total := int64(11)
 +	first := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "hello.txt", 0, &total, false, bytes.NewBufferString("hello "))
@@ -2703,9 +2734,9 @@ index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f
 +func TestResumableUploadIncorrectOffsetAndFinalLengthRollback(t *testing.T) {
 +	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 +	token := signBetterFilesUploadToken(t, s.ID())
-+	previousActivity := saveResumableUploadActivity
-+	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-+	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++	previousActivity := saveUploadActivity
++	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
++	t.Cleanup(func() { saveUploadActivity = previousActivity })
 +
 +	total := int64(4)
 +	require.Equal(t, http.StatusOK, performResumableRequest(handler, http.MethodPatch, token, "/", "offset.txt", 0, &total, false, bytes.NewBufferString("ab")).Code)
@@ -2783,9 +2814,9 @@ index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f
 +func TestResumableUploadTokenIsBoundToOneTargetAndRetiredOnCompletion(t *testing.T) {
 +	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 +	token := signBetterFilesUploadToken(t, s.ID())
-+	previousActivity := saveResumableUploadActivity
-+	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-+	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++	previousActivity := saveUploadActivity
++	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
++	t.Cleanup(func() { saveUploadActivity = previousActivity })
 +	total := int64(4)
 +
 +	first := performResumableRequest(handler, http.MethodPatch, token, "/", "bound.txt", 0, &total, false, bytes.NewBufferString("ab"))
@@ -2928,9 +2959,9 @@ index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f
 +func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
 +	_, s, handler := newBetterFilesHTTPServer(t, 10, 20)
 +	token := signBetterFilesUploadToken(t, s.ID())
-+	previousActivity := saveResumableUploadActivity
-+	saveResumableUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-+	t.Cleanup(func() { saveResumableUploadActivity = previousActivity })
++	previousActivity := saveUploadActivity
++	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
++	t.Cleanup(func() { saveUploadActivity = previousActivity })
 +	timedHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 +		ctx := context.WithValue(request.Context(), resumableUploadIdleTimeoutContextKey{}, 50*time.Millisecond)
 +		handler.ServeHTTP(writer, request.WithContext(ctx))
@@ -2988,7 +3019,7 @@ index 0000000000000000000000000000000000000000..efe42fb88b87eb5ef76dbc594e25159f
 +}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625c32f97e0
+index 00000000..f3a3c19c
 --- /dev/null
 +++ b/router/router_server_archive_nbt.go
 @@ -0,0 +1,496 @@
@@ -3490,7 +3521,7 @@ index 0000000000000000000000000000000000000000..f3a3c19c92cdb91a4ce5b2c524bbd625
 +}
 diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7df283e95b
+index 00000000..3b91d185
 --- /dev/null
 +++ b/router/router_server_betterfiles_collaboration.go
 @@ -0,0 +1,39 @@
@@ -3534,18 +3565,38 @@ index 0000000000000000000000000000000000000000..3b91d1858c59a215086269e279583d7d
 +	c.JSON(http.StatusOK, gin.H{"closed": closed})
 +}
 diff --git a/router/router_server_files.go b/router/router_server_files.go
-index 75618442a8f6af401e65a2541af088afa8524f21..36b63257bbbb396c180d5354d409b5a957caf3eb 100644
+index 75618442..b2e287b0 100644
 --- a/router/router_server_files.go
 +++ b/router/router_server_files.go
-@@ -9,7 +9,6 @@ import (
+@@ -3,15 +3,18 @@ package router
+ import (
+ 	"bufio"
+ 	"context"
++	"encoding/json"
++	"github.com/pterodactyl/wings/internal/ufs"
+ 	"io"
++	"io/fs"
+ 	"mime/multipart"
+ 	"net/http"
  	"net/url"
  	"os"
  	"path"
 -	"path/filepath"
  	"strconv"
  	"strings"
++	"unicode/utf8"
  
-@@ -138,6 +137,7 @@ func putServerRenameFiles(c *gin.Context) {
+ 	"emperror.dev/errors"
+ 	"github.com/apex/log"
+@@ -19,7 +22,6 @@ import (
+ 	"golang.org/x/sync/errgroup"
+ 
+ 	"github.com/pterodactyl/wings/config"
+-	"github.com/pterodactyl/wings/internal/models"
+ 	"github.com/pterodactyl/wings/router/downloader"
+ 	"github.com/pterodactyl/wings/router/middleware"
+ 	"github.com/pterodactyl/wings/router/tokens"
+@@ -138,6 +140,7 @@ func putServerRenameFiles(c *gin.Context) {
  					}
  					return err
  				}
@@ -3553,7 +3604,7 @@ index 75618442a8f6af401e65a2541af088afa8524f21..36b63257bbbb396c180d5354d409b5a9
  				return nil
  			}
  		})
-@@ -214,7 +214,11 @@ func postServerDeleteFiles(c *gin.Context) {
+@@ -214,7 +217,11 @@ func postServerDeleteFiles(c *gin.Context) {
  			case <-ctx.Done():
  				return ctx.Err()
  			default:
@@ -3566,7 +3617,7 @@ index 75618442a8f6af401e65a2541af088afa8524f21..36b63257bbbb396c180d5354d409b5a9
  			}
  		})
  	}
-@@ -247,6 +251,12 @@ func postServerWriteFile(c *gin.Context) {
+@@ -247,6 +254,12 @@ func postServerWriteFile(c *gin.Context) {
  		return
  	}
  
@@ -3579,7 +3630,7 @@ index 75618442a8f6af401e65a2541af088afa8524f21..36b63257bbbb396c180d5354d409b5a9
  	if err := s.Filesystem().Write(f, c.Request.Body, c.Request.ContentLength, 0o644); err != nil {
  		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
  			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-@@ -259,6 +269,18 @@ func postServerWriteFile(c *gin.Context) {
+@@ -259,6 +272,18 @@ func postServerWriteFile(c *gin.Context) {
  		return
  	}
  
@@ -3598,84 +3649,264 @@ index 75618442a8f6af401e65a2541af088afa8524f21..36b63257bbbb396c180d5354d409b5a9
  	c.Status(http.StatusNoContent)
  }
  
-@@ -598,36 +620,69 @@ func postServerUploadFiles(c *gin.Context) {
+@@ -565,6 +590,16 @@ func postServerChmodFile(c *gin.Context) {
+ 	c.Status(http.StatusNoContent)
+ }
+ 
++const (
++	maxMultipartUploadFiles    = 512
++	maxMultipartUploadOverhead = int64(8 * 1024 * 1024)
++)
++
++type multipartUploadTarget struct {
++	header *multipart.FileHeader
++	path   string
++}
++
+ func postServerUploadFiles(c *gin.Context) {
+ 	manager := middleware.ExtractManager(c)
+ 
+@@ -575,57 +610,195 @@ func postServerUploadFiles(c *gin.Context) {
+ 	}
+ 
+ 	s, ok := manager.Get(token.ServerUuid)
+-	if !ok || token.Denylisted() || !token.IsUniqueRequest() || !token.HasScope(tokens.FileUpload) {
++	if !ok || token.Denylisted() || !token.HasScope(tokens.FileUpload) || !token.IsUniqueRequest() {
+ 		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{
+ 			"error": "The requested resource was not found on this server.",
+ 		})
  		return
  	}
  
--	directory := c.Query("directory")
-+	directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))
-+	if directory == "." {
-+		directory = "/"
-+	}
- 
- 	maxFileSize := config.Get().Api.UploadLimit
++	maxFileSize := config.Get().Api.UploadLimit
 +	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
 +	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
-+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-+			"error": "Upload limit is not configured correctly.",
-+		})
++		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Upload limit is not configured correctly."})
 +		return
 +	}
- 	maxFileSizeBytes := maxFileSize * 1024 * 1024
- 	var totalSize int64
- 	for _, header := range headers {
++	maxFileSizeBytes := maxFileSize * 1024 * 1024
++	maxBodyBytes := int64(1<<63 - 1)
++	if maxFileSizeBytes <= maxBodyBytes-maxMultipartUploadOverhead {
++		maxBodyBytes = maxFileSizeBytes + maxMultipartUploadOverhead
++	}
++	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
+ 	form, err := c.MultipartForm()
+ 	if err != nil {
++		var tooLarge *http.MaxBytesError
++		if errors.As(err, &tooLarge) {
++			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The multipart request exceeds the upload limit."})
++			return
++		}
+ 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+ 			"error": "Failed to get multipart form data from request.",
+ 		})
+ 		return
+ 	}
++	defer form.RemoveAll()
+ 
+-	headers, ok := form.File["files"]
+-	if !ok {
+-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+-			"error": "No files were found on the request body.",
+-		})
++	directory, err := normalizeBetterFilesRoot(c.Query("directory"))
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid upload directory."})
+ 		return
+ 	}
+-
+-	directory := c.Query("directory")
+-
+-	maxFileSize := config.Get().Api.UploadLimit
+-	maxFileSizeBytes := maxFileSize * 1024 * 1024
+-	var totalSize int64
+-	for _, header := range headers {
 -		if header.Size > maxFileSizeBytes {
-+		if header.Size < 0 || header.Size > maxFileSizeBytes {
- 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
- 				"error": "File " + header.Filename + " is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
- 			})
+-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+-				"error": "File " + header.Filename + " is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
+-			})
++	targets, err := multipartUploadTargets(form, directory, maxFileSizeBytes)
++	if err != nil {
++		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
++		return
++	}
++	// Reject invalid/ignored destinations and insufficient aggregate quota before
++	// creating directories or writing any file. Runtime writes recheck quota atomically.
++	var growth, projectedGrowth int64
++	plannedSizes := make(map[string]int64, len(targets))
++	for _, target := range targets {
++		if err := ensureBetterFilesAllowed(s.Filesystem(), target.path); err != nil {
++			middleware.CaptureAndAbort(c, err)
++			return
++		}
++		oldSize, err := multipartUploadExistingSize(s.Filesystem(), target.path)
++		if err != nil {
++			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "An upload destination is not a regular file or contains a symbolic link."})
  			return
  		}
- 		totalSize += header.Size
-+		if totalSize > maxFileSizeBytes {
-+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-+				"error": "Total upload size is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
-+			})
-+			return
+-		totalSize += header.Size
++		if prior, exists := plannedSizes[target.path]; exists {
++			oldSize = prior
++		}
++		plannedSizes[target.path] = target.header.Size
++		delta := target.header.Size - oldSize
++		// Simulate sequential overwrites, including earlier shrinks and repeated
++		// flat filenames. More than one request's worth of shrink credit cannot
++		// affect the peak, so cap it to keep all arithmetic within int64.
++		if delta < 0 && projectedGrowth < -maxFileSizeBytes-delta {
++			projectedGrowth = -maxFileSizeBytes
++		} else {
++			projectedGrowth += delta
++		}
++		if projectedGrowth > growth {
++			growth = projectedGrowth
 +		}
  	}
- 
- 	for _, header := range headers {
- 		// We run this in a different method so I can use defer without any of
- 		// the consequences caused by calling it in a loop.
+-
+-	for _, header := range headers {
+-		// We run this in a different method so I can use defer without any of
+-		// the consequences caused by calling it in a loop.
 -		if err := handleFileUpload(filepath.Join(directory, header.Filename), s, header); err != nil {
-+		filename, ok := cleanUploadFilename(header.Filename)
++	if err := s.Filesystem().HasSpaceFor(growth); err != nil {
++		middleware.CaptureAndAbort(c, err)
++		return
++	}
++	for _, target := range targets {
++		release, ok := uploadLocks.acquire(s.ID() + "\x00" + target.path)
 +		if !ok {
-+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-+				"error": "Invalid upload filename.",
-+			})
++			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "An upload is already active for this file."})
 +			return
 +		}
-+
-+		// We run this in a different method so I can use defer without any of
-+		// the consequences caused by calling it in a loop.
-+		if err := handleFileUpload(path.Join(directory, filename), s, header); err != nil {
++		err := handleFileUpload(target.path, s, target.header)
++		release()
++		if err != nil {
  			middleware.CaptureAndAbort(c, err)
  			return
- 		} else {
- 			s.SaveActivity(s.NewRequestActivity(token.UserUuid, c.ClientIP()), server.ActivityFileUploaded, models.ActivityMeta{
+-		} else {
+-			s.SaveActivity(s.NewRequestActivity(token.UserUuid, c.ClientIP()), server.ActivityFileUploaded, models.ActivityMeta{
 -				"file":      header.Filename,
 -				"directory": filepath.Clean(directory),
-+				"file":      filename,
-+				"directory": directory,
- 			})
+-			})
  		}
- 	}
- }
- 
++		saveUploadActivity(s, token.UserUuid, c.ClientIP(), path.Base(target.path), path.Dir(target.path))
++	}
++}
++
++// paths is an optional JSON array of relative paths, in files-part order. Never
++// recover paths from FileHeader.Filename: mime/multipart already strips directories.
++func multipartUploadTargets(form *multipart.Form, directory string, limit int64) ([]multipartUploadTarget, error) {
++	headers := form.File["files"]
++	if len(headers) == 0 {
++		return nil, errors.New("No files were found on the request body.")
++	}
++	var paths []string
++	values, hasPaths := form.Value["paths"]
++	if hasPaths && len(headers) > maxMultipartUploadFiles {
++		return nil, errors.New("A folder batch may contain at most 512 files.")
++	}
++	if len(form.File["paths"]) != 0 {
++		return nil, errors.New("paths must be a JSON text field.")
++	}
++	if hasPaths {
++		if len(values) != 1 || len(values[0]) > maxMultipartUploadFiles*(betterFilesMaxPathLength+8) || !utf8.ValidString(values[0]) {
++			return nil, errors.New("Exactly one bounded paths manifest is required.")
++		}
++		if err := json.Unmarshal([]byte(values[0]), &paths); err != nil || len(paths) != len(headers) {
++			return nil, errors.New("paths must be a JSON array with one relative path per file, in the same order.")
++		}
++	}
++	targets := make([]multipartUploadTarget, 0, len(headers))
++	seen := make(map[string]struct{}, len(headers))
++	var total int64
++	for i, header := range headers {
++		if header.Size < 0 || header.Size > limit-total {
++			return nil, errors.New("The files exceed the maximum total upload size.")
++		}
++		total += header.Size
++		name, ok := cleanUploadFilename(header.Filename)
++		if !ok {
++			return nil, errors.New("Invalid upload filename.")
++		}
++		if hasPaths {
++			name = paths[i]
++			// ValidPath rejects empty, absolute, dot, parent and empty components.
++			// Backslashes and Windows drive prefixes are rejected explicitly.
++			if !fs.ValidPath(name) || strings.ContainsAny(name, "\\\x00") ||
++				(len(name) >= 2 && name[1] == ':') || path.Base(name) != header.Filename {
++				return nil, errors.New("Invalid relative upload path or mismatched filename.")
++			}
++		}
++		target, err := joinBetterFilesPath(directory, name)
++		if err != nil {
++			return nil, errors.New("Invalid relative upload path.")
++		}
++		if _, exists := seen[target]; hasPaths && exists {
++			return nil, errors.New("Duplicate upload destination.")
++		}
++		seen[target] = struct{}{}
++		targets = append(targets, multipartUploadTarget{header: header, path: target})
++	}
++	for target := range seen {
++		for parent := path.Dir(target); parent != "/"; parent = path.Dir(parent) {
++			if _, exists := seen[parent]; exists {
++				return nil, errors.New("An upload destination is also used as a directory.")
++			}
++		}
++	}
++	return targets, nil
++}
++
++func multipartUploadExistingSize(files *filesystem.Filesystem, target string) (int64, error) {
++	parts := strings.Split(strings.TrimPrefix(target, "/"), "/")
++	for i := range parts {
++		info, err := files.UnixFS().Lstat(strings.Join(parts[:i+1], "/"))
++		if errors.Is(err, ufs.ErrNotExist) {
++			return 0, nil
++		}
++		if err != nil {
++			return 0, err
++		}
++		if info.Mode()&ufs.ModeSymlink != 0 {
++			return 0, errBetterFilesInvalidPath
++		}
++		if i == len(parts)-1 {
++			if !info.Mode().IsRegular() {
++				return 0, errBetterFilesInvalidPath
++			}
++			return info.Size(), nil
++		}
++		if !info.IsDir() {
++			return 0, errBetterFilesInvalidPath
++		}
++	}
++	return 0, errBetterFilesInvalidPath
++}
++
 +func cleanUploadFilename(name string) (string, bool) {
 +	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
 +		return "", false
-+	}
+ 	}
 +	return name, true
-+}
-+
+ }
+ 
  func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) error {
- 	file, err := header.Open()
- 	if err != nil {
+@@ -635,11 +808,11 @@ func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader)
+ 	}
+ 	defer file.Close()
+ 
+-	if err := s.Filesystem().IsIgnored(p); err != nil {
++	if err := ensureBetterFilesAllowed(s.Filesystem(), p); err != nil {
+ 		return err
+ 	}
+ 
+-	if err := s.Filesystem().Write(p, file, header.Size, 0o644); err != nil {
++	if err := s.Filesystem().WriteUpload(p, file, header.Size); err != nil {
+ 		return err
+ 	}
+ 	return nil
 diff --git a/router/router_server_files_copy_many.go b/router/router_server_files_copy_many.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..814c57b29caa052d37278cc9974a35e8d9b82752
+index 00000000..814c57b2
 --- /dev/null
 +++ b/router/router_server_files_copy_many.go
 @@ -0,0 +1,345 @@
@@ -4026,7 +4257,7 @@ index 0000000000000000000000000000000000000000..814c57b29caa052d37278cc9974a35e8
 +}
 diff --git a/router/router_server_files_copy_many_test.go b/router/router_server_files_copy_many_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..181e3bf39853e5cefb53a0a40fadfdf057ada916
+index 00000000..181e3bf3
 --- /dev/null
 +++ b/router/router_server_files_copy_many_test.go
 @@ -0,0 +1,138 @@
@@ -4170,7 +4401,7 @@ index 0000000000000000000000000000000000000000..181e3bf39853e5cefb53a0a40fadfdf0
 +}
 diff --git a/router/router_server_files_fingerprints.go b/router/router_server_files_fingerprints.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8aa1665c2098352268957e97ab0944af5da74c64
+index 00000000..8aa1665c
 --- /dev/null
 +++ b/router/router_server_files_fingerprints.go
 @@ -0,0 +1,269 @@
@@ -4445,7 +4676,7 @@ index 0000000000000000000000000000000000000000..8aa1665c2098352268957e97ab0944af
 +}
 diff --git a/router/router_server_files_fingerprints_test.go b/router/router_server_files_fingerprints_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..e8343cba6bad097675c2b4c173562a00d01273a1
+index 00000000..e8343cba
 --- /dev/null
 +++ b/router/router_server_files_fingerprints_test.go
 @@ -0,0 +1,53 @@
@@ -4504,7 +4735,7 @@ index 0000000000000000000000000000000000000000..e8343cba6bad097675c2b4c173562a00
 +}
 diff --git a/router/router_server_files_largest.go b/router/router_server_files_largest.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..030ff1d607b84508d65403a1fd494b2b4f70016c
+index 00000000..030ff1d6
 --- /dev/null
 +++ b/router/router_server_files_largest.go
 @@ -0,0 +1,194 @@
@@ -4704,7 +4935,7 @@ index 0000000000000000000000000000000000000000..030ff1d607b84508d65403a1fd494b2b
 +}
 diff --git a/router/router_server_files_largest_test.go b/router/router_server_files_largest_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..193875d50a083512d95baa17052c846eea2891b2
+index 00000000..193875d5
 --- /dev/null
 +++ b/router/router_server_files_largest_test.go
 @@ -0,0 +1,46 @@
@@ -4756,7 +4987,7 @@ index 0000000000000000000000000000000000000000..193875d50a083512d95baa17052c846e
 +}
 diff --git a/router/router_server_files_rename.go b/router/router_server_files_rename.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..60f27fc23a46ad1d16b21204fa2cde9c64357a39
+index 00000000..60f27fc2
 --- /dev/null
 +++ b/router/router_server_files_rename.go
 @@ -0,0 +1,134 @@
@@ -4896,7 +5127,7 @@ index 0000000000000000000000000000000000000000..60f27fc23a46ad1d16b21204fa2cde9c
 +}
 diff --git a/router/router_server_files_revisions.go b/router/router_server_files_revisions.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d3be75f7b
+index 00000000..9ea50002
 --- /dev/null
 +++ b/router/router_server_files_revisions.go
 @@ -0,0 +1,146 @@
@@ -5048,7 +5279,7 @@ index 0000000000000000000000000000000000000000..9ea50002b2ce92c241f915619912c74d
 +}
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d31286d521da9
+index 00000000..43f8d3e3
 --- /dev/null
 +++ b/router/router_server_files_search.go
 @@ -0,0 +1,611 @@
@@ -5665,7 +5896,7 @@ index 0000000000000000000000000000000000000000..43f8d3e3abc4b2610208e0f48a2d3128
 +}
 diff --git a/router/router_server_files_search_v2.go b/router/router_server_files_search_v2.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..f9458127b36ad2f127a09c34cbeca5624f92c75b
+index 00000000..f9458127
 --- /dev/null
 +++ b/router/router_server_files_search_v2.go
 @@ -0,0 +1,443 @@
@@ -6114,7 +6345,7 @@ index 0000000000000000000000000000000000000000..f9458127b36ad2f127a09c34cbeca562
 +}
 diff --git a/router/router_server_files_search_v2_test.go b/router/router_server_files_search_v2_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..8f280593cf86827c202492794b35b0ba506a444f
+index 00000000..8f280593
 --- /dev/null
 +++ b/router/router_server_files_search_v2_test.go
 @@ -0,0 +1,108 @@
@@ -6228,7 +6459,7 @@ index 0000000000000000000000000000000000000000..8f280593cf86827c202492794b35b0ba
 +}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..5546110625d6d63c1cf1702eef4a8cda8548cf4a
+index 00000000..55461106
 --- /dev/null
 +++ b/router/router_server_git.go
 @@ -0,0 +1,1648 @@
@@ -7882,7 +8113,7 @@ index 0000000000000000000000000000000000000000..5546110625d6d63c1cf1702eef4a8cda
 +}
 diff --git a/router/router_server_git_test.go b/router/router_server_git_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..a0383495dc9bc85e4b156116068dea86e7fa87b5
+index 00000000..a0383495
 --- /dev/null
 +++ b/router/router_server_git_test.go
 @@ -0,0 +1,444 @@
@@ -8331,7 +8562,7 @@ index 0000000000000000000000000000000000000000..a0383495dc9bc85e4b156116068dea86
 +	}
 +}
 diff --git a/router/router_server_ws.go b/router/router_server_ws.go
-index b0ba3a4c254ac16a1edd4e0af9d0725a43454738..15d0a31f32d68392bd35c9d1231d1558b4ddf855 100644
+index b0ba3a4c..15d0a31f 100644
 --- a/router/router_server_ws.go
 +++ b/router/router_server_ws.go
 @@ -106,13 +106,33 @@ func getServerWebsocket(c *gin.Context) {
@@ -8422,7 +8653,7 @@ index b0ba3a4c254ac16a1edd4e0af9d0725a43454738..15d0a31f32d68392bd35c9d1231d1558
  }
 diff --git a/router/router_system_config.go b/router/router_system_config.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..430efccfce960a815a50486930ea655efbbe0b1e
+index 00000000..430efccf
 --- /dev/null
 +++ b/router/router_system_config.go
 @@ -0,0 +1,26 @@
@@ -8454,7 +8685,7 @@ index 0000000000000000000000000000000000000000..430efccfce960a815a50486930ea655e
 +}
 diff --git a/router/router_system_config_test.go b/router/router_system_config_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..7143a8b491e9640d1d503b253571f57ae948abcc
+index 00000000..7143a8b4
 --- /dev/null
 +++ b/router/router_system_config_test.go
 @@ -0,0 +1,62 @@
@@ -8520,8 +8751,255 @@ index 0000000000000000000000000000000000000000..7143a8b491e9640d1d503b253571f57a
 +		},
 +	}, response)
 +}
+diff --git a/router/router_upload_batch_test.go b/router/router_upload_batch_test.go
+new file mode 100644
+index 00000000..fea81bee
+--- /dev/null
++++ b/router/router_upload_batch_test.go
+@@ -0,0 +1,241 @@
++package router
++
++import (
++	"bytes"
++	"encoding/json"
++	"math"
++	"mime/multipart"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++
++	"github.com/pterodactyl/wings/server"
++	"github.com/stretchr/testify/require"
++)
++
++type multipartTestFile struct {
++	name string
++	data []byte
++}
++
++func performMultipartUpload(t *testing.T, handler http.Handler, token, directory string, files []multipartTestFile, fields [][2]string, manifestFirst bool) *httptest.ResponseRecorder {
++	t.Helper()
++	var body bytes.Buffer
++	w := multipart.NewWriter(&body)
++	writeFields := func() {
++		for _, field := range fields {
++			require.NoError(t, w.WriteField(field[0], field[1]))
++		}
++	}
++	if manifestFirst {
++		writeFields()
++	}
++	for _, file := range files {
++		part, err := w.CreateFormFile("files", file.name)
++		require.NoError(t, err)
++		_, err = part.Write(file.data)
++		require.NoError(t, err)
++	}
++	if !manifestFirst {
++		writeFields()
++	}
++	require.NoError(t, w.Close())
++	request := httptest.NewRequest(http.MethodPost, "/upload/file?"+url.Values{"token": {token}, "directory": {directory}, "total_size": {"0"}}.Encode(), &body)
++	request.Header.Set("Content-Type", w.FormDataContentType())
++	recorder := httptest.NewRecorder()
++	handler.ServeHTTP(recorder, request)
++	return recorder
++}
++
++func batchPaths(t *testing.T, paths ...string) [][2]string {
++	t.Helper()
++	encoded, err := json.Marshal(paths)
++	require.NoError(t, err)
++	return [][2]string{{"paths", string(encoded)}}
++}
++
++func quietUploadActivity(t *testing.T) {
++	t.Helper()
++	previous := saveUploadActivity
++	saveUploadActivity = func(*server.Server, string, string, string, string) {}
++	t.Cleanup(func() { saveUploadActivity = previous })
++}
++
++func TestMultipartFolderBatchPreservesPathsAndDuplicateBasenames(t *testing.T) {
++	quietUploadActivity(t)
++	for _, first := range []bool{true, false} {
++		_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++		var activities [][2]string
++		saveUploadActivity = func(_ *server.Server, _, _, name, directory string) {
++			activities = append(activities, [2]string{directory, name})
++		}
++		files := []multipartTestFile{{"config.yml", []byte("one")}, {"mods/b/config.yml", []byte("two")}, {"empty.txt", nil}}
++		response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/uploads", files, batchPaths(t, "mods/a/config.yml", "mods/b/config.yml", "資料/empty.txt"), first)
++		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
++		require.Equal(t, []byte("one"), readServerHTTPFixture(t, s, "uploads/mods/a/config.yml"))
++		require.Equal(t, []byte("two"), readServerHTTPFixture(t, s, "uploads/mods/b/config.yml"))
++		require.Empty(t, readServerHTTPFixture(t, s, "uploads/資料/empty.txt"))
++		require.NoFileExists(t, filepath.Join(s.Filesystem().Path(), "uploads/config.yml"))
++		require.Equal(t, [][2]string{{"/uploads/mods/a", "config.yml"}, {"/uploads/mods/b", "config.yml"}, {"/uploads/資料", "empty.txt"}}, activities)
++		require.Equal(t, int64(6), s.Filesystem().CachedUsage())
++	}
++}
++
++func TestMultipartFlatUploadsAndSingleUseTokensRemainCompatible(t *testing.T) {
++	quietUploadActivity(t)
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++	token := signBetterFilesUploadToken(t, s.ID())
++	files := []multipartTestFile{{"file.txt", []byte("first")}, {"folder/other.txt", []byte("second")}}
++	response := performMultipartUpload(t, handler, token, "/existing", files, nil, false)
++	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
++	require.Equal(t, []byte("first"), readServerHTTPFixture(t, s, "existing/file.txt"))
++	require.Equal(t, []byte("second"), readServerHTTPFixture(t, s, "existing/other.txt"))
++	response = performMultipartUpload(t, handler, token, "/existing", files, nil, false)
++	require.Equal(t, http.StatusNotFound, response.Code)
++	require.Equal(t, http.StatusNotFound, performResumableRequest(handler, http.MethodHead, token, "/existing", "file.txt", 0, nil, false, nil).Code)
++	newToken := signBetterFilesUploadToken(t, s.ID())
++	require.Equal(t, http.StatusOK, performResumableRequest(handler, http.MethodHead, newToken, "/existing", "file.txt", 0, nil, false, nil).Code)
++	response = performMultipartUpload(t, handler, newToken, "/existing", files, nil, false)
++	require.Equal(t, http.StatusNotFound, response.Code)
++}
++
++func TestMultipartFlatQuotaPreservesSequentialOverwriteBehavior(t *testing.T) {
++	quietUploadActivity(t)
++	_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++	s.Filesystem().SetDiskLimit(10)
++	require.NoError(t, s.Filesystem().WriteUpload("a", bytes.NewBufferString("1234567890"), 10))
++	response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/", []multipartTestFile{{"a", nil}, {"b", []byte("1234567890")}}, nil, false)
++	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
++	require.Empty(t, readServerHTTPFixture(t, s, "a"))
++	require.Equal(t, []byte("1234567890"), readServerHTTPFixture(t, s, "b"))
++	require.Equal(t, int64(10), s.Filesystem().CachedUsage())
++
++	_, s, handler = newBetterFilesHTTPServer(t, 10, 10)
++	s.Filesystem().SetDiskLimit(10)
++	response = performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/", []multipartTestFile{{"a", []byte("1234567890")}, {"a", []byte("abcdefghij")}}, nil, false)
++	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
++	require.Equal(t, []byte("abcdefghij"), readServerHTTPFixture(t, s, "a"))
++	require.Equal(t, int64(10), s.Filesystem().CachedUsage())
++}
++
++func TestMultipartFolderBatchRejectsInvalidManifestBeforeWrites(t *testing.T) {
++	quietUploadActivity(t)
++	tests := []struct {
++		name   string
++		fields [][2]string
++	}{
++		{"empty", [][2]string{{"paths", ""}}}, {"null", [][2]string{{"paths", "null"}}},
++		{"object", [][2]string{{"paths", `{"file.txt":"folder/file.txt"}`}}},
++		{"short", batchPaths(t, "good.txt")}, {"long", batchPaths(t, "good.txt", "folder/file.txt", "extra.txt")},
++		{"duplicate field", [][2]string{{"paths", `["good.txt","file.txt"]`}, {"paths", `["good.txt","file.txt"]`}}},
++		{"duplicate destination", batchPaths(t, "same/good.txt", "same/good.txt")},
++		{"null entry", [][2]string{{"paths", `["good.txt",null]`}}},
++		{"invalid UTF8", [][2]string{{"paths", "[\"good.txt\",\"\xff/file.txt\"]"}}},
++		{"mismatched basename", batchPaths(t, "good.txt", "folder/wrong.txt")},
++		{"extra JSON", [][2]string{{"paths", `["good.txt","file.txt"] []`}}},
++	}
++	for _, test := range tests {
++		t.Run(test.name, func(t *testing.T) {
++			_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++			response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/new", []multipartTestFile{{"good.txt", []byte("good")}, {"file.txt", []byte("bad")}}, test.fields, false)
++			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
++			require.NoDirExists(t, filepath.Join(s.Filesystem().Path(), "new"))
++		})
++	}
++}
++
++func TestMultipartFolderBatchRejectsTraversalAndPathAliases(t *testing.T) {
++	quietUploadActivity(t)
++	for _, value := range []string{"../file.txt", "/file.txt", "a/../../file.txt", "a\\file.txt", "C:/file.txt", "a//file.txt", "a/./file.txt", "a/../file.txt", "./file.txt", "a/\x00/file.txt", "", ".", strings.Repeat("a", 256) + "/file.txt", strings.Repeat("dir/", 1100) + "file.txt"} {
++		t.Run(value, func(t *testing.T) {
++			_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++			response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/new", []multipartTestFile{{"good.txt", []byte("good")}, {"file.txt", []byte("bad")}}, batchPaths(t, "good.txt", value), false)
++			require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
++			require.NoDirExists(t, filepath.Join(s.Filesystem().Path(), "new"))
++		})
++	}
++}
++
++func TestMultipartFolderBatchRejectsDuplicatesAndFileDirectoryConflicts(t *testing.T) {
++	quietUploadActivity(t)
++	for _, paths := range [][]string{{"a/file.txt", "a/file.txt"}, {"a", "a/file.txt"}, {"a/file.txt", "a"}} {
++		_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++		files := []multipartTestFile{}
++		for _, p := range paths {
++			files = append(files, multipartTestFile{filepath.Base(p), []byte("data")})
++		}
++		response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/new", files, batchPaths(t, paths...), false)
++		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
++		require.NoDirExists(t, filepath.Join(s.Filesystem().Path(), "new"))
++	}
++}
++
++func TestMultipartFolderBatchIgnoredPathsAndSymlinks(t *testing.T) {
++	quietUploadActivity(t)
++	for _, rule := range []string{"secret", "/secret", "secret/*"} {
++		_, s, handler := newBetterFilesHTTPServer(t, 10, 10, rule)
++		response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/", []multipartTestFile{{"good.txt", []byte("good")}, {"file.txt", []byte("bad")}}, batchPaths(t, "good.txt", "secret/nested/file.txt"), false)
++		require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
++		require.NoFileExists(t, filepath.Join(s.Filesystem().Path(), "good.txt"))
++	}
++	for _, target := range []string{"link/file.txt", "link/nested/file.txt", "file.txt"} {
++		_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
++		outside := t.TempDir()
++		require.NoError(t, os.WriteFile(filepath.Join(outside, "file.txt"), []byte("protected"), 0o600))
++		if target == "file.txt" {
++			require.NoError(t, os.Symlink(filepath.Join(outside, "file.txt"), filepath.Join(s.Filesystem().Path(), "file.txt")))
++		} else {
++			require.NoError(t, os.Symlink(outside, filepath.Join(s.Filesystem().Path(), "link")))
++		}
++		response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/", []multipartTestFile{{"good.txt", []byte("good")}, {"file.txt", []byte("bad")}}, batchPaths(t, "good.txt", target), false)
++		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
++		require.NoFileExists(t, filepath.Join(s.Filesystem().Path(), "good.txt"))
++		data, err := os.ReadFile(filepath.Join(outside, "file.txt"))
++		require.NoError(t, err)
++		require.Equal(t, "protected", string(data))
++		require.NoDirExists(t, filepath.Join(outside, "nested"))
++	}
++}
++
++func TestMultipartFolderBatchLimitsQuotaAndRejectedTokenReuse(t *testing.T) {
++	quietUploadActivity(t)
++	for _, limits := range [][2]int64{{1, 10}, {10, 1}} {
++		_, s, handler := newBetterFilesHTTPServer(t, limits[0], limits[1])
++		token := signBetterFilesUploadToken(t, s.ID())
++		files := []multipartTestFile{{"a", bytes.Repeat([]byte("a"), 600*1024)}, {"b", bytes.Repeat([]byte("b"), 600*1024)}}
++		response := performMultipartUpload(t, handler, token, "/new", files, batchPaths(t, "a", "nested/b"), false)
++		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
++		require.NoDirExists(t, filepath.Join(s.Filesystem().Path(), "new"))
++		response = performMultipartUpload(t, handler, token, "/", []multipartTestFile{{"a", []byte("x")}}, nil, false)
++		require.Equal(t, http.StatusNotFound, response.Code)
++	}
++	_, s, handler := newBetterFilesHTTPServer(t, 1, 10)
++	response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/", []multipartTestFile{{"big", bytes.Repeat([]byte("x"), 10*1024*1024)}}, batchPaths(t, "folder/big"), false)
++	require.Equal(t, http.StatusRequestEntityTooLarge, response.Code, response.Body.String())
++	require.NoDirExists(t, filepath.Join(s.Filesystem().Path(), "folder"))
++}
++
++func TestMultipartFolderBatchPlanRejectsSizeOverflowAndFileCount(t *testing.T) {
++	for _, sizes := range [][]int64{{-1}, {math.MaxInt64, 1}, {math.MaxInt64/2 + 1, math.MaxInt64/2 + 1}} {
++		form := &multipart.Form{File: map[string][]*multipart.FileHeader{"files": {}}}
++		for _, size := range sizes {
++			form.File["files"] = append(form.File["files"], &multipart.FileHeader{Filename: "file.txt", Size: size})
++		}
++		_, err := multipartUploadTargets(form, "/", math.MaxInt64)
++		require.Error(t, err)
++	}
++	form := &multipart.Form{Value: map[string][]string{"paths": {"[]"}}, File: map[string][]*multipart.FileHeader{"files": make([]*multipart.FileHeader, maxMultipartUploadFiles+1)}}
++	_, err := multipartUploadTargets(form, "/", 10)
++	require.Error(t, err)
++	delete(form.Value, "paths")
++	for i := range form.File["files"] {
++		form.File["files"][i] = &multipart.FileHeader{Filename: "file.txt"}
++	}
++	targets, err := multipartUploadTargets(form, "/", 10)
++	require.NoError(t, err, "flat uploads retain the multipart parser's original file-count limit")
++	require.Len(t, targets, maxMultipartUploadFiles+1)
++}
 diff --git a/router/tokens/websocket.go b/router/tokens/websocket.go
-index 07ad8f4e6633999989f32602868fbfacfb37f237..c896adeed8e8a0127b41b3384793b402b79ea937 100644
+index 07ad8f4e..c896adee 100644
 --- a/router/tokens/websocket.go
 +++ b/router/tokens/websocket.go
 @@ -85,6 +85,8 @@ type WebsocketPayload struct {
@@ -8535,7 +9013,7 @@ index 07ad8f4e6633999989f32602868fbfacfb37f237..c896adeed8e8a0127b41b3384793b402
  }
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..e74ea9c28b9b75175902d1e6be40bdc308d1d9d5
+index 00000000..e74ea9c2
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
 @@ -0,0 +1,1269 @@
@@ -9810,7 +10288,7 @@ index 0000000000000000000000000000000000000000..e74ea9c28b9b75175902d1e6be40bdc3
 +}
 diff --git a/router/websocket/betterfiles_collaboration_ot.go b/router/websocket/betterfiles_collaboration_ot.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..b9c6811e8690498aed5925574f2e1d287dcc8feb
+index 00000000..b9c6811e
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration_ot.go
 @@ -0,0 +1,292 @@
@@ -10108,7 +10586,7 @@ index 0000000000000000000000000000000000000000..b9c6811e8690498aed5925574f2e1d28
 +}
 diff --git a/router/websocket/betterfiles_collaboration_ot_test.go b/router/websocket/betterfiles_collaboration_ot_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..461c1ca9cb80a19f8bc545a7d6df8f88d7e90fda
+index 00000000..461c1ca9
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration_ot_test.go
 @@ -0,0 +1,128 @@
@@ -10242,7 +10720,7 @@ index 0000000000000000000000000000000000000000..461c1ca9cb80a19f8bc545a7d6df8f88
 +}
 diff --git a/router/websocket/file_collaboration_yjs.go b/router/websocket/file_collaboration_yjs.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..622fd79ca2017c42b7dc7e5d6f5b525eabecc9f2
+index 00000000..622fd79c
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs.go
 @@ -0,0 +1,611 @@
@@ -10859,7 +11337,7 @@ index 0000000000000000000000000000000000000000..622fd79ca2017c42b7dc7e5d6f5b525e
 +}
 diff --git a/router/websocket/file_collaboration_yjs_test.go b/router/websocket/file_collaboration_yjs_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..b370dd1838bc05fa7a9120075d623047276cd13d
+index 00000000..b370dd18
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs_test.go
 @@ -0,0 +1,339 @@
@@ -11203,7 +11681,7 @@ index 0000000000000000000000000000000000000000..b370dd1838bc05fa7a9120075d623047
 +	require.Equal(t, "ab", truncated)
 +}
 diff --git a/router/websocket/limiter.go b/router/websocket/limiter.go
-index 57315a96f2d7baba708d8f9bf1333aed935182d6..436ca497351df2cf4937abe7ce2c41ebbd3ee155 100644
+index 57315a96..436ca497 100644
 --- a/router/websocket/limiter.go
 +++ b/router/websocket/limiter.go
 @@ -1,6 +1,7 @@
@@ -11232,7 +11710,7 @@ index 57315a96f2d7baba708d8f9bf1333aed935182d6..436ca497351df2cf4937abe7ce2c41eb
 +	return IsBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)
 +}
 diff --git a/router/websocket/listeners.go b/router/websocket/listeners.go
-index 12e5f8168dd72837db7082b2803609cd87768e60..b79ddc184fa248858ab68414e7839f293044e2e2 100644
+index 12e5f816..b79ddc18 100644
 --- a/router/websocket/listeners.go
 +++ b/router/websocket/listeners.go
 @@ -78,6 +78,25 @@ var e = []string{
@@ -11274,7 +11752,7 @@ index 12e5f8168dd72837db7082b2803609cd87768e60..b79ddc184fa248858ab68414e7839f29
  				message.Args = []string{string(b)}
 diff --git a/router/websocket/listeners_operation_test.go b/router/websocket/listeners_operation_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..e05c740a919f54ef3cd6f7c0237f3b0d767ff761
+index 00000000..e05c740a
 --- /dev/null
 +++ b/router/websocket/listeners_operation_test.go
 @@ -0,0 +1,15 @@
@@ -11294,7 +11772,7 @@ index 0000000000000000000000000000000000000000..e05c740a919f54ef3cd6f7c0237f3b0d
 +	require.False(t, ok)
 +}
 diff --git a/router/websocket/websocket.go b/router/websocket/websocket.go
-index 4482667e67723a87eeb47735708f96206806c5db..e08e07acacf0eb94cc629833f74f92d0e6a1eb37 100644
+index 4482667e..e08e07ac 100644
 --- a/router/websocket/websocket.go
 +++ b/router/websocket/websocket.go
 @@ -39,13 +39,14 @@ const (
@@ -11357,7 +11835,7 @@ index 4482667e67723a87eeb47735708f96206806c5db..e08e07acacf0eb94cc629833f74f92d0
  	case AuthenticationEvent:
  		{
 diff --git a/server/events.go b/server/events.go
-index d08411cce8e18de88008df04789d40bc24e55ad7..c4a31cb52bda7e5d77f0e0198ec40741a904930f 100644
+index d08411cc..c4a31cb5 100644
 --- a/server/events.go
 +++ b/server/events.go
 @@ -19,6 +19,9 @@ const (
@@ -11372,7 +11850,7 @@ index d08411cce8e18de88008df04789d40bc24e55ad7..c4a31cb52bda7e5d77f0e0198ec40741
  // Events returns the server's emitter instance.
 diff --git a/server/file_history.go b/server/file_history.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717ca8a08f58
+index 00000000..98f3cf3c
 --- /dev/null
 +++ b/server/file_history.go
 @@ -0,0 +1,783 @@
@@ -12161,7 +12639,7 @@ index 0000000000000000000000000000000000000000..98f3cf3c42cf75b108def1f128bb717c
 +}
 diff --git a/server/file_history_test.go b/server/file_history_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af92b9280e
+index 00000000..32cabc52
 --- /dev/null
 +++ b/server/file_history_test.go
 @@ -0,0 +1,140 @@
@@ -12307,7 +12785,7 @@ index 0000000000000000000000000000000000000000..32cabc525e54b1788acf0f8a782959af
 +}
 diff --git a/server/file_operations.go b/server/file_operations.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..75a73a9d6837ccd7bbfaa8e3b086a9dfd6d05245
+index 00000000..75a73a9d
 --- /dev/null
 +++ b/server/file_operations.go
 @@ -0,0 +1,213 @@
@@ -12526,7 +13004,7 @@ index 0000000000000000000000000000000000000000..75a73a9d6837ccd7bbfaa8e3b086a9df
 +}
 diff --git a/server/file_operations_test.go b/server/file_operations_test.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..727a06c8348874140251a9b2f89864aecdddcf67
+index 00000000..727a06c8
 --- /dev/null
 +++ b/server/file_operations_test.go
 @@ -0,0 +1,150 @@
@@ -12682,7 +13160,7 @@ index 0000000000000000000000000000000000000000..727a06c8348874140251a9b2f89864ae
 +}
 diff --git a/server/filesystem/replace.go b/server/filesystem/replace.go
 new file mode 100644
-index 0000000000000000000000000000000000000000..e13edc4ba84df3e8f4a2cf18cc9da532057c0602
+index 00000000..e13edc4b
 --- /dev/null
 +++ b/server/filesystem/replace.go
 @@ -0,0 +1,124 @@
@@ -12810,8 +13288,243 @@ index 0000000000000000000000000000000000000000..e13edc4ba84df3e8f4a2cf18cc9da532
 +	}
 +	return nil
 +}
+diff --git a/server/filesystem/upload.go b/server/filesystem/upload.go
+new file mode 100644
+index 00000000..64f20bae
+--- /dev/null
++++ b/server/filesystem/upload.go
+@@ -0,0 +1,112 @@
++package filesystem
++
++import (
++	"errors"
++	"io"
++	"io/fs"
++	"strings"
++
++	"golang.org/x/sys/unix"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/internal/ufs"
++)
++
++// WriteUpload writes a regular upload through pinned directory descriptors.
++// Every component is opened separately with O_NOFOLLOW, including on kernels
++// without openat2. Quota growth is reserved before truncating the destination.
++func (f *Filesystem) WriteUpload(name string, source io.Reader, size int64) (err error) {
++	name = strings.TrimPrefix(name, "/")
++	if size < 0 || !fs.ValidPath(name) || name == "." || strings.ContainsAny(name, "\\\x00") {
++		return ufs.ErrBadPathResolution
++	}
++	parts := strings.Split(name, "/")
++	for i := range parts {
++		prefix := strings.Join(parts[:i+1], "/")
++		if err := f.IsIgnored(prefix, "/"+prefix); err != nil {
++			return err
++		}
++	}
++	if err := f.HasSpaceFor(0); err != nil {
++		return err
++	}
++	parent, err := f.unixFS.OpenFile(".", ufs.O_DIRECTORY|ufs.O_RDONLY, 0)
++	if err != nil {
++		return err
++	}
++	defer func() { _ = parent.Close() }()
++	uid, gid := config.Get().System.User.Uid, config.Get().System.User.Gid
++	for _, component := range parts[:len(parts)-1] {
++		child, openErr := f.unixFS.OpenFileat(int(parent.Fd()), component, ufs.O_DIRECTORY|ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++		if errors.Is(openErr, ufs.ErrNotExist) {
++			created := false
++			if mkdirErr := f.unixFS.Mkdirat(int(parent.Fd()), component, 0o755); mkdirErr == nil {
++				created = true
++			} else if !errors.Is(mkdirErr, ufs.ErrExist) {
++				return mkdirErr
++			}
++			child, openErr = f.unixFS.OpenFileat(int(parent.Fd()), component, ufs.O_DIRECTORY|ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
++			if openErr == nil && created && !f.isTest {
++				if err := unix.Fchown(int(child.Fd()), uid, gid); err != nil {
++					_ = child.Close()
++					return err
++				}
++			}
++		}
++		if openErr != nil {
++			return openErr
++		}
++		_ = parent.Close()
++		parent = child
++	}
++	// O_NONBLOCK avoids blocking on a raced-in FIFO. Do not truncate until the
++	// opened inode is verified as regular and its quota growth is reserved.
++	file, err := f.unixFS.OpenFileat(int(parent.Fd()), parts[len(parts)-1], ufs.O_CREATE|ufs.O_RDWR|ufs.O_NOFOLLOW|unix.O_NONBLOCK, 0o644)
++	if err != nil {
++		return err
++	}
++	defer func() {
++		if closeErr := file.Close(); err == nil {
++			err = closeErr
++		}
++	}()
++	info, err := file.Stat()
++	if err != nil {
++		return err
++	}
++	var stat unix.Stat_t
++	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
++		return err
++	}
++	if !info.Mode().IsRegular() || stat.Nlink != 1 {
++		return ufs.ErrBadPathResolution
++	}
++	growth := size - info.Size()
++	if err := f.HasSpaceFor(growth); err != nil {
++		return err
++	}
++	reserved := int64(0)
++	if growth > 0 {
++		if err := f.reserveDisk(growth); err != nil {
++			return err
++		}
++		reserved = growth
++	}
++	defer func() {
++		if after, statErr := file.Stat(); statErr == nil {
++			f.adjustDisk(after.Size() - info.Size() - reserved)
++		} else if err == nil {
++			err = statErr
++		}
++	}()
++	if err := file.Truncate(0); err != nil {
++		return err
++	}
++	if _, err := io.CopyN(file, source, size); err != nil {
++		return err
++	}
++	if !f.isTest {
++		return unix.Fchown(int(file.Fd()), uid, gid)
++	}
++	return nil
++}
+diff --git a/server/filesystem/upload_test.go b/server/filesystem/upload_test.go
+new file mode 100644
+index 00000000..dbf937f7
+--- /dev/null
++++ b/server/filesystem/upload_test.go
+@@ -0,0 +1,111 @@
++package filesystem
++
++import (
++	"bytes"
++	"io"
++	"os"
++	"path/filepath"
++	"sync"
++	"sync/atomic"
++	"testing"
++
++	"github.com/pterodactyl/wings/config"
++	"github.com/pterodactyl/wings/internal/ufs"
++	"github.com/stretchr/testify/require"
++	"golang.org/x/sys/unix"
++)
++
++func uploadTestFilesystem(t *testing.T, openat2 bool, limit int64, ignored ...string) *Filesystem {
++	t.Helper()
++	config.Set(&config.Configuration{AuthenticationToken: "upload-test"})
++	f, err := New(t.TempDir(), limit, ignored)
++	require.NoError(t, err)
++	f.unixFS.UnixFS, err = ufs.NewUnixFS(f.Path(), openat2)
++	require.NoError(t, err)
++	f.isTest = true
++	return f
++}
++
++func TestWriteUploadRejectsLinksAndSpecialFilesAtTheSink(t *testing.T) {
++	for _, openat2 := range []bool{false, true} {
++		t.Run(map[bool]string{true: "openat2", false: "openat"}[openat2], func(t *testing.T) {
++			f := uploadTestFilesystem(t, openat2, 100, "protected")
++			outside := t.TempDir()
++			require.NoError(t, os.WriteFile(filepath.Join(outside, "file"), []byte("outside"), 0o600))
++			require.NoError(t, os.MkdirAll(filepath.Join(f.Path(), "protected/nested"), 0o755))
++			require.NoError(t, os.WriteFile(filepath.Join(f.Path(), "protected/nested/file"), []byte("inside"), 0o600))
++			require.NoError(t, os.Symlink(outside, filepath.Join(f.Path(), "escape")))
++			require.NoError(t, os.Symlink("protected", filepath.Join(f.Path(), "alias")))
++			require.NoError(t, os.Symlink(filepath.Join(outside, "file"), filepath.Join(f.Path(), "leaf")))
++			require.NoError(t, os.Link(filepath.Join(f.Path(), "protected/nested/file"), filepath.Join(f.Path(), "hardlink")))
++			require.NoError(t, unix.Mkfifo(filepath.Join(f.Path(), "fifo"), 0o600))
++			for _, name := range []string{"escape/file", "escape/new/file", "alias/nested/file", "leaf", "hardlink", "fifo", "protected/nested/file"} {
++				require.Error(t, f.WriteUpload(name, bytes.NewBufferString("bad"), 3), name)
++			}
++			data, err := os.ReadFile(filepath.Join(outside, "file"))
++			require.NoError(t, err)
++			require.Equal(t, "outside", string(data))
++			data, err = os.ReadFile(filepath.Join(f.Path(), "protected/nested/file"))
++			require.NoError(t, err)
++			require.Equal(t, "inside", string(data))
++			require.NoDirExists(t, filepath.Join(outside, "new"))
++		})
++	}
++}
++
++func TestWriteUploadReservesQuotaAcrossConcurrentFiles(t *testing.T) {
++	f := uploadTestFilesystem(t, false, 10)
++	start := make(chan struct{})
++	var successes atomic.Int32
++	var wg sync.WaitGroup
++	for _, name := range []string{"a", "b", "c", "d"} {
++		wg.Add(1)
++		go func(name string) {
++			defer wg.Done()
++			<-start
++			if err := f.WriteUpload(name, bytes.NewBufferString("1234567890"), 10); err == nil {
++				successes.Add(1)
++			}
++		}(name)
++	}
++	close(start)
++	wg.Wait()
++	require.Equal(t, int32(1), successes.Load())
++	require.Equal(t, int64(10), f.CachedUsage())
++	var actual int64
++	entries, err := os.ReadDir(f.Path())
++	require.NoError(t, err)
++	for _, entry := range entries {
++		info, err := entry.Info()
++		require.NoError(t, err)
++		actual += info.Size()
++	}
++	require.Equal(t, int64(10), actual)
++}
++
++func TestWriteUploadTracksOverwriteShortReadAndParentOwnership(t *testing.T) {
++	f := uploadTestFilesystem(t, false, 10)
++	settings := config.Get()
++	settings.System.User.Uid = os.Getuid()
++	settings.System.User.Gid = os.Getgid()
++	config.Set(settings)
++	f.isTest = false
++	require.NoError(t, f.WriteUpload("a/b/file", bytes.NewBufferString("1234567890"), 10))
++	for _, name := range []string{"a", "a/b", "a/b/file"} {
++		var stat unix.Stat_t
++		require.NoError(t, unix.Stat(filepath.Join(f.Path(), name), &stat))
++		require.Equal(t, uint32(os.Getuid()), stat.Uid)
++		require.Equal(t, uint32(os.Getgid()), stat.Gid)
++	}
++	require.NoError(t, f.WriteUpload("a/b/file", bytes.NewBufferString("12"), 2))
++	require.Equal(t, int64(2), f.CachedUsage())
++	require.ErrorIs(t, f.WriteUpload("a/b/short", bytes.NewBufferString("123"), 8), io.EOF)
++	require.Equal(t, int64(5), f.CachedUsage())
++	require.Error(t, f.WriteUpload("a/b/file", bytes.NewBufferString("1234567890"), 10))
++	data, err := os.ReadFile(filepath.Join(f.Path(), "a/b/file"))
++	require.NoError(t, err)
++	require.Equal(t, "12", string(data))
++	f.SetDiskLimit(-1)
++	require.Error(t, f.WriteUpload("disabled/file", bytes.NewReader(nil), 0))
++	require.NoDirExists(t, filepath.Join(f.Path(), "disabled"))
++}
 diff --git a/server/server.go b/server/server.go
-index a1777b047ba40a7d9060d76a298ecf7df6a2284a..073ec76f961d7cb07313fe6aaa664e6352d8d55a 100644
+index a1777b04..073ec76f 100644
 --- a/server/server.go
 +++ b/server/server.go
 @@ -46,7 +46,8 @@ type Server struct {

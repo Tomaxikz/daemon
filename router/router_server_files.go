@@ -3,7 +3,9 @@ package router
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"io"
+	"io/fs"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -11,6 +13,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
@@ -18,7 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/pterodactyl/wings/config"
-	"github.com/pterodactyl/wings/internal/models"
+	"github.com/pterodactyl/wings/internal/ufs"
 	"github.com/pterodactyl/wings/router/downloader"
 	"github.com/pterodactyl/wings/router/middleware"
 	"github.com/pterodactyl/wings/router/tokens"
@@ -587,6 +590,16 @@ func postServerChmodFile(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+const (
+	maxMultipartUploadFiles    = 512
+	maxMultipartUploadOverhead = int64(8 * 1024 * 1024)
+)
+
+type multipartUploadTarget struct {
+	header *multipart.FileHeader
+	path   string
+}
+
 func postServerUploadFiles(c *gin.Context) {
 	manager := middleware.ExtractManager(c)
 
@@ -604,74 +617,181 @@ func postServerUploadFiles(c *gin.Context) {
 		return
 	}
 
+	maxFileSize := config.Get().Api.UploadLimit
+	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
+	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Upload limit is not configured correctly."})
+		return
+	}
+	maxFileSizeBytes := maxFileSize * 1024 * 1024
+	maxBodyBytes := int64(1<<63 - 1)
+	if maxFileSizeBytes <= maxBodyBytes-maxMultipartUploadOverhead {
+		maxBodyBytes = maxFileSizeBytes + maxMultipartUploadOverhead
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodyBytes)
 	form, err := c.MultipartForm()
 	if err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			c.AbortWithStatusJSON(http.StatusRequestEntityTooLarge, gin.H{"error": "The multipart request exceeds the upload limit."})
+			return
+		}
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "Failed to get multipart form data from request.",
 		})
 		return
 	}
+	defer form.RemoveAll()
 
-	headers, ok := form.File["files"]
-	if !ok {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-			"error": "No files were found on the request body.",
-		})
+	directory, err := normalizeBetterFilesRoot(c.Query("directory"))
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid upload directory."})
 		return
 	}
-
-	directory := path.Clean("/" + strings.TrimLeft(c.Query("directory"), "/"))
-	if directory == "." {
-		directory = "/"
-	}
-
-	maxFileSize := config.Get().Api.UploadLimit
-	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)
-	if maxFileSize <= 0 || maxFileSize > maxUploadLimitMB {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
-			"error": "Upload limit is not configured correctly.",
-		})
+	targets, err := multipartUploadTargets(form, directory, maxFileSizeBytes)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	maxFileSizeBytes := maxFileSize * 1024 * 1024
-	var totalSize int64
-	for _, header := range headers {
-		if header.Size < 0 || header.Size > maxFileSizeBytes {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "File " + header.Filename + " is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
-			})
-			return
-		}
-		totalSize += header.Size
-		if totalSize > maxFileSizeBytes {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "Total upload size is larger than the maximum file upload size of " + strconv.FormatInt(maxFileSize, 10) + " MB.",
-			})
-			return
-		}
-	}
-
-	for _, header := range headers {
-		filename, ok := cleanUploadFilename(header.Filename)
-		if !ok {
-			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
-				"error": "Invalid upload filename.",
-			})
-			return
-		}
-
-		// We run this in a different method so I can use defer without any of
-		// the consequences caused by calling it in a loop.
-		if err := handleFileUpload(path.Join(directory, filename), s, header); err != nil {
+	// Reject invalid/ignored destinations and insufficient aggregate quota before
+	// creating directories or writing any file. Runtime writes recheck quota atomically.
+	var growth, projectedGrowth int64
+	plannedSizes := make(map[string]int64, len(targets))
+	for _, target := range targets {
+		if err := ensureBetterFilesAllowed(s.Filesystem(), target.path); err != nil {
 			middleware.CaptureAndAbort(c, err)
 			return
+		}
+		oldSize, err := multipartUploadExistingSize(s.Filesystem(), target.path)
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "An upload destination is not a regular file or contains a symbolic link."})
+			return
+		}
+		if prior, exists := plannedSizes[target.path]; exists {
+			oldSize = prior
+		}
+		plannedSizes[target.path] = target.header.Size
+		delta := target.header.Size - oldSize
+		// Simulate sequential overwrites, including earlier shrinks and repeated
+		// flat filenames. More than one request's worth of shrink credit cannot
+		// affect the peak, so cap it to keep all arithmetic within int64.
+		if delta < 0 && projectedGrowth < -maxFileSizeBytes-delta {
+			projectedGrowth = -maxFileSizeBytes
 		} else {
-			s.SaveActivity(s.NewRequestActivity(token.UserUuid, c.ClientIP()), server.ActivityFileUploaded, models.ActivityMeta{
-				"file":      filename,
-				"directory": directory,
-			})
+			projectedGrowth += delta
+		}
+		if projectedGrowth > growth {
+			growth = projectedGrowth
 		}
 	}
+	if err := s.Filesystem().HasSpaceFor(growth); err != nil {
+		middleware.CaptureAndAbort(c, err)
+		return
+	}
+	for _, target := range targets {
+		release, ok := uploadLocks.acquire(s.ID() + "\x00" + target.path)
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "An upload is already active for this file."})
+			return
+		}
+		err := handleFileUpload(target.path, s, target.header)
+		release()
+		if err != nil {
+			middleware.CaptureAndAbort(c, err)
+			return
+		}
+		saveUploadActivity(s, token.UserUuid, c.ClientIP(), path.Base(target.path), path.Dir(target.path))
+	}
+}
+
+// paths is an optional JSON array of relative paths, in files-part order. Never
+// recover paths from FileHeader.Filename: mime/multipart already strips directories.
+func multipartUploadTargets(form *multipart.Form, directory string, limit int64) ([]multipartUploadTarget, error) {
+	headers := form.File["files"]
+	if len(headers) == 0 {
+		return nil, errors.New("No files were found on the request body.")
+	}
+	var paths []string
+	values, hasPaths := form.Value["paths"]
+	if hasPaths && len(headers) > maxMultipartUploadFiles {
+		return nil, errors.New("A folder batch may contain at most 512 files.")
+	}
+	if len(form.File["paths"]) != 0 {
+		return nil, errors.New("paths must be a JSON text field.")
+	}
+	if hasPaths {
+		if len(values) != 1 || len(values[0]) > maxMultipartUploadFiles*(betterFilesMaxPathLength+8) || !utf8.ValidString(values[0]) {
+			return nil, errors.New("Exactly one bounded paths manifest is required.")
+		}
+		if err := json.Unmarshal([]byte(values[0]), &paths); err != nil || len(paths) != len(headers) {
+			return nil, errors.New("paths must be a JSON array with one relative path per file, in the same order.")
+		}
+	}
+	targets := make([]multipartUploadTarget, 0, len(headers))
+	seen := make(map[string]struct{}, len(headers))
+	var total int64
+	for i, header := range headers {
+		if header.Size < 0 || header.Size > limit-total {
+			return nil, errors.New("The files exceed the maximum total upload size.")
+		}
+		total += header.Size
+		name, ok := cleanUploadFilename(header.Filename)
+		if !ok {
+			return nil, errors.New("Invalid upload filename.")
+		}
+		if hasPaths {
+			name = paths[i]
+			// ValidPath rejects empty, absolute, dot, parent and empty components.
+			// Backslashes and Windows drive prefixes are rejected explicitly.
+			if !fs.ValidPath(name) || strings.ContainsAny(name, "\\\x00") ||
+				(len(name) >= 2 && name[1] == ':') || path.Base(name) != header.Filename {
+				return nil, errors.New("Invalid relative upload path or mismatched filename.")
+			}
+		}
+		target, err := joinBetterFilesPath(directory, name)
+		if err != nil {
+			return nil, errors.New("Invalid relative upload path.")
+		}
+		if _, exists := seen[target]; hasPaths && exists {
+			return nil, errors.New("Duplicate upload destination.")
+		}
+		seen[target] = struct{}{}
+		targets = append(targets, multipartUploadTarget{header: header, path: target})
+	}
+	for target := range seen {
+		for parent := path.Dir(target); parent != "/"; parent = path.Dir(parent) {
+			if _, exists := seen[parent]; exists {
+				return nil, errors.New("An upload destination is also used as a directory.")
+			}
+		}
+	}
+	return targets, nil
+}
+
+func multipartUploadExistingSize(files *filesystem.Filesystem, target string) (int64, error) {
+	parts := strings.Split(strings.TrimPrefix(target, "/"), "/")
+	for i := range parts {
+		info, err := files.UnixFS().Lstat(strings.Join(parts[:i+1], "/"))
+		if errors.Is(err, ufs.ErrNotExist) {
+			return 0, nil
+		}
+		if err != nil {
+			return 0, err
+		}
+		if info.Mode()&ufs.ModeSymlink != 0 {
+			return 0, errBetterFilesInvalidPath
+		}
+		if i == len(parts)-1 {
+			if !info.Mode().IsRegular() {
+				return 0, errBetterFilesInvalidPath
+			}
+			return info.Size(), nil
+		}
+		if !info.IsDir() {
+			return 0, errBetterFilesInvalidPath
+		}
+	}
+	return 0, errBetterFilesInvalidPath
 }
 
 func cleanUploadFilename(name string) (string, bool) {
@@ -688,11 +808,11 @@ func handleFileUpload(p string, s *server.Server, header *multipart.FileHeader) 
 	}
 	defer file.Close()
 
-	if err := s.Filesystem().IsIgnored(p); err != nil {
+	if err := ensureBetterFilesAllowed(s.Filesystem(), p); err != nil {
 		return err
 	}
 
-	if err := s.Filesystem().Write(p, file, header.Size, 0o644); err != nil {
+	if err := s.Filesystem().WriteUpload(p, file, header.Size); err != nil {
 		return err
 	}
 	return nil
