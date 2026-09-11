@@ -28,19 +28,31 @@ Notable changes in this fork include:
   Wings-rs-style downloads so later file growth does not extend the response.
 * Download responses include safer headers such as `X-Content-Type-Options: nosniff`.
 
-## Clone this fork
+## Download the latest prebuilt Wings
 
-Clone this repository's `develop` branch into a new `daemon` directory:
+No Git clone, Go installation, build, or source patch is needed. On Linux, run
+this command in a download directory to save the correct amd64/arm64 binary as
+`./wings` (replacing that local file if it already exists):
 
 ```bash
-git clone --branch develop https://github.com/Tomaxikz/daemon.git
-cd daemon
+(case "$(uname -m)" in x86_64) wings_arch=amd64 ;; aarch64|arm64) wings_arch=arm64 ;; *) printf 'Unsupported architecture\n' >&2; exit 1 ;; esac; curl -fL --retry 3 -o wings "https://github.com/Tomaxikz/daemon/releases/download/dev-latest/wings_linux_${wings_arch}" && chmod 0755 wings)
 ```
 
-This is the development branch and already includes this fork's changes; do not
-apply the bundled upstream patches to this checkout. Cloning downloads the source
-only—it does not install or restart Wings. Keep the full Git history (no
-`--depth` option) if you plan to run the installer validation commands below.
+This downloads the newest published [development release](https://github.com/Tomaxikz/daemon/releases/tag/dev-latest),
+which already includes this fork's changes. It is a **prerelease**, not a stable
+release: use the `dev-latest` URL above, not GitHub's stable-only
+`releases/latest/download` URL. Versioned downloads and `SHA256SUMS` are available
+on the [releases page](https://github.com/Tomaxikz/daemon/releases).
+
+For an existing Wings installation, keep a rollback copy of the installed binary,
+then install the successfully downloaded file:
+
+```bash
+sudo install -m 0755 wings /usr/local/bin/wings
+```
+
+Restart your Wings service separately when ready to activate the new binary.
+These commands do not change your configuration or apply any source patches.
 
 ## Release pipeline
 
