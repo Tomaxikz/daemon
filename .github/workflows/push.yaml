@@ -1,76 +1,142 @@
-name: Push
+name: Build, Test and Release
 
 on:
   push:
-    branches:
-      - develop
+    branches: [develop]
+    tags: ['v*']
   pull_request:
-    branches:
-      - develop
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build-and-test:
-    name: Build and Test
-    runs-on: ${{ matrix.os }}
+    name: Test and build Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
-        go: ["1.26.7"]
-        goos: [linux]
-        goarch: [amd64, arm64]
-    permissions:
-      contents: read
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
-      - name: Code checkout
-        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
-
-      - name: Setup Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          go-version: ${{ matrix.go }}
-
-      - name: go mod download
-        env:
-          CGO_ENABLED: 0
+          persist-credentials: false
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: go.mod
+      - name: Verify modules
         run: |
           go mod download
-
-      - name: Build
+          go mod verify
+      - name: Test
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-          SRC_PATH: github.com/pterodactyl/wings
-        run: |
-          go build -v -trimpath -ldflags="-s -w -X ${SRC_PATH}/system.Version=dev-${GITHUB_SHA:0:7}" -o dist/wings ${SRC_PATH}
-          go build -v -trimpath -ldflags="-X ${SRC_PATH}/system.Version=dev-${GITHUB_SHA:0:7}" -o dist/wings_debug ${SRC_PATH}
-          chmod 755 dist/*
-
-      - name: go test
-        if: ${{ matrix.goarch == 'amd64' }}
+          CGO_ENABLED: '0'
+          GOTOOLCHAIN: local
+        run: go test -mod=readonly ./...
+      - name: Race test
         env:
-          CGO_ENABLED: 0
-        run: |
-          go test $(go list ./...)
-
-      - name: go test -race
-        if: ${{ matrix.goarch == 'amd64' }}
+          CGO_ENABLED: '1'
+          GOTOOLCHAIN: local
+        run: go test -race -mod=readonly ./...
+      - name: Build and smoke-test release binaries
         env:
-          CGO_ENABLED: 1
-        run: |
-          go test -race $(go list ./...)
-
-      - name: Upload Release Artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.26.7' }}
+          BUILD_ARCH: ${{ matrix.arch }}
+        run: python3 .github/scripts/release.py build --arch "$BUILD_ARCH" --directory dist
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
-          name: wings_linux_${{ matrix.goarch }}
-          path: dist/wings
+          name: wings-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+          overwrite: true
 
-      - name: Upload Debug Artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-        if: ${{ (github.ref == 'refs/heads/develop' || github.event_name == 'pull_request') && matrix.go == '1.26.7' }}
+  installers:
+    name: Validate ${{ matrix.addon }} distribution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        addon: [betterfiles, betterconsole, networkstats, full]
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
-          name: wings_linux_${{ matrix.goarch }}_debug
-          path: dist/wings_debug
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version-file: go.mod
+      - name: Test release tooling
+        if: matrix.addon == 'full'
+        run: python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+      - name: Check shell syntax
+        run: |
+          bash -n betterfiles_patch.sh
+          bash -n betterconsolepatch.sh
+          bash -n install_networkstats.sh
+      - name: Validate patches, clean installs, upgrades and repeat runs
+        env:
+          ADDON: ${{ matrix.addon }}
+        run: python3 .github/scripts/validate_installers.py "$ADDON"
+
+  bundle:
+    name: Assemble verified release bundle
+    needs: [build-and-test, installers]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          pattern: wings-linux-*
+          merge-multiple: true
+          path: dist
+      - name: Pin installer sources and generate checksums
+        run: python3 .github/scripts/release.py bundle --directory dist
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: wings-release-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+          overwrite: true
+
+  publish:
+    name: Publish verified release
+    needs: bundle
+    if: >-
+      github.repository == 'Tomaxikz/daemon' &&
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    concurrency:
+      group: wings-release-publisher
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6.0.0
+        with:
+          name: wings-release-${{ github.sha }}
+          path: dist
+      - name: Publish snapshot, then promote the development alias
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release.py publish --directory dist

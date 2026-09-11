@@ -28,6 +28,62 @@ Notable changes in this fork include:
   Wings-rs-style downloads so later file growth does not extend the response.
 * Download responses include safer headers such as `X-Content-Type-Options: nosniff`.
 
+## Release pipeline
+
+`.github/workflows/push.yaml` owns testing, packaging and publishing. Go versions
+come from `go.mod`. Pull requests run with read-only repository permissions; only
+the final publishing job on this repository has `contents: write`.
+
+Before a release can publish, the workflow must complete:
+
+- Native Linux amd64 and arm64 tests, race tests, release/debug builds, and binary
+  version smoke tests.
+- Clean application and builds of `betterfiles.patch`, `betterconsole.patch`,
+  `nsm.patch`, and `tomaxikz.patch` against supported upstream commit `6987d5e`.
+- Clean, repeat, and upgrade runs of all three smart installers, using source
+  files from the same checkout. The upgrade fixtures use patches from `60f5d30`.
+- Release-tool regression tests, source consistency checks, and bundle checksum
+  verification. CodeQL remains a separate scheduled analysis workflow.
+
+Every bundle contains both architectures' normal/debug binaries, all four patches,
+all three installers, `README.md`, `RELEASE.json`, and portable `SHA256SUMS`.
+Installers attached to releases fetch their source files from that exact commit;
+the repository copies continue to default to `develop`. `TOMAXIKZ_RAW_BASE` still
+allows an explicit source override.
+
+Pushes to `develop` publish a versioned prerelease named `dev-<full commit SHA>`
+before updating the existing `dev-latest` download URLs. Versioned releases are
+never overwritten by this pipeline. Publishing is serialized across branches,
+and an older run cannot promote itself when `develop` has advanced. The alias is
+temporarily hidden while its assets are replaced and verified. Ordinary failures
+restore the previous alias; a forced runner termination may require rerunning the
+publishing job. Versioned snapshots remain available during alias updates.
+
+For a stable release, push a tag such as `v1.2.3`. Tags such as `v1.2.3-rc.1` publish
+prereleases. Both use the same checks and bundling process. Older stable versions
+do not displace a newer stable version as GitHub's latest release. There are no
+automatic release-branch commits or requests to Pterodactyl's upstream CDN.
+
+No custom publishing secret is needed: the workflow uses its repository-scoped
+`GITHUB_TOKEN`. The repository's rolling `dev-latest` release must remain mutable;
+enabling repository-wide release immutability is incompatible with this alias.
+The workflow itself refuses to move or replace versioned releases. To roll back,
+download a binary from a previous versioned release, replace Wings, and restart it.
+
+Local validation on Linux with Go from `go.mod`:
+
+```bash
+python3 -m unittest discover -s .github/scripts -p 'test_*.py' -v
+python3 .github/scripts/validate_installers.py betterfiles
+python3 .github/scripts/validate_installers.py betterconsole
+python3 .github/scripts/validate_installers.py networkstats
+python3 .github/scripts/validate_installers.py full
+python3 .github/scripts/release.py build --arch amd64 --directory /tmp/wings-build
+```
+
+The build command requires the matching native Linux architecture. Publishing is
+restricted to trusted GitHub workflow events; local validation never publishes.
+
 ## Sponsors
 
 I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.

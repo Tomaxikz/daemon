@@ -32,6 +32,9 @@ func newBetterFilesHTTPServer(t *testing.T, uploadLimitMB, diskMB int64, ignored
 	next.Api.UploadLimit = uploadLimitMB
 	next.System.Data = filepath.Join(root, "volumes")
 	next.System.RootDirectory = root
+	// These fixtures measure per-write quota accounting from an empty root.
+	// Disable the manager's asynchronous startup scan so it cannot race writes.
+	next.System.DiskCheckInterval = 0
 	next.System.User.Uid = os.Getuid()
 	next.System.User.Gid = os.Getgid()
 	next.System.FileHistory.Enabled = false

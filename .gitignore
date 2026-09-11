@@ -31,6 +31,10 @@
 
 # Builds by gox
 /build
+/dist/
+
+# Python release-tool caches
+__pycache__/
 
 # Go Coverage tool
 /coverage.out

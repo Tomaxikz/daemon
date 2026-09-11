@@ -1008,10 +1008,10 @@ index 00000000..74ccb8f6
 +}
 diff --git a/router/betterfiles_http_test.go b/router/betterfiles_http_test.go
 new file mode 100644
-index 00000000..8f75b755
+index 00000000..c1797680
 --- /dev/null
 +++ b/router/betterfiles_http_test.go
-@@ -0,0 +1,124 @@
+@@ -0,0 +1,127 @@
 +package router
 +
 +import (
@@ -1046,6 +1046,9 @@ index 00000000..8f75b755
 +	next.Api.UploadLimit = uploadLimitMB
 +	next.System.Data = filepath.Join(root, "volumes")
 +	next.System.RootDirectory = root
++	// These fixtures measure per-write quota accounting from an empty root.
++	// Disable the manager's asynchronous startup scan so it cannot race writes.
++	next.System.DiskCheckInterval = 0
 +	next.System.User.Uid = os.Getuid()
 +	next.System.User.Gid = os.Getgid()
 +	next.System.FileHistory.Enabled = false

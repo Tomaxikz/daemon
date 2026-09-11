@@ -1059,6 +1059,28 @@ replace_once(
     "MkdirAll(path.Dir(c.PrivateKeyPath()), 0o700)",
     "private SFTP key directory permissions",
 )
+
+# Keep source edits aligned with the current downloaded SFTP regression tests.
+insert_after("sftp/server.go", "import (\n", '\tstderrors "errors"\n', 'stderrors "errors"', "SFTP handshake errors import")
+insert_after("sftp/server.go", "import (\n", '\t"io"\n', '"io"', "SFTP handshake EOF import")
+insert_before("sftp/server.go", "//goland:noinspection GoNameStartsWithPackageName\n",
+    "// sshHandshakeError identifies failures that occur before an inbound client\n// completes the SSH handshake. These errors are controlled by remote clients\n// and are routine noise on a public SFTP port, not daemon failures.\ntype sshHandshakeError struct {\n\tcause error\n}\n\nfunc (e *sshHandshakeError) Error() string { return e.cause.Error() }\nfunc (e *sshHandshakeError) Unwrap() error { return e.cause }\n\n", "type sshHandshakeError struct", "SFTP handshake error type")
+insert_before("sftp/server.go", "// AcceptInbound handles an inbound connection to the instance and determines if we should\n",
+    "// logInboundSFTPError keeps client-controlled handshake failures out of the\n// error log. Public SFTP listeners are continuously hit by scanners, obsolete\n// SSH clients, and non-SSH protocols; logging those with stack traces creates\n// noise without identifying a daemon fault. Unexpected post-handshake errors\n// remain error-level and retain their full diagnostic context.\nfunc logInboundSFTPError(err error, remoteAddress string) {\n\tvar handshakeErr *sshHandshakeError\n\tif stderrors.As(err, &handshakeErr) {\n\t\tlog.WithFields(log.Fields{\n\t\t\t\"ip\":     remoteAddress,\n\t\t\t\"reason\": sshHandshakeRejectionReason(handshakeErr.cause),\n\t\t}).Debug(\"sftp: rejected inbound SSH handshake\")\n\t\treturn\n\t}\n\n\tlog.WithError(err).WithField(\"ip\", remoteAddress).Error(\"sftp: failed to accept inbound connection\")\n}\n\n// sshHandshakeRejectionReason returns a bounded, non-sensitive description of\n// a rejected handshake. In particular, it avoids logging attacker-controlled\n// algorithm lists or malformed version strings.\nfunc sshHandshakeRejectionReason(err error) string {\n\tif stderrors.Is(err, io.EOF) {\n\t\treturn \"connection closed before handshake completed\"\n\t}\n\n\tvar netErr net.Error\n\tif stderrors.As(err, &netErr) && netErr.Timeout() {\n\t\treturn \"handshake timed out\"\n\t}\n\n\tmessage := strings.ToLower(err.Error())\n\tswitch {\n\tcase strings.Contains(message, \"overflow reading version string\"):\n\t\treturn \"invalid SSH version string\"\n\tcase strings.Contains(message, \"no common algorithm for key exchange\"):\n\t\treturn \"no compatible key-exchange algorithm\"\n\tcase strings.Contains(message, \"no common algorithm for host key\"):\n\t\treturn \"no compatible host-key algorithm\"\n\tcase strings.Contains(message, \"no common algorithm for cipher\"):\n\t\treturn \"no compatible cipher\"\n\tcase strings.Contains(message, \"no common algorithm for mac\"):\n\t\treturn \"no compatible message-authentication algorithm\"\n\tcase strings.Contains(message, \"unable to authenticate\"):\n\t\treturn \"authentication rejected\"\n\tcase strings.Contains(message, \"connection reset by peer\"),\n\t\tstrings.Contains(message, \"broken pipe\"),\n\t\tstrings.Contains(message, \"unexpected eof\"):\n\t\treturn \"connection closed during handshake\"\n\tdefault:\n\t\treturn \"SSH handshake rejected\"\n\t}\n}\n\n", "func sshHandshakeRejectionReason", "bounded SFTP handshake logging")
+path, text = read_text("sftp/server.go")
+replacement = 'logInboundSFTPError(err, conn.RemoteAddr().String())'
+if replacement not in text:
+    for logger in ('log.WithField("error", err)', 'log.WithError(err)'):
+        original = logger + '.WithField("ip", conn.RemoteAddr().String()).Error("sftp: failed to accept inbound connection")'
+        if original in text:
+            write_text(path, text, text.replace(original, replacement, 1), "classify SFTP handshake failures")
+            break
+    else:
+        fail("could not find SFTP handshake failure logging")
+replace_once("sftp/server.go",
+    'sconn, chans, reqs, err := ssh.NewServerConn(conn, config)\n\tif err != nil {\n\t\treturn errors.WithStack(err)\n\t}',
+    'sconn, chans, reqs, err := ssh.NewServerConn(conn, config)\n\tif err != nil {\n\t\treturn &sshHandshakeError{cause: err}\n\t}',
+    'return &sshHandshakeError{cause: err}', "preserve the handshake error cause")
 PY
 
 section "Formatting and building"
