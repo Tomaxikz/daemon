@@ -28,6 +28,20 @@ Notable changes in this fork include:
   Wings-rs-style downloads so later file growth does not extend the response.
 * Download responses include safer headers such as `X-Content-Type-Options: nosniff`.
 
+## Clone this fork
+
+Clone this repository's `develop` branch into a new `daemon` directory:
+
+```bash
+git clone --branch develop https://github.com/Tomaxikz/daemon.git
+cd daemon
+```
+
+This is the development branch and already includes this fork's changes; do not
+apply the bundled upstream patches to this checkout. Cloning downloads the source
+only—it does not install or restart Wings. Keep the full Git history (no
+`--depth` option) if you plan to run the installer validation commands below.
+
 ## Release pipeline
 
 `.github/workflows/push.yaml` owns testing, packaging and publishing. Go versions
