@@ -23,6 +23,13 @@ class FakePublisher(release.Publisher):
         self.fail_upload = False
         self.calls = []
 
+    def release_response(self, value):
+        result = {key: value[key] for key in value if key != "data"}
+        result["assets"] = [{"id": f"{value['id']}-{name}", "name": name, "size": len(data),
+                             "digest": "sha256:" + hashlib.sha256(data).hexdigest()}
+                            for name, data in value["data"].items()]
+        return copy.deepcopy(result)
+
     def api(self, method, route, payload=None, missing=False):
         self.calls.append((method, route, copy.deepcopy(payload)))
         if route == "commits/develop":
@@ -38,13 +45,19 @@ class FakePublisher(release.Publisher):
             return {}
         if route.startswith("releases/tags/"):
             value = self.releases.get(route.removeprefix("releases/tags/"))
-            if value is None:
+            # GitHub's tag endpoint returns published releases, not drafts.
+            if value is None or value["draft"]:
                 return None
-            result = {key: value[key] for key in value if key != "data"}
-            result["assets"] = [{"id": f"{value['id']}-{name}", "name": name, "size": len(data),
-                                  "digest": "sha256:" + hashlib.sha256(data).hexdigest()}
-                                 for name, data in value["data"].items()]
-            return copy.deepcopy(result)
+            return self.release_response(value)
+        if route.startswith("releases?per_page=100&page="):
+            page = int(route.split("page=")[-1])
+            values = sorted(self.releases.values(), key=lambda item: item["id"], reverse=True)
+            return [self.release_response(value) for value in values[(page-1)*100:page*100]]
+        if method == "GET" and route.startswith("releases/") and route.split("/")[-1].isdigit():
+            value = next((value for value in self.releases.values() if value["id"] == int(route.split("/")[-1])), None)
+            if value is None:
+                raise RuntimeError("gh: Not Found (HTTP 404)")
+            return self.release_response(value)
         if route == "releases/latest":
             for value in self.releases.values():
                 if value.get("make_latest") == "true":
@@ -53,7 +66,7 @@ class FakePublisher(release.Publisher):
         if route == "releases" and method == "POST":
             value = {"id": len(self.releases) + 1, "body": "", "data": {}, **payload}
             self.releases[value["tag_name"]] = value
-            return self.api("GET", "releases/tags/" + value["tag_name"])
+            return self.release_response(value)
         if route.startswith("releases/assets/") and method == "DELETE":
             identity, name = route.removeprefix("releases/assets/").split("-", 1)
             value = next(value for value in self.releases.values() if value["id"] == int(identity))
@@ -62,7 +75,7 @@ class FakePublisher(release.Publisher):
         if route.startswith("releases/") and method == "PATCH":
             value = next(value for value in self.releases.values() if value["id"] == int(route.split("/")[1]))
             value.update(payload)
-            return self.api("GET", "releases/tags/" + value["tag_name"])
+            return self.release_response(value)
         raise AssertionError((method, route, payload))
 
     def upload(self, tag, directory):
@@ -145,8 +158,68 @@ class ReleaseTests(unittest.TestCase):
             with patch.object(release.subprocess, "run", return_value=response), self.assertRaises(RuntimeError):
                 publisher.release("dev-latest")
         response = SimpleNamespace(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)\n")
-        with patch.object(release.subprocess, "run", return_value=response):
+        empty_list = SimpleNamespace(returncode=0, stdout="[]", stderr="")
+        with patch.object(release.subprocess, "run", side_effect=[response, empty_list]):
             self.assertIsNone(publisher.release("dev-latest"))
+
+    def test_draft_discovery_permission_errors_are_not_treated_as_absence(self):
+        publisher = release.Publisher("Tomaxikz/daemon")
+        missing_tag = SimpleNamespace(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)\n")
+        for code in (403, 404, 500):
+            denied_list = SimpleNamespace(returncode=1, stdout="", stderr=f"gh: failed (HTTP {code})\n")
+            with patch.object(release.subprocess, "run", side_effect=[missing_tag, denied_list]):
+                with self.assertRaises(RuntimeError):
+                    publisher.release("dev-latest")
+
+    def test_drafts_are_hidden_by_tag_but_readable_by_id(self):
+        publisher = FakePublisher()
+        draft = publisher.api("POST", "releases", {"tag_name": "dev-test", "draft": True, "prerelease": True})
+        self.assertIsNone(publisher.api("GET", "releases/tags/dev-test", missing=True))
+        self.assertEqual(publisher.release_by_id(draft["id"])["tag_name"], "dev-test")
+        self.assertEqual(publisher.release("dev-test")["id"], draft["id"])
+
+    def test_draft_lookup_follows_pagination(self):
+        publisher = FakePublisher()
+        draft = publisher.api("POST", "releases", {"tag_name": "dev-old-draft", "draft": True})
+        for number in range(100):
+            publisher.api("POST", "releases", {"tag_name": f"other-{number}", "draft": False})
+        self.assertEqual(publisher.release("dev-old-draft")["id"], draft["id"])
+        self.assertIn(("GET", "releases?per_page=100&page=2", None), publisher.calls)
+
+    def test_id_lookup_fails_clearly_if_the_known_release_is_unavailable(self):
+        publisher = release.Publisher("Tomaxikz/daemon")
+        for response in (None, {"id": 2, "assets": []}, {"id": 1}):
+            with patch.object(publisher, "api", return_value=response) as api:
+                with self.assertRaisesRegex(RuntimeError, "invalid response for release 1"):
+                    publisher.release_by_id(1)
+                api.assert_called_once_with("GET", "releases/1")
+
+    def test_snapshot_resumes_an_uploaded_draft_without_creating_a_duplicate(self):
+        directory, metadata = self.make_bundle()
+        publisher = FakePublisher()
+        tag = "dev-" + COMMIT
+        publisher.tags[tag] = COMMIT
+        draft = publisher.api("POST", "releases", {"tag_name": tag, "draft": True, "prerelease": True})
+        publisher.upload(tag, directory)
+        self.assertIsNone(publisher.api("GET", f"releases/tags/{tag}", missing=True))
+        publisher.snapshot(tag, metadata, directory)
+        self.assertEqual(publisher.releases[tag]["id"], draft["id"])
+        self.assertFalse(publisher.releases[tag]["draft"])
+        self.assertEqual(sum(method == "POST" and route == "releases" for method, route, _ in publisher.calls), 1)
+        self.assertIn(("GET", f"releases/{draft['id']}", None), publisher.calls)
+
+    def test_existing_draft_alias_is_promoted_using_its_original_id(self):
+        directory, metadata = self.make_bundle()
+        publisher = FakePublisher()
+        publisher.tags["dev-latest"] = OLD_COMMIT
+        draft = publisher.api("POST", "releases", {"tag_name": "dev-latest", "name": "Interrupted release",
+                                                  "draft": True, "prerelease": True})
+        publisher.releases["dev-latest"]["data"] = {"wings_linux_amd64": b"previous binary"}
+        publisher.promote_dev(metadata, directory)
+        self.assertEqual(publisher.releases["dev-latest"]["id"], draft["id"])
+        self.assertFalse(publisher.releases["dev-latest"]["draft"])
+        self.assertEqual(publisher.tags["dev-latest"], COMMIT)
+        self.assertEqual(sum(method == "POST" and route == "releases" for method, route, _ in publisher.calls), 1)
 
     def test_corrupt_remote_upload_cannot_be_published(self):
         directory, metadata = self.make_bundle()

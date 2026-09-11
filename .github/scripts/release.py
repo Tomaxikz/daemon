@@ -175,7 +175,32 @@ class Publisher:
         return json.loads(result.stdout) if result.stdout.strip() else None
 
     def release(self, tag):
-        return self.api("GET", f"releases/tags/{tag}", missing=True)
+        found = self.api("GET", f"releases/tags/{tag}", missing=True)
+        if found is not None:
+            return found
+        # The tag endpoint only returns published releases. Authenticated list
+        # responses include drafts, which must be reused after a failed run.
+        page = 1
+        while True:
+            releases = self.api("GET", f"releases?per_page=100&page={page}")
+            if not isinstance(releases, list):
+                raise RuntimeError("GitHub returned an invalid release listing")
+            matches = [item for item in releases if item["tag_name"] == tag]
+            if len(matches) > 1 or (matches and found is not None):
+                raise RuntimeError(f"Multiple releases match {tag}; refusing an ambiguous update")
+            if matches:
+                found = matches[0]
+            if len(releases) < 100:
+                return found
+            page += 1
+
+    def release_by_id(self, release_id):
+        # Once discovered or created, the ID remains usable while a release is
+        # a draft, including during dev-latest updates and rollback.
+        found = self.api("GET", f"releases/{release_id}")
+        if not isinstance(found, dict) or found.get("id") != release_id or not isinstance(found.get("assets"), list):
+            raise RuntimeError(f"GitHub returned an invalid response for release {release_id}")
+        return found
 
     def tag_commit(self, tag):
         ref = self.api("GET", f"git/ref/tags/{tag}", missing=True)
@@ -253,9 +278,9 @@ class Publisher:
             release = self.api("POST", "releases", {"tag_name": tag, "target_commitish": metadata["commit"],
                 "name": f"Wings {metadata['version']}", "body": notes, "draft": True, "prerelease": True})
         self.upload(tag, directory)
-        release = self.release(tag)
+        release = self.release_by_id(release["id"])
         self.remove_extra_assets(release, ASSETS)
-        self.check_assets(self.release(tag), directory)
+        self.check_assets(self.release_by_id(release["id"]), directory)
         stable = VERSION_TAG.fullmatch(tag)
         is_stable = stable is not None and stable[4] is None
         latest = self.api("GET", "releases/latest", missing=True) if is_stable else None
@@ -290,8 +315,8 @@ class Publisher:
                 # mixture of architectures/checksums from different commits.
                 self.api("PATCH", f"releases/{release['id']}", {"draft": True})
                 self.upload(tag, directory)
-                self.remove_extra_assets(self.release(tag), ASSETS)
-                self.check_assets(self.release(tag), directory)
+                self.remove_extra_assets(self.release_by_id(release["id"]), ASSETS)
+                self.check_assets(self.release_by_id(release["id"]), directory)
                 self.set_tag(tag, metadata["commit"], mutable=True)
                 self.api("PATCH", f"releases/{release['id']}", {"draft": False, "prerelease": True,
                     "make_latest": "false", "name": "Wings development build",
@@ -300,10 +325,10 @@ class Publisher:
                 if previous:
                     try:
                         self.api("PATCH", f"releases/{release['id']}", {"draft": True})
-                        self.remove_extra_assets(self.release(tag), {file.name for file in backup.iterdir()})
+                        self.remove_extra_assets(self.release_by_id(release["id"]), {file.name for file in backup.iterdir()})
                         if previous["assets"]:
                             self.upload(tag, backup)
-                            self.check_assets(self.release(tag), backup)
+                            self.check_assets(self.release_by_id(release["id"]), backup)
                         if old_commit:
                             self.set_tag(tag, old_commit, mutable=True)
                         self.api("PATCH", f"releases/{release['id']}", {key: previous[key]

@@ -32,6 +32,58 @@ func getOpenAPI(c *gin.Context) {
 			},
 		}}},
 	}
+	search := operation("Search regular files with Wings-rs V2 filters", "200", "400", "401", "403", "404", "408", "413", "422", "500")
+	search["description"] = "Returns only regular files. Result names are relative to root, but gitignore-style globs are anchored at the server filesystem root. Basename globs match at any depth; ordered ! negation is supported and excluded directories are pruned. Case-insensitive matching folds ASCII only. Size min is inclusive and max is exclusive. Content searches use the first 128 bytes as a UTF-8 heuristic, allow NUL bytes, and stop at the first literal match. include_unmatched includes oversized/unsearched files, not searched nonmatches or detected-binary files. No archives, virtual backup mounts, V1 POST payload, or match_context support. Unknown fields are rejected. Traversal/read limit errors return no partial results."
+	search["security"] = []gin.H{{"daemonToken": []string{}}}
+	search["parameters"] = []gin.H{{"in": "path", "name": "server", "required": true, "schema": gin.H{"type": "string", "format": "uuid"}}}
+	search["x-search-limits"] = gin.H{
+		"request_bytes": maxSearchV2RequestBytes, "results": maxSearchV2Results,
+		"patterns_combined": maxSearchV2Patterns, "pattern_bytes_combined": maxSearchV2PatternBytes,
+		"alternatives_per_pattern": maxSearchV2Alternatives, "entries": maxSearchV2Entries,
+		"directories": maxSearchV2Directories, "depth": maxSearchV2Depth,
+		"total_read_bytes": maxSearchV2TotalRead, "timeout_seconds": int(searchV2Timeout.Seconds()),
+	}
+	search["requestBody"] = gin.H{
+		"required": true,
+		"content": gin.H{"application/json": gin.H{"schema": gin.H{
+			"type": "object", "additionalProperties": false,
+			"properties": gin.H{
+				"root": gin.H{"type": []string{"string", "null"}, "default": "/", "maxLength": betterFilesMaxPathLength, "description": "Server directory; omitted, null or empty means /. At most 4096 UTF-8 bytes; parent components, backslashes and symlinks are rejected."},
+				"path_filter": gin.H{"type": []string{"object", "null"}, "default": nil, "additionalProperties": false, "properties": gin.H{
+					"include":          gin.H{"type": []string{"array", "null"}, "default": []string{}, "maxItems": maxSearchV2Patterns, "items": gin.H{"type": "string", "maxLength": betterFilesMaxPathLength}, "description": "Ordered gitignore-style include overrides. Empty/omitted/null includes all files. At most 128 include+exclude patterns and 64 KiB combined, each at most 4096 UTF-8 bytes. Brace alternatives are limited to 64 expansions within a path component; nested/empty alternatives and alternatives containing slashes are unsupported."},
+					"exclude":          gin.H{"type": []string{"array", "null"}, "default": []string{}, "maxItems": maxSearchV2Patterns, "items": gin.H{"type": "string", "maxLength": betterFilesMaxPathLength}, "description": "Ordered gitignore-style exclusions; directory matches prune descendants. A later ! pattern cannot re-include files below an already-pruned directory."},
+					"case_insensitive": gin.H{"type": []string{"boolean", "null"}, "default": false},
+				}},
+				"size_filter": gin.H{"type": []string{"object", "null"}, "default": nil, "additionalProperties": false, "properties": gin.H{
+					"min": gin.H{"type": []string{"integer", "null"}, "format": "int64", "minimum": 0, "default": nil, "description": "Inclusive minimum bytes; omitted/null is unbounded below (equivalent to zero)."},
+					"max": gin.H{"type": []string{"integer", "null"}, "format": "int64", "minimum": 0, "default": nil, "description": "Exclusive maximum bytes; omitted/null is unbounded above. min > max is invalid; equal bounds give no results."},
+				}},
+				"content_filter": gin.H{"type": []string{"object", "null"}, "default": nil, "additionalProperties": false, "properties": gin.H{
+					"query":             gin.H{"type": []string{"string", "null"}, "default": "", "maxLength": betterFilesMaxPathLength, "description": "Literal UTF-8 query, at most 4096 bytes. Empty/omitted/null matches every eligible file passing the UTF-8 head check; no regular expressions."},
+					"max_search_size":   gin.H{"type": []string{"integer", "null"}, "format": "int64", "minimum": 0, "maximum": maxSearchV2ReadLimit, "default": defaultSearchV2ReadLimit, "description": "Files larger than this threshold are not content-searched. Explicit zero is preserved. At most this many bytes are scanned per eligible file; a growing file remains bounded. Unsearched included files may still read 128 bytes for MIME detection."},
+					"include_unmatched": gin.H{"type": []string{"boolean", "null"}, "default": false, "description": "Include oversized files without applying the query; searched nonmatches and invalid-UTF-8-head files still do not match."},
+					"case_insensitive":  gin.H{"type": []string{"boolean", "null"}, "default": false},
+				}},
+				"per_page": gin.H{"type": []string{"integer", "null"}, "minimum": 0, "default": 100, "description": "Maximum returned results; values above 500 are capped to 500. Zero returns an empty list. Omitted/null defaults to 100. Ordering is unspecified; no pagination cursor."},
+			},
+		}}},
+	}
+	search["responses"].(gin.H)["200"] = gin.H{"description": "Matching regular files; results is [] when empty.", "content": gin.H{"application/json": gin.H{"schema": gin.H{
+		"type": "object", "required": []string{"results"}, "additionalProperties": false,
+		"properties": gin.H{"results": gin.H{"type": "array", "maxItems": maxSearchV2Results, "items": gin.H{
+			"type": "object", "required": []string{"name", "size", "size_physical", "directory", "file", "symlink", "mime", "created", "modified"},
+			"properties": gin.H{
+				"name":          gin.H{"type": "string", "description": "Slash-separated file path relative to root; never an absolute host path."},
+				"size":          gin.H{"type": "integer", "format": "int64", "minimum": 0},
+				"size_physical": gin.H{"type": "integer", "format": "int64", "minimum": 0, "description": "Allocated bytes where available, otherwise logical size."},
+				"directory":     gin.H{"type": "boolean", "const": false}, "file": gin.H{"type": "boolean", "const": true}, "symlink": gin.H{"type": "boolean", "const": false},
+				"mime": gin.H{"type": "string"}, "created": gin.H{"type": "string", "format": "date-time", "description": "Metadata-change time or modification-time fallback."}, "modified": gin.H{"type": "string", "format": "date-time"},
+			},
+		}}},
+	}}}}
+	for _, status := range []string{"400", "401", "403", "404", "408", "413", "422", "500"} {
+		search["responses"].(gin.H)[status].(gin.H)["content"] = gin.H{"application/json": gin.H{"schema": gin.H{"type": "object", "required": []string{"error"}, "properties": gin.H{"error": gin.H{"type": "string"}, "request_id": gin.H{"type": "string"}}}}}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"openapi": "3.1.0",
@@ -39,6 +91,7 @@ func getOpenAPI(c *gin.Context) {
 			"title":   "Wings Better Files API",
 			"version": "1.0.0",
 		},
+		"components": gin.H{"securitySchemes": gin.H{"daemonToken": gin.H{"type": "http", "scheme": "bearer"}}},
 		"paths": gin.H{
 			"/upload/file": gin.H{
 				"post":  multipartUpload,
@@ -56,7 +109,7 @@ func getOpenAPI(c *gin.Context) {
 			},
 			"/api/servers/{server}/files/search": gin.H{
 				"get":  operation("Search files using the V1 query contract", "200", "400"),
-				"post": operation("Search files using structured filters", "200", "422"),
+				"post": search,
 			},
 			"/api/servers/{server}/files/largest-directories": gin.H{
 				"get": operation("Analyze directory disk usage", "200", "404", "422"),
@@ -81,6 +134,8 @@ func statusCode(value string) int {
 		return http.StatusNoContent
 	case "400":
 		return http.StatusBadRequest
+	case "401":
+		return http.StatusUnauthorized
 	case "404":
 		return http.StatusNotFound
 	case "403":

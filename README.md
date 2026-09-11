@@ -100,6 +100,116 @@ I would like to extend my sincere thanks to the following sponsors for helping f
 
 ## Documentation
 
+### Advanced file search (Better Files / Wings-rs V2)
+
+The existing authenticated `POST /api/servers/{server}/files/search` accepts the
+BFM V2 JSON contract. The legacy `GET` search remains unchanged. For example:
+
+```json
+{
+  "root": "/plugins",
+  "path_filter": {
+    "include": ["**/*.yml"],
+    "exclude": ["**/cache/**"],
+    "case_insensitive": true
+  },
+  "size_filter": {"min": 0, "max": 10485760},
+  "content_filter": {
+    "query": "enabled",
+    "max_search_size": 2097152,
+    "include_unmatched": false,
+    "case_insensitive": true
+  },
+  "per_page": 100
+}
+```
+
+All three filters may be omitted or `null`. Empty, omitted or null `root` means
+`/`; omitted or null `per_page` defaults to 100. Results use the existing directory
+entry fields: `name`, `size`, `size_physical`, `directory`, `file`, `symlink`,
+`mime`, `created`, and `modified`. Only regular files are returned. A file at
+`/plugins/a/config.yml` has `name: "a/config.yml"` for this root; another at
+`/plugins/b/config.yml` remains a separate result. Empty results are exactly
+`{"results":[]}`. Ordering is unspecified; `per_page` caps results, not a pageable
+cursor. Physical size and creation/change time fall back to logical size and
+modification time when that metadata is unavailable.
+
+Compatibility follows the BFM-consumed subset of Calagopus Wings'
+[search implementation at d3eced7](https://github.com/calagopus/wings/blob/d3eced76461845ce4833eb0c849b46e3c9a4b572/application/src/routes/api/servers/_server_/files/search.rs):
+
+- Globs use gitignore-style rules against paths from the **server filesystem
+  root**, not the requested search directory. `*.yml` matches basenames at any
+  depth; `/plugins/*.yml` is root-anchored. `**`, character classes, single-component
+  brace alternatives, escaped leading `#`/`!`, comments and ordered `!` negation
+  are supported. Exclusions win over includes. Excluded directories are pruned,
+  so later rules cannot re-include their descendants. A trailing `/` matches
+  directories only; `cache/**` matches descendants, not `cache` itself.
+- Empty/omitted/null include and exclude arrays apply no restriction. Other
+  include arrays require a positive matching rule (an array containing only
+  comments or negative rules matches no files). Path and content case-insensitive
+  matching fold ASCII only. Glob `?` matches one byte, not one Unicode character.
+- Size `min` is inclusive and `max` is exclusive. Omitted/null bounds are
+  unbounded. Equal bounds match nothing; negative or reversed bounds are errors.
+- Content queries are literal UTF-8, not regular expressions. The first 128 bytes
+  provide the upstream UTF-8 heuristic: an incomplete trailing character is
+  accepted, NUL bytes are allowed, and invalid UTF-8 after that prefix does not
+  disqualify a file. Matching streams through bounded buffers, preserves matches
+  across buffer boundaries, and stops on the first match.
+- `max_search_size` defaults to 2 MiB when omitted/null. Files larger than it are
+  not content-searched. Explicit zero is preserved. `include_unmatched: true`
+  includes these oversized/unsearched files (even binary files), **not** searched
+  nonmatches or files rejected by the UTF-8 head check. Empty/omitted/null queries
+  match eligible files passing that check, including empty files. Both content
+  booleans default to false, as does path `case_insensitive`.
+
+Search uses Wings' sandbox and denylist, refuses symlink roots and skips symlinks
+and special files. Directory traversal uses bounded batches and pinned directory
+handles. Unopenable regular files are skipped; read failures abort the request.
+Resource limits deliberately bound the upstream-compatible subset:
+
+| Limit | Value |
+| --- | --- |
+| JSON body | 1 MiB |
+| Results | Default 100; maximum 500 (larger values capped); zero returns `[]` |
+| Include + exclude patterns | 128 total; 64 KiB combined; 4096 UTF-8 bytes each |
+| Brace expansion | 64 combinations per pattern; no nested/empty or cross-directory alternatives |
+| Root / content query | 4096 UTF-8 bytes each; root path components at most 255 bytes |
+| Entries / directories / depth below root | 250,000 / 16,384 including root / 256 |
+| Content size threshold | Default 2 MiB; accepted range 0–1 GiB per file |
+| Total file reads | 1 GiB per request, including up to 128 MIME bytes per unsearched file |
+| Search execution | 30 seconds, also canceled when the request context ends |
+
+Per-file content reads stay within `max_search_size`, even if the file grows.
+Unknown fields (including `match_context`), V1 POST payloads, malformed JSON and
+wrong types return `400`; an oversized body returns `413`. Invalid roots, filters
+or exhausted traversal/read budgets return `422`, forbidden roots `403`, missing
+roots `404`, and cancellation/timeouts `408`. Execution errors return no partial
+result list. Archive/backup mounting and optional match context are unsupported;
+this endpoint searches only the live server filesystem. Unsupported or invalid
+globs are rejected, never silently dropped.
+
+BFM detects advanced search from the actual `GET /openapi.json` response:
+
+```javascript
+const properties = openapi.paths?.['/api/servers/{server}/files/search']?.post
+    ?.requestBody?.content?.['application/json']?.schema?.properties;
+const canSearchV2 = ['path_filter', 'size_filter', 'content_filter', 'per_page']
+    .every((key) => Object.prototype.hasOwnProperty.call(properties ?? {}, key));
+```
+
+A version string, legacy GET operation or schema-less POST is insufficient. The
+inline schema describes the nested contract and response; `x-search-limits`
+reports execution bounds. No Panel API changes or capability-check weakening are
+needed. Rebuild and replace the daemon binary, then restart it when deploying.
+BFM's backend capability cache lasts 60 seconds and its frontend cache 30 seconds;
+allow both to expire (up to about 90 seconds in sequence) and reload the file manager.
+
+Source installations can use the updated `betterfiles.patch` or `tomaxikz.patch`.
+`betterfiles_patch.sh` already downloads these handler, OpenAPI and test files in
+place, so its logic does not need changing. Use files from the same updated
+revision/release, then rebuild; updating documentation alone changes no running
+daemon. Binary installations need only the newly built daemon, not a source patch.
+
 ### Multipart folder uploads (Better Files)
 
 `POST /upload/file` accepts the existing signed upload URL and `directory` query
