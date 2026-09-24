@@ -116,7 +116,9 @@ type nativeFileCollabSaved struct {
 var nativeFileCollabRegistry = struct {
 	sync.Mutex
 	sessions map[string]*nativeFileCollabSession
-}{sessions: map[string]*nativeFileCollabSession{}}
+}{
+	sessions: map[string]*nativeFileCollabSession{},
+}
 
 // IsNativeFileCollaborationEvent reports whether an event belongs to the
 // Wings-rs-compatible Yjs collaboration protocol.
@@ -197,7 +199,9 @@ func nativeFileCollabValidArgs(message Message) bool {
 	case FileCollabSubscribeEvent, FileCollabUnsubscribeEvent, FileCollabSaveEvent:
 		return len(message.Args) == 1
 	case FileCollabUpdateEvent:
-		return len(message.Args) == 3 && (message.Args[1] == "0" || message.Args[1] == "1") && message.Args[2] != ""
+		return len(message.Args) == 3 &&
+			(message.Args[1] == "0" || message.Args[1] == "1") &&
+			message.Args[2] != ""
 	case FileCollabAwarenessEvent:
 		return len(message.Args) == 2 && message.Args[1] != ""
 	default:
@@ -269,11 +273,14 @@ func nativeFileCollabSubscribe(h *Handler, path string) error {
 	session.mu.Unlock()
 
 	meta, _ := json.Marshal(nativeFileCollabSyncMeta{Dirty: dirty})
-	if err := h.SendJson(Message{Event: fileCollabSyncEvent, Args: []string{
-		path,
-		base64.StdEncoding.EncodeToString(state),
-		string(meta),
-	}}); err != nil {
+	if err := h.SendJson(Message{
+		Event: fileCollabSyncEvent,
+		Args: []string{
+			path,
+			base64.StdEncoding.EncodeToString(state),
+			string(meta),
+		},
+	}); err != nil {
 		return err
 	}
 	nativeFileCollabBroadcastParticipants(session)
@@ -322,10 +329,13 @@ func nativeFileCollabApplyUpdate(h *Handler, path string, finished bool, encoded
 		nativeFileCollabBroadcast(session, "", Message{Event: fileCollabErrorEvent, Args: []string{path, "resync"}})
 		return nil
 	}
-	nativeFileCollabBroadcast(session, h.Uuid().String(), Message{Event: FileCollabUpdateEvent, Args: []string{
-		path,
-		base64.StdEncoding.EncodeToString(update),
-	}})
+	nativeFileCollabBroadcast(session, h.Uuid().String(), Message{
+		Event: FileCollabUpdateEvent,
+		Args: []string{
+			path,
+			base64.StdEncoding.EncodeToString(update),
+		},
+	})
 	return nil
 }
 
@@ -428,7 +438,9 @@ func nativeFileCollabRemoveMember(session *nativeFileCollabSession, handlerID st
 		key := nativeFileCollabKey(session.serverUUID, session.path)
 		nativeFileCollabRegistry.Lock()
 		session.mu.Lock()
-		remove := len(session.members) == 0 && session.teardownGeneration == generation && nativeFileCollabRegistry.sessions[key] == session
+		remove := len(session.members) == 0 &&
+			session.teardownGeneration == generation &&
+			nativeFileCollabRegistry.sessions[key] == session
 		if remove {
 			delete(nativeFileCollabRegistry.sessions, key)
 			session.doc.Destroy()
@@ -492,7 +504,11 @@ func nativeFileCollabBroadcastParticipants(session *nativeFileCollabSession) {
 	nativeFileCollabBroadcast(session, "", Message{Event: fileCollabParticipantsEvent, Args: []string{session.path, string(payload)}})
 }
 
-func nativeFileCollabBroadcast(session *nativeFileCollabSession, exceptHandlerID string, message Message) {
+func nativeFileCollabBroadcast(
+	session *nativeFileCollabSession,
+	exceptHandlerID string,
+	message Message,
+) {
 	session.mu.Lock()
 	handlers := make([]*Handler, 0, len(session.members))
 	for id, member := range session.members {
@@ -535,7 +551,11 @@ func nativeFileCollabReadFile(h *Handler, path string) (string, error) {
 	return string(content), nil
 }
 
-func nativeFileCollabNewSession(serverUUID string, path string, content string) *nativeFileCollabSession {
+func nativeFileCollabNewSession(
+	serverUUID string,
+	path string,
+	content string,
+) *nativeFileCollabSession {
 	session := &nativeFileCollabSession{
 		serverUUID: serverUUID,
 		path:       path,

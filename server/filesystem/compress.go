@@ -30,7 +30,11 @@ import (
 // and the compressed file will be placed at that location named
 // `archive-{date}.tar.gz`.
 func (fs *Filesystem) CompressFiles(dir string, paths []string) (ufs.FileInfo, error) {
-	a := &Archive{Filesystem: fs, BaseDirectory: dir, Files: paths}
+	a := &Archive{
+		Filesystem:    fs,
+		BaseDirectory: dir,
+		Files:         paths,
+	}
 	d := path.Join(
 		dir,
 		fmt.Sprintf("archive-%s.tar.gz", strings.ReplaceAll(time.Now().Format(time.RFC3339), ":", "")),
@@ -91,7 +95,11 @@ func (fs *Filesystem) archiverFileSystem(ctx context.Context, p string) (iofs.FS
 			}
 			return reader, f, nil
 		case archives.Extraction:
-			return &archives.ArchiveFS{Stream: io.NewSectionReader(f, 0, info.Size()), Format: ff, Context: ctx}, f, nil
+			return &archives.ArchiveFS{
+				Stream:  io.NewSectionReader(f, 0, info.Size()),
+				Format:  ff,
+				Context: ctx,
+			}, f, nil
 		case archives.Compression:
 			return archiverext.FileFS{File: f, Compression: ff}, f, nil
 		}
@@ -102,7 +110,11 @@ func (fs *Filesystem) archiverFileSystem(ctx context.Context, p string) (iofs.FS
 
 // SpaceAvailableForDecompression looks through a given archive and determines
 // if decompressing it would put the server over its allocated disk space limit.
-func (fs *Filesystem) SpaceAvailableForDecompression(ctx context.Context, dir string, file string) error {
+func (fs *Filesystem) SpaceAvailableForDecompression(
+	ctx context.Context,
+	dir string,
+	file string,
+) error {
 	// Don't waste time trying to determine this if we know the server will have the space for
 	// it since there is no limit.
 	if fs.MaxDisk() <= 0 {

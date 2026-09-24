@@ -77,13 +77,16 @@ func createDockerNetwork(ctx context.Context, cli *client.Client) error {
 		EnableIPv6: &enableIPv6,
 		Internal:   nw.IsInternal,
 		IPAM: &network.IPAM{
-			Config: []network.IPAMConfig{{
-				Subnet:  nw.Interfaces.V4.Subnet,
-				Gateway: nw.Interfaces.V4.Gateway,
-			}, {
-				Subnet:  nw.Interfaces.V6.Subnet,
-				Gateway: nw.Interfaces.V6.Gateway,
-			}},
+			Config: []network.IPAMConfig{
+				{
+					Subnet:  nw.Interfaces.V4.Subnet,
+					Gateway: nw.Interfaces.V4.Gateway,
+				},
+				{
+					Subnet:  nw.Interfaces.V6.Subnet,
+					Gateway: nw.Interfaces.V6.Gateway,
+				},
+			},
 		},
 		Options: map[string]string{
 			"encryption": "false",

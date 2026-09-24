@@ -1,0 +1,77 @@
+{
+  "feature": "networkstats-network-policy",
+  "contract_version": 1,
+  "release": "better-wings-v1.2",
+  "implementation_base": "d0e07134d8862c22ca2594526f5b879280eacff1",
+  "base_version": "commit-pinned Go Wings develop; no other tag compatibility claimed",
+  "stock_base": "6987d5e6f0612133e031255a99655e822d30579a",
+  "legacy_nsm_fixture": "60f5d300139f677e1324a4e0126c4b7e65e8bf71",
+  "patches": [
+    {
+      "file": "nsm.patch",
+      "base": "6987d5e6f0612133e031255a99655e822d30579a",
+      "includes": "NSM statistics and network policy"
+    },
+    {
+      "file": "tomaxikz.patch",
+      "base": "6987d5e6f0612133e031255a99655e822d30579a",
+      "includes": "existing full addon bundle plus network policy"
+    },
+    {
+      "file": "nsm-networking.patch",
+      "base": "d0e07134d8862c22ca2594526f5b879280eacff1",
+      "includes": "network policy upgrade and shared lock-copy fixes"
+    }
+  ],
+  "application_order": "Choose exactly one patch matching the checkout, git apply --check, apply, test, build, validate on a disposable Linux node, deploy manually, then opt in through node configuration.",
+  "prerequisites": [
+    "Go 1.26.7",
+    "rootful local Linux Docker bridge",
+    "nftables bridge hooks",
+    "Linux 4.20+ route Netlink strict checking, kernel TBF and FQ-CoDel memory-limit support",
+    "nft userspace; no ip/tc subprocess requirement for enforcement",
+    "administrator ACLs covering dedicated nsm bridges"
+  ],
+  "privileged_verification": "Deferred to the operator; not a production enforcement certification.",
+  "source_files": [
+    "go.mod",
+    "go.sum",
+    "cmd/root.go",
+    "cmd/nsm_runtime.go",
+    "system/const.go",
+    "system/system.go",
+    "system/identity_test.go",
+    "config/config_docker.go",
+    "config/config_network_policy.go",
+    "environment/docker/container.go",
+    "environment/docker/environment.go",
+    "environment/docker/power.go",
+    "environment/docker/network_policy.go",
+    "environment/docker/network_policy_test.go",
+    "internal/networkpolicy/policy.go",
+    "internal/networkpolicy/store.go",
+    "internal/networkpolicy/linux.go",
+    "internal/networkpolicy/route.go",
+    "internal/networkpolicy/shaping.go",
+    "internal/networkpolicy/runtime.go",
+    "internal/networkpolicy/testdata/shared.json",
+    "router/router.go",
+    "router/router_system.go",
+    "router/router_network_policy.go",
+    "router/router_network_policy_test.go",
+    "server/update.go",
+    "server/configuration.go",
+    "server/manager.go",
+    "server/power.go",
+    "server/network_policy_test.go",
+    "server/resources.go",
+    "server/resources_test.go",
+    "server/server.go",
+    "server/configuration_test.go",
+    "server/filesystem/filesystem_test.go",
+    "router/downloader/downloader.go",
+    "router/downloader/downloader_test.go"
+  ],
+  "documentation": "README.md#network-statistics-manager-policies",
+  "regenerate": "python3 .github/scripts/build_network_policy_patches.py"
+}

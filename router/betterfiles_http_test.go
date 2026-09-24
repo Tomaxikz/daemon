@@ -23,7 +23,11 @@ import (
 	"github.com/pterodactyl/wings/server"
 )
 
-func newBetterFilesHTTPServer(t *testing.T, uploadLimitMB, diskMB int64, ignored ...string) (*server.Manager, *server.Server, http.Handler) {
+func newBetterFilesHTTPServer(
+	t *testing.T,
+	uploadLimitMB, diskMB int64,
+	ignored ...string,
+) (*server.Manager, *server.Server, http.Handler) {
 	t.Helper()
 	root := t.TempDir()
 	next, err := config.NewAtPath(filepath.Join(root, "config.yml"))
@@ -93,8 +97,19 @@ func signBetterFilesDownloadToken(t *testing.T, serverUUID, filePath string) str
 	return string(signed)
 }
 
-func performResumableRequest(handler http.Handler, method, token, directory, filename string, offset int64, length *int64, complete bool, body io.Reader) *httptest.ResponseRecorder {
-	query := url.Values{"token": {token}, "directory": {directory}, "file": {filename}}
+func performResumableRequest(
+	handler http.Handler,
+	method, token, directory, filename string,
+	offset int64,
+	length *int64,
+	complete bool,
+	body io.Reader,
+) *httptest.ResponseRecorder {
+	query := url.Values{
+		"token":     {token},
+		"directory": {directory},
+		"file":      {filename},
+	}
 	request := httptest.NewRequest(method, "/upload/file?"+query.Encode(), body)
 	if method == http.MethodPatch {
 		request.Header.Set("Content-Type", "application/offset+octet-stream")

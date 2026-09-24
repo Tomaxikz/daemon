@@ -92,7 +92,11 @@ func (c *client) GetInstallationScript(ctx context.Context, uuid string) (Instal
 	return config, err
 }
 
-func (c *client) SetInstallationStatus(ctx context.Context, uuid string, data InstallStatusRequest) error {
+func (c *client) SetInstallationStatus(
+	ctx context.Context,
+	uuid string,
+	data InstallStatusRequest,
+) error {
 	resp, err := c.Post(ctx, fmt.Sprintf("/servers/%s/install", uuid), data)
 	if err != nil {
 		return err
@@ -133,7 +137,11 @@ func (c *client) ValidateSftpCredentials(ctx context.Context, request SftpAuthRe
 	res, err := c.Post(ctx, "/sftp/auth", request)
 	if err != nil {
 		if err := AsRequestError(err); err != nil && (err.StatusCode() >= 400 && err.StatusCode() < 500) {
-			log.WithFields(log.Fields{"subsystem": "sftp", "username": request.User, "ip": request.IP}).Warn(err.Error())
+			log.WithFields(log.Fields{
+				"subsystem": "sftp",
+				"username":  request.User,
+				"ip":        request.IP,
+			}).Warn(err.Error())
 			return auth, &SftpInvalidCredentialsError{}
 		}
 		return auth, err
@@ -146,7 +154,11 @@ func (c *client) ValidateSftpCredentials(ctx context.Context, request SftpAuthRe
 	return auth, nil
 }
 
-func (c *client) GetBackupRemoteUploadURLs(ctx context.Context, backup string, size int64) (BackupRemoteUploadResponse, error) {
+func (c *client) GetBackupRemoteUploadURLs(
+	ctx context.Context,
+	backup string,
+	size int64,
+) (BackupRemoteUploadResponse, error) {
 	var data BackupRemoteUploadResponse
 	res, err := c.Get(ctx, fmt.Sprintf("/backups/%s", backup), q{"size": strconv.FormatInt(size, 10)})
 	if err != nil {

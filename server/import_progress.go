@@ -97,7 +97,11 @@ func (p *ImportProgress) SetTotals(s *Server, totalFiles, totalBytes int64) {
 	p.publishLocked(s, true)
 }
 
-func (p *ImportProgress) SetScanEstimate(s *Server, totalFiles, totalBytes int64, currentFile string) {
+func (p *ImportProgress) SetScanEstimate(
+	s *Server,
+	totalFiles, totalBytes int64,
+	currentFile string,
+) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 

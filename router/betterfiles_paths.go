@@ -95,7 +95,10 @@ func normalizeBetterFilesUploadPath(directory, filename string) (string, string,
 }
 
 func validBetterFilesPathText(value string) bool {
-	return value != "" && len(value) <= betterFilesMaxPathLength && utf8.ValidString(value) && !strings.ContainsRune(value, '\x00')
+	return value != "" &&
+		len(value) <= betterFilesMaxPathLength &&
+		utf8.ValidString(value) &&
+		!strings.ContainsRune(value, '\x00')
 }
 
 func validBetterFilesComponents(value string) bool {

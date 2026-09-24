@@ -34,7 +34,13 @@ func (fs *UnixFS) WalkDirat(dirfd int, name string, fn WalkDiratFunc) error {
 	return err
 }
 
-func (fs *UnixFS) walkDir(b []byte, parentfd int, name, relative string, d DirEntry, walkDirFn WalkDiratFunc) error {
+func (fs *UnixFS) walkDir(
+	b []byte,
+	parentfd int,
+	name, relative string,
+	d DirEntry,
+	walkDirFn WalkDiratFunc,
+) error {
 	if err := walkDirFn(parentfd, name, relative, d, nil); err != nil || !d.IsDir() {
 		if err == SkipDir && d.IsDir() {
 			// Successfully skipped directory.
@@ -247,7 +253,9 @@ func (fs *UnixFS) readDir(fd int, name, relative string, b []byte) ([]DirEntry, 
 		nameSlice := nameFromDirent(&sde)
 		nameLength := len(nameSlice)
 
-		if nameLength == 0 || (nameSlice[0] == '.' && (nameLength == 1 || (nameLength == 2 && nameSlice[1] == '.'))) {
+		if nameLength == 0 ||
+			(nameSlice[0] == '.' && (nameLength == 1 ||
+				(nameLength == 2 && nameSlice[1] == '.'))) {
 			continue
 		}
 
@@ -262,7 +270,13 @@ func (fs *UnixFS) readDir(fd int, name, relative string, b []byte) ([]DirEntry, 
 		} else {
 			rel = path.Join(relative, childName)
 		}
-		entries = append(entries, &dirent{dirfd: fd, name: childName, path: rel, modeType: mt, fs: fs})
+		entries = append(entries, &dirent{
+			dirfd:    fd,
+			name:     childName,
+			path:     rel,
+			modeType: mt,
+			fs:       fs,
+		})
 	}
 }
 

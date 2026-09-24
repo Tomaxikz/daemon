@@ -95,7 +95,9 @@ func (b *Backup) Identifier() string {
 
 func (b *Backup) normalizedIdentifier() (string, error) {
 	parsed, err := uuid.Parse(b.Identifier())
-	if err != nil || len(b.Identifier()) != len(parsed.String()) || parsed.String() != strings.ToLower(b.Identifier()) {
+	if err != nil ||
+		len(b.Identifier()) != len(parsed.String()) ||
+		parsed.String() != strings.ToLower(b.Identifier()) {
 		return "", errors.New("backup: identifier must be a valid UUID")
 	}
 	return parsed.String(), nil

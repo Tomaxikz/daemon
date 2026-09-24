@@ -706,7 +706,11 @@ func postServerUploadFiles(c *gin.Context) {
 
 // paths is an optional JSON array of relative paths, in files-part order. Never
 // recover paths from FileHeader.Filename: mime/multipart already strips directories.
-func multipartUploadTargets(form *multipart.Form, directory string, limit int64) ([]multipartUploadTarget, error) {
+func multipartUploadTargets(
+	form *multipart.Form,
+	directory string,
+	limit int64,
+) ([]multipartUploadTarget, error) {
 	headers := form.File["files"]
 	if len(headers) == 0 {
 		return nil, errors.New("No files were found on the request body.")
@@ -720,7 +724,9 @@ func multipartUploadTargets(form *multipart.Form, directory string, limit int64)
 		return nil, errors.New("paths must be a JSON text field.")
 	}
 	if hasPaths {
-		if len(values) != 1 || len(values[0]) > maxMultipartUploadFiles*(betterFilesMaxPathLength+8) || !utf8.ValidString(values[0]) {
+		if len(values) != 1 ||
+			len(values[0]) > maxMultipartUploadFiles*(betterFilesMaxPathLength+8) ||
+			!utf8.ValidString(values[0]) {
 			return nil, errors.New("Exactly one bounded paths manifest is required.")
 		}
 		if err := json.Unmarshal([]byte(values[0]), &paths); err != nil || len(paths) != len(headers) {

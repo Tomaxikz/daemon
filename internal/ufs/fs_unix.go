@@ -505,7 +505,12 @@ func (fs *UnixFS) Rename(oldpath, newpath string) error {
 		return err
 	}
 	if err := unix.Renameat(olddirfd, oldname, newdirfd, newname); err != nil {
-		return &LinkError{Op: "rename", Old: oldpath, New: newpath, Err: err}
+		return &LinkError{
+			Op:  "rename",
+			Old: oldpath,
+			New: newpath,
+			Err: err,
+		}
 	}
 	return nil
 }
@@ -576,7 +581,12 @@ func (fs *UnixFS) Symlink(oldpath, newpath string) error {
 		// it wants.
 		return unix.Symlinkat(oldpath, dirfd, newpath)
 	}); err != nil {
-		return &LinkError{Op: "symlink", Old: oldpath, New: newpath, Err: err}
+		return &LinkError{
+			Op:  "symlink",
+			Old: oldpath,
+			New: newpath,
+			Err: err,
+		}
 	}
 	return nil
 }
@@ -648,7 +658,11 @@ func (fs *UnixFS) WalkDir(root string, fn WalkDirFunc) error {
 // of unix.Openat due to having better security properties for our use-case.
 func (fs *UnixFS) openat(dirfd int, name string, flag int, mode FileMode) (int, error) {
 	if flag < 0 {
-		return 0, &PathError{Op: "open", Path: name, Err: unix.EINVAL}
+		return 0, &PathError{
+			Op:   "open",
+			Path: name,
+			Err:  unix.EINVAL,
+		}
 	}
 	if flag&O_NOFOLLOW == 0 {
 		flag |= O_NOFOLLOW
@@ -818,7 +832,9 @@ func (fs *UnixFS) safePath(path string) (dirfd int, file string, closeFd func(),
 	// If dir is empty then name is not nested.
 	if dir == "" {
 		dirfd = fsDirfd
-		closeFd = func() { _ = unix.Close(dirfd) }
+		closeFd = func() {
+			_ = unix.Close(dirfd)
+		}
 
 		// Return dirfd, name, an empty closeFd func, and no error
 		return
@@ -831,7 +847,9 @@ func (fs *UnixFS) safePath(path string) (dirfd int, file string, closeFd func(),
 	if err != nil {
 		// An error occurred while opening the directory, but we already opened
 		// the filesystem root, so we still need to ensure it gets closed.
-		closeFd = func() { _ = unix.Close(fsDirfd) }
+		closeFd = func() {
+			_ = unix.Close(fsDirfd)
+		}
 	} else {
 		// Set closeFd to close the newly opened directory file descriptor.
 		closeFd = func() {

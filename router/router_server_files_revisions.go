@@ -135,7 +135,10 @@ func captureFileRevisionContent(s *server.Server, filePath string) ([]byte, bool
 		return nil, false
 	}
 	defer f.Close()
-	if stat.IsDir() || stat.Size() < 0 || stat.Size() > limit || !server.ShouldRecordFileHistory(filePath, uint64(stat.Size())) {
+	if stat.IsDir() ||
+		stat.Size() < 0 ||
+		stat.Size() > limit ||
+		!server.ShouldRecordFileHistory(filePath, uint64(stat.Size())) {
 		return nil, false
 	}
 	content, err := io.ReadAll(io.LimitReader(f, limit+1))

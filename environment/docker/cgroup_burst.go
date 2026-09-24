@@ -91,7 +91,9 @@ func writeBurstFile(pid int, burst int64) error {
 func logBurstFailure(l *log.Entry, burst int64) {
 	if burst > 0 {
 		first := false
-		burstWarning.Do(func() { first = true })
+		burstWarning.Do(func() {
+			first = true
+		})
 		if first {
 			l.Warn("failed to set cpu burst, this requires Linux 5.14 or newer and a writable cgroup hierarchy")
 			return

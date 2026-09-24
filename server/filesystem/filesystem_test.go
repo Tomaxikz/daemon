@@ -30,7 +30,6 @@ func NewFs() (*Filesystem, *rootFs) {
 	tmpDir, err := os.MkdirTemp(os.TempDir(), "pterodactyl")
 	if err != nil {
 		panic(err)
-		return nil, nil
 	}
 
 	rfs := rootFs{root: tmpDir}
@@ -38,14 +37,12 @@ func NewFs() (*Filesystem, *rootFs) {
 	p := filepath.Join(tmpDir, "server")
 	if err := os.Mkdir(p, 0o755); err != nil {
 		panic(err)
-		return nil, nil
 	}
 
 	fs, _ := New(p, 0, []string{})
 	fs.isTest = true
 	if err := fs.TruncateRootDirectory(); err != nil {
 		panic(err)
-		return nil, nil
 	}
 
 	return fs, &rfs

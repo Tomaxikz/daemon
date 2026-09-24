@@ -59,7 +59,12 @@ func (fs *Filesystem) RenameNoReplace(oldpath, newpath string) error {
 			continue
 		}
 		if err != nil {
-			return &ufs.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: err}
+			return &ufs.LinkError{
+				Op:  "rename",
+				Old: oldpath,
+				New: newpath,
+				Err: err,
+			}
 		}
 		return nil
 	}
@@ -113,7 +118,12 @@ func (fs *Filesystem) Replace(oldpath, newpath string) error {
 			continue
 		}
 		if err != nil {
-			return &ufs.LinkError{Op: "replace", Old: oldpath, New: newpath, Err: err}
+			return &ufs.LinkError{
+				Op:  "replace",
+				Old: oldpath,
+				New: newpath,
+				Err: err,
+			}
 		}
 		break
 	}

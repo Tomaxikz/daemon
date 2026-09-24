@@ -30,7 +30,11 @@ type backupTestRemoteClient struct {
 	credentials   chan [2]string
 }
 
-func (c backupTestRemoteClient) GetBackupRemoteUploadURLs(context.Context, string, int64) (remote.BackupRemoteUploadResponse, error) {
+func (c backupTestRemoteClient) GetBackupRemoteUploadURLs(
+	context.Context,
+	string,
+	int64,
+) (remote.BackupRemoteUploadResponse, error) {
 	return remote.BackupRemoteUploadResponse{}, nil
 }
 
@@ -54,11 +58,19 @@ func (c backupTestRemoteClient) SetArchiveStatus(context.Context, string, bool) 
 	return nil
 }
 
-func (c backupTestRemoteClient) SetBackupStatus(context.Context, string, remote.BackupRequest) error {
+func (c backupTestRemoteClient) SetBackupStatus(
+	context.Context,
+	string,
+	remote.BackupRequest,
+) error {
 	return nil
 }
 
-func (c backupTestRemoteClient) SendRestorationStatus(_ context.Context, backup string, _ bool) error {
+func (c backupTestRemoteClient) SendRestorationStatus(
+	_ context.Context,
+	backup string,
+	_ bool,
+) error {
 	if c.restoreStatus != nil {
 		select {
 		case c.restoreStatus <- backup:
@@ -68,7 +80,11 @@ func (c backupTestRemoteClient) SendRestorationStatus(_ context.Context, backup 
 	return nil
 }
 
-func (c backupTestRemoteClient) SetInstallationStatus(context.Context, string, remote.InstallStatusRequest) error {
+func (c backupTestRemoteClient) SetInstallationStatus(
+	context.Context,
+	string,
+	remote.InstallStatusRequest,
+) error {
 	return nil
 }
 
@@ -92,53 +108,92 @@ func (c backupTestRemoteClient) SetCredentials(id, token string) {
 
 type backupTestEnvironment struct{}
 
-func (backupTestEnvironment) Type() string { return "test" }
+func (backupTestEnvironment) Type() string {
+	return "test"
+}
 
 func (backupTestEnvironment) Config() *environment.Configuration {
 	return &environment.Configuration{}
 }
 
-func (backupTestEnvironment) Events() *events.Bus { return events.NewBus() }
+func (backupTestEnvironment) Events() *events.Bus {
+	return events.NewBus()
+}
 
-func (backupTestEnvironment) Exists() (bool, error) { return true, nil }
+func (backupTestEnvironment) Exists() (bool, error) {
+	return true, nil
+}
 
-func (backupTestEnvironment) IsRunning(context.Context) (bool, error) { return false, nil }
+func (backupTestEnvironment) IsRunning(context.Context) (bool, error) {
+	return false, nil
+}
 
-func (backupTestEnvironment) InSituUpdate() error { return nil }
+func (backupTestEnvironment) InSituUpdate() error {
+	return nil
+}
 
-func (backupTestEnvironment) OnBeforeStart(context.Context) error { return nil }
+func (backupTestEnvironment) OnBeforeStart(context.Context) error {
+	return nil
+}
 
-func (backupTestEnvironment) Start(context.Context) error { return nil }
+func (backupTestEnvironment) Start(context.Context) error {
+	return nil
+}
 
-func (backupTestEnvironment) Stop(context.Context) error { return nil }
+func (backupTestEnvironment) Stop(context.Context) error {
+	return nil
+}
 
 func (backupTestEnvironment) WaitForStop(context.Context, time.Duration, bool) error {
 	return nil
 }
 
-func (backupTestEnvironment) Terminate(context.Context, string) error { return nil }
+func (backupTestEnvironment) Terminate(context.Context, string) error {
+	return nil
+}
 
-func (backupTestEnvironment) Destroy() error { return nil }
+func (backupTestEnvironment) Destroy() error {
+	return nil
+}
 
-func (backupTestEnvironment) ExitState() (uint32, bool, error) { return 0, false, nil }
+func (backupTestEnvironment) ExitState() (uint32, bool, error) {
+	return 0, false, nil
+}
 
-func (backupTestEnvironment) Create() error { return nil }
+func (backupTestEnvironment) Create() error {
+	return nil
+}
 
-func (backupTestEnvironment) Attach(context.Context) error { return nil }
+func (backupTestEnvironment) Attach(context.Context) error {
+	return nil
+}
 
-func (backupTestEnvironment) SendCommand(string) error { return nil }
+func (backupTestEnvironment) SendCommand(string) error {
+	return nil
+}
 
-func (backupTestEnvironment) Readlog(int) ([]string, error) { return nil, nil }
+func (backupTestEnvironment) Readlog(int) ([]string, error) {
+	return nil, nil
+}
 
-func (backupTestEnvironment) State() string { return environment.ProcessOfflineState }
+func (backupTestEnvironment) State() string {
+	return environment.ProcessOfflineState
+}
 
 func (backupTestEnvironment) SetState(string) {}
 
-func (backupTestEnvironment) Uptime(context.Context) (int64, error) { return 0, nil }
+func (backupTestEnvironment) Uptime(context.Context) (int64, error) {
+	return 0, nil
+}
 
 func (backupTestEnvironment) SetLogCallback(func([]byte)) {}
 
-func newBackupRestoreContext(t *testing.T, client backupTestRemoteClient, backupID string, body string) (*gin.Context, *httptest.ResponseRecorder, *wserver.Server) {
+func newBackupRestoreContext(
+	t *testing.T,
+	client backupTestRemoteClient,
+	backupID string,
+	body string,
+) (*gin.Context, *httptest.ResponseRecorder, *wserver.Server) {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -308,10 +363,30 @@ func TestBackupRestoreDestinationAllowlist(t *testing.T) {
 		ip      string
 		blocked bool
 	}{
-		{name: "hostname", host: "minio.internal", ip: "10.0.0.20", blocked: false},
-		{name: "ip", host: "10.0.0.10", ip: "10.0.0.10", blocked: false},
-		{name: "cidr", host: "192.168.50.10", ip: "192.168.50.10", blocked: false},
-		{name: "not listed", host: "10.0.0.11", ip: "10.0.0.11", blocked: true},
+		{
+			name:    "hostname",
+			host:    "minio.internal",
+			ip:      "10.0.0.20",
+			blocked: false,
+		},
+		{
+			name:    "ip",
+			host:    "10.0.0.10",
+			ip:      "10.0.0.10",
+			blocked: false,
+		},
+		{
+			name:    "cidr",
+			host:    "192.168.50.10",
+			ip:      "192.168.50.10",
+			blocked: false,
+		},
+		{
+			name:    "not listed",
+			host:    "10.0.0.11",
+			ip:      "10.0.0.11",
+			blocked: true,
+		},
 	}
 
 	for _, test := range tests {

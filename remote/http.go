@@ -118,7 +118,12 @@ func (c *client) Post(ctx context.Context, path string, data interface{}) (*Resp
 // requestOnce creates a http request and executes it once. Prefer request()
 // over this method when possible. It appends the path to the endpoint of the
 // client and adds the authentication token to the request.
-func (c *client) requestOnce(ctx context.Context, method, path string, body io.Reader, opts ...func(r *http.Request)) (*Response, error) {
+func (c *client) requestOnce(
+	ctx context.Context,
+	method, path string,
+	body io.Reader,
+	opts ...func(r *http.Request),
+) (*Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.baseUrl+path, body)
 	if err != nil {
 		return nil, err
@@ -151,7 +156,12 @@ func (c *client) requestOnce(ctx context.Context, method, path string, body io.R
 // and adds the required authentication headers to the request that is being
 // created. Errors returned will be of the RequestError type if there was some
 // type of response from the API that can be parsed.
-func (c *client) request(ctx context.Context, method, path string, body *bytes.Buffer, opts ...func(r *http.Request)) (*Response, error) {
+func (c *client) request(
+	ctx context.Context,
+	method, path string,
+	body *bytes.Buffer,
+	opts ...func(r *http.Request),
+) (*Response, error) {
 	var res *Response
 	err := backoff.Retry(func() error {
 		var b bytes.Buffer

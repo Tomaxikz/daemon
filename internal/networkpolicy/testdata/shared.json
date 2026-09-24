@@ -1,0 +1,68 @@
+{
+  "api_version": 1,
+  "revision": 1,
+  "policy_hash": "667d839d9a720983bb7e5ad84066a4f559577bbfbd53c3a1dafe93b44a8581de",
+  "allocations": [
+    {
+      "id": 1,
+      "ip": "192.0.2.1",
+      "port": 25565
+    }
+  ],
+  "resolved_groups": [
+    {
+      "id": "game",
+      "protocol": "udp",
+      "allocations": [
+        {
+          "id": 1,
+          "ip": "192.0.2.1",
+          "port": 25565
+        }
+      ]
+    }
+  ],
+  "policy": {
+    "groups": [
+      {
+        "id": "game",
+        "name": "Game",
+        "mode": "range",
+        "protocol": "udp",
+        "allocation_ids": [],
+        "port_start": 25560,
+        "port_end": 25570,
+        "ip": null
+      }
+    ],
+    "firewall": {
+      "enabled": true,
+      "default_inbound": "drop",
+      "default_outbound": "allow",
+      "chains": [
+        {
+          "id": "game-chain",
+          "name": "Game access",
+          "enabled": true
+        }
+      ],
+      "rules": [
+        {
+          "id": "allow-game",
+          "name": "Allow game",
+          "enabled": true,
+          "chain_id": "game-chain",
+          "direction": "inbound",
+          "action": "allow",
+          "protocol": "udp",
+          "group_id": "game",
+          "cidr": null
+        }
+      ]
+    },
+    "bandwidth": {
+      "download_bps": 0,
+      "upload_bps": 0
+    }
+  }
+}

@@ -41,7 +41,9 @@ type FileOperation struct {
 	cancelled      atomic.Bool
 }
 
-func (o *FileOperation) Identifier() string { return o.identifier }
+func (o *FileOperation) Identifier() string {
+	return o.identifier
+}
 
 func (o *FileOperation) AddBytesProcessed(value uint64) {
 	o.bytesProcessed.Add(value)
@@ -144,7 +146,11 @@ func (m *FileOperationManager) Start(
 	return op, result, nil
 }
 
-func (m *FileOperationManager) publishProgressUntilDone(op *FileOperation, done <-chan struct{}, stopped chan<- struct{}) {
+func (m *FileOperationManager) publishProgressUntilDone(
+	op *FileOperation,
+	done <-chan struct{},
+	stopped chan<- struct{},
+) {
 	defer close(stopped)
 	m.publishProgress(op)
 	ticker := time.NewTicker(time.Second)

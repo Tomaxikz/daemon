@@ -55,7 +55,9 @@ func TestFileOperationProgressCompletionAndCleanup(t *testing.T) {
 	s := testOperationServer(t, "server-a")
 	eventChannel := make(chan []byte, 16)
 	s.Events().On(eventChannel)
-	t.Cleanup(func() { s.Events().Off(eventChannel) })
+	t.Cleanup(func() {
+		s.Events().Off(eventChannel)
+	})
 
 	op, done, err := s.FileOperations().Start(context.Background(), "copy_many", func(_ context.Context, operation *FileOperation) error {
 		operation.SetBytesTotal(500)
@@ -77,14 +79,18 @@ func TestFileOperationProgressCompletionAndCleanup(t *testing.T) {
 
 	completed := waitForOperationEvent(t, eventChannel, OperationCompletedEvent)
 	require.Equal(t, []string{op.Identifier()}, operationEventArgs(t, completed))
-	require.Eventually(t, func() bool { return s.FileOperations().Count() == 0 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool {
+		return s.FileOperations().Count() == 0
+	}, time.Second, time.Millisecond)
 }
 
 func TestFileOperationErrorAndCleanup(t *testing.T) {
 	s := testOperationServer(t, "server-errors")
 	eventChannel := make(chan []byte, 16)
 	s.Events().On(eventChannel)
-	t.Cleanup(func() { s.Events().Off(eventChannel) })
+	t.Cleanup(func() {
+		s.Events().Off(eventChannel)
+	})
 
 	op, done, err := s.FileOperations().Start(context.Background(), "copy_many", func(context.Context, *FileOperation) error {
 		return errors.New("/host/private/path")
@@ -101,7 +107,9 @@ func TestFileOperationCancellationAndServerIsolation(t *testing.T) {
 	second := testOperationServer(t, "server-second")
 	eventChannel := make(chan []byte, 16)
 	first.Events().On(eventChannel)
-	t.Cleanup(func() { first.Events().Off(eventChannel) })
+	t.Cleanup(func() {
+		first.Events().Off(eventChannel)
+	})
 
 	started := make(chan struct{})
 	op, done, err := first.FileOperations().Start(context.Background(), "copy_many", func(ctx context.Context, operation *FileOperation) error {

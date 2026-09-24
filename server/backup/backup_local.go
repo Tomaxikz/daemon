@@ -65,7 +65,11 @@ func (b *LocalBackup) WithLogContext(c map[string]interface{}) {
 
 // Generate generates a backup of the selected files and pushes it to the
 // defined location for this instance.
-func (b *LocalBackup) Generate(ctx context.Context, fsys *filesystem.Filesystem, ignore string) (*ArchiveDetails, error) {
+func (b *LocalBackup) Generate(
+	ctx context.Context,
+	fsys *filesystem.Filesystem,
+	ignore string,
+) (*ArchiveDetails, error) {
 	if err := b.validateIdentifier(); err != nil {
 		return nil, err
 	}

@@ -69,11 +69,19 @@ func (f FileFS) Stat(name string) (fs.FileInfo, error) {
 
 func (f FileFS) checkName(name, op string) error {
 	if !fs.ValidPath(name) {
-		return &fs.PathError{Op: "open", Path: name, Err: fs.ErrInvalid}
+		return &fs.PathError{
+			Op:   "open",
+			Path: name,
+			Err:  fs.ErrInvalid,
+		}
 	}
 	// TODO: we may need better name validation.
 	if name != "." {
-		return &fs.PathError{Op: op, Path: name, Err: fs.ErrNotExist}
+		return &fs.PathError{
+			Op:   op,
+			Path: name,
+			Err:  fs.ErrNotExist,
+		}
 	}
 	return nil
 }

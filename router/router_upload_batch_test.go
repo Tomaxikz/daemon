@@ -22,7 +22,14 @@ type multipartTestFile struct {
 	data []byte
 }
 
-func performMultipartUpload(t *testing.T, handler http.Handler, token, directory string, files []multipartTestFile, fields [][2]string, manifestFirst bool) *httptest.ResponseRecorder {
+func performMultipartUpload(
+	t *testing.T,
+	handler http.Handler,
+	token, directory string,
+	files []multipartTestFile,
+	fields [][2]string,
+	manifestFirst bool,
+) *httptest.ResponseRecorder {
 	t.Helper()
 	var body bytes.Buffer
 	w := multipart.NewWriter(&body)
@@ -44,7 +51,11 @@ func performMultipartUpload(t *testing.T, handler http.Handler, token, directory
 		writeFields()
 	}
 	require.NoError(t, w.Close())
-	request := httptest.NewRequest(http.MethodPost, "/upload/file?"+url.Values{"token": {token}, "directory": {directory}, "total_size": {"0"}}.Encode(), &body)
+	request := httptest.NewRequest(http.MethodPost, "/upload/file?"+url.Values{
+		"token":      {token},
+		"directory":  {directory},
+		"total_size": {"0"},
+	}.Encode(), &body)
 	request.Header.Set("Content-Type", w.FormDataContentType())
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
@@ -62,7 +73,9 @@ func quietUploadActivity(t *testing.T) {
 	t.Helper()
 	previous := saveUploadActivity
 	saveUploadActivity = func(*server.Server, string, string, string, string) {}
-	t.Cleanup(func() { saveUploadActivity = previous })
+	t.Cleanup(func() {
+		saveUploadActivity = previous
+	})
 }
 
 func TestMultipartFolderBatchPreservesPathsAndDuplicateBasenames(t *testing.T) {
@@ -228,7 +241,12 @@ func TestMultipartFolderBatchPlanRejectsSizeOverflowAndFileCount(t *testing.T) {
 		_, err := multipartUploadTargets(form, "/", math.MaxInt64)
 		require.Error(t, err)
 	}
-	form := &multipart.Form{Value: map[string][]string{"paths": {"[]"}}, File: map[string][]*multipart.FileHeader{"files": make([]*multipart.FileHeader, maxMultipartUploadFiles+1)}}
+	form := &multipart.Form{
+		Value: map[string][]string{"paths": {"[]"}},
+		File: map[string][]*multipart.FileHeader{
+			"files": make([]*multipart.FileHeader, maxMultipartUploadFiles+1),
+		},
+	}
 	_, err := multipartUploadTargets(form, "/", 10)
 	require.Error(t, err)
 	delete(form.Value, "paths")

@@ -12,6 +12,7 @@ import (
 )
 
 type Information struct {
+	Daemon  string            `json:"daemon"`
 	Version string            `json:"version"`
 	Docker  DockerInformation `json:"docker"`
 	System  System            `json:"system"`
@@ -85,11 +86,13 @@ func GetSystemInformation() (*Information, error) {
 		if v[0] != "Backing Filesystem" {
 			continue
 		}
+
 		filesystem = v[1]
 		break
 	}
 
 	return &Information{
+		Daemon:  "wings",
 		Version: Version,
 		Docker: DockerInformation{
 			Version: version.Version,
@@ -128,6 +131,7 @@ func GetDockerInfo(ctx context.Context) (types.Version, system.Info, error) {
 	if err != nil {
 		return types.Version{}, system.Info{}, err
 	}
+
 	defer c.Close()
 
 	dockerVersion, err := c.ServerVersion(ctx)

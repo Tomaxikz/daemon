@@ -70,8 +70,11 @@ func newDiagnosticsCommand() *cobra.Command {
 func diagnosticsCmdRun(*cobra.Command, []string) {
 	questions := []*survey.Question{
 		{
-			Name:   "IncludeEndpoints",
-			Prompt: &survey.Confirm{Message: "Do you want to include endpoints (i.e. the FQDN/IP of your panel)?", Default: false},
+			Name: "IncludeEndpoints",
+			Prompt: &survey.Confirm{
+				Message: "Do you want to include endpoints (i.e. the FQDN/IP of your panel)?",
+				Default: false,
+			},
 		},
 		{
 			Name:   "IncludeLogs",

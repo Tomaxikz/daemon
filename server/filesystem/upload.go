@@ -34,7 +34,9 @@ func (f *Filesystem) WriteUpload(name string, source io.Reader, size int64) (err
 	if err != nil {
 		return err
 	}
-	defer func() { _ = parent.Close() }()
+	defer func() {
+		_ = parent.Close()
+	}()
 	uid, gid := config.Get().System.User.Uid, config.Get().System.User.Gid
 	for _, component := range parts[:len(parts)-1] {
 		child, openErr := f.unixFS.OpenFileat(int(parent.Fd()), component, ufs.O_DIRECTORY|ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)

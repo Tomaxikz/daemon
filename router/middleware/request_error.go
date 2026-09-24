@@ -122,13 +122,16 @@ func (re *RequestError) asFilesystemError() (int, string) {
 		strings.Contains(err.Error(), "resolves to a location outside the server root") {
 		return http.StatusNotFound, "The requested resources was not found on the system."
 	}
-	if filesystem.IsErrorCode(err, filesystem.ErrCodeDenylistFile) || strings.Contains(err.Error(), "filesystem: file access prohibited") {
+	if filesystem.IsErrorCode(err, filesystem.ErrCodeDenylistFile) ||
+		strings.Contains(err.Error(), "filesystem: file access prohibited") {
 		return http.StatusForbidden, "This file cannot be modified: present in egg denylist."
 	}
-	if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) || strings.Contains(err.Error(), "filesystem: is a directory") {
+	if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) ||
+		strings.Contains(err.Error(), "filesystem: is a directory") {
 		return http.StatusBadRequest, "Cannot perform that action: file is a directory."
 	}
-	if filesystem.IsErrorCode(err, filesystem.ErrCodeDiskSpace) || strings.Contains(err.Error(), "filesystem: not enough disk space") {
+	if filesystem.IsErrorCode(err, filesystem.ErrCodeDiskSpace) ||
+		strings.Contains(err.Error(), "filesystem: not enough disk space") {
 		return http.StatusBadRequest, "There is not enough disk space available to perform that action."
 	}
 	if strings.HasSuffix(err.Error(), "file name too long") {

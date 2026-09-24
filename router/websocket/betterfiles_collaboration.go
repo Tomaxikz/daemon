@@ -415,10 +415,15 @@ func (h *Handler) betterFilesCollabPatch(m Message) error {
 
 	totalTextBytes := 0
 	for _, change := range payload.Changes {
-		if change.RangeOffset < 0 || change.RangeLength < 0 || change.BaseLength < 0 || !utf8.ValidString(change.Text) {
+		if change.RangeOffset < 0 ||
+			change.RangeLength < 0 ||
+			change.BaseLength < 0 ||
+			!utf8.ValidString(change.Text) {
 			return h.betterFilesCollabError("invalid collaboration patch change")
 		}
-		if change.RangeOffset > betterFilesCollabMaxPayloadBytes || change.RangeLength > betterFilesCollabMaxPayloadBytes || change.BaseLength > betterFilesCollabMaxPayloadBytes {
+		if change.RangeOffset > betterFilesCollabMaxPayloadBytes ||
+			change.RangeLength > betterFilesCollabMaxPayloadBytes ||
+			change.BaseLength > betterFilesCollabMaxPayloadBytes {
 			return h.betterFilesCollabError("invalid collaboration patch change")
 		}
 		totalTextBytes += len(change.Text)
@@ -881,7 +886,11 @@ func (h *Handler) betterFilesCollabDocumentFor(session *betterFilesCollabSession
 	return document, nil
 }
 
-func (h *Handler) betterFilesCollabSendDocument(session *betterFilesCollabSession, document *betterFilesCollabDocument, path string) error {
+func (h *Handler) betterFilesCollabSendDocument(
+	session *betterFilesCollabSession,
+	document *betterFilesCollabDocument,
+	path string,
+) error {
 	content, revision := document.snapshot()
 	return h.betterFilesCollabSend(betterFilesCollabSnapshotOut, map[string]any{
 		"code":     session.Code,
@@ -960,7 +969,11 @@ func betterFilesCollabRemoveMember(code string, handlerID string) {
 	betterFilesCollabBroadcastFileUsers(session)
 }
 
-func betterFilesCollabAcceptVersion(session *betterFilesCollabSession, member *betterFilesCollabMember, version int64) bool {
+func betterFilesCollabAcceptVersion(
+	session *betterFilesCollabSession,
+	member *betterFilesCollabMember,
+	version int64,
+) bool {
 	if version < 1 {
 		return false
 	}
@@ -976,7 +989,11 @@ func betterFilesCollabAcceptVersion(session *betterFilesCollabSession, member *b
 	return true
 }
 
-func betterFilesCollabSetMemberPath(session *betterFilesCollabSession, member *betterFilesCollabMember, path string) bool {
+func betterFilesCollabSetMemberPath(
+	session *betterFilesCollabSession,
+	member *betterFilesCollabMember,
+	path string,
+) bool {
 	session.Lock()
 	defer session.Unlock()
 
@@ -1051,7 +1068,11 @@ func CloseBetterFilesCollaborationSessions(serverUUID string, mode string, reaso
 	return len(sessions)
 }
 
-func betterFilesCollabUsersForPath(session *betterFilesCollabSession, path string, exceptHandlerID string) []betterFilesCollabUser {
+func betterFilesCollabUsersForPath(
+	session *betterFilesCollabSession,
+	path string,
+	exceptHandlerID string,
+) []betterFilesCollabUser {
 	users := make([]betterFilesCollabUser, 0)
 
 	session.RLock()
@@ -1133,7 +1154,12 @@ func betterFilesCollabMembers(session *betterFilesCollabSession) []betterFilesCo
 	return members
 }
 
-func betterFilesCollabBroadcast(session *betterFilesCollabSession, exceptHandlerID string, event Event, payload any) {
+func betterFilesCollabBroadcast(
+	session *betterFilesCollabSession,
+	exceptHandlerID string,
+	event Event,
+	payload any,
+) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return
@@ -1185,7 +1211,10 @@ func betterFilesCollabSessionExpired(session *betterFilesCollabSession) bool {
 
 func betterFilesCollabPath(path string) (string, bool) {
 	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
-	if path == "" || len(path) > betterFilesCollabMaxPathBytes || strings.Contains(path, "\x00") || !utf8.ValidString(path) {
+	if path == "" ||
+		len(path) > betterFilesCollabMaxPathBytes ||
+		strings.Contains(path, "\x00") ||
+		!utf8.ValidString(path) {
 		return "", false
 	}
 	for _, r := range path {
@@ -1205,7 +1234,10 @@ func betterFilesCollabPath(path string) (string, bool) {
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	if path == "." || path == "/" || len(path) > betterFilesCollabMaxPathBytes || betterFilesCollabSensitivePath(path) {
+	if path == "." ||
+		path == "/" ||
+		len(path) > betterFilesCollabMaxPathBytes ||
+		betterFilesCollabSensitivePath(path) {
 		return "", false
 	}
 	return path, true
@@ -1217,13 +1249,19 @@ func betterFilesCollabSensitivePath(path string) bool {
 		if part == "" {
 			continue
 		}
-		if part == ".env" || strings.HasPrefix(part, ".env.") || part == ".npmrc" || part == "composer.auth.json" {
+		if part == ".env" ||
+			strings.HasPrefix(part, ".env.") ||
+			part == ".npmrc" ||
+			part == "composer.auth.json" {
 			return true
 		}
 		if part == "id_rsa" || part == "id_ed25519" || part == "id_ecdsa" {
 			return true
 		}
-		if strings.HasSuffix(part, ".pem") || strings.HasSuffix(part, ".key") || strings.HasSuffix(part, ".p12") || strings.HasSuffix(part, ".pfx") {
+		if strings.HasSuffix(part, ".pem") ||
+			strings.HasSuffix(part, ".key") ||
+			strings.HasSuffix(part, ".p12") ||
+			strings.HasSuffix(part, ".pfx") {
 			return true
 		}
 		if strings.HasPrefix(part, "secret") || strings.HasPrefix(part, "credential") {

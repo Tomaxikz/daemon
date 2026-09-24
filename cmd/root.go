@@ -88,6 +88,7 @@ func init() {
 	rootCommand.AddCommand(versionCommand)
 	rootCommand.AddCommand(configureCmd)
 	rootCommand.AddCommand(newDiagnosticsCommand())
+	rootCommand.AddCommand(newNetworkRuntimeCommand())
 }
 
 func rootCmdRun(cmd *cobra.Command, _ []string) {
@@ -143,6 +144,8 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 		return
 	}
 
+	// Persist new defaults even if a server policy fails backend validation.
+	writeConfiguration()
 	manager, err := server.NewManager(cmd.Context(), pclient)
 	if err != nil {
 		log.WithField("error", err).Fatal("failed to load server configurations")
@@ -154,13 +157,7 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 		return
 	}
 
-	if err := config.WriteToDisk(config.Get()); err != nil {
-		if !errors.Is(err, syscall.EROFS) {
-			log.WithField("error", err).Error("failed to write configuration to disk")
-		} else {
-			log.WithField("error", err).Debug("failed to write configuration to disk")
-		}
-	}
+	writeConfiguration()
 
 	// Just for some nice log output.
 	for _, s := range manager.All() {
@@ -383,7 +380,11 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 		}()
 		// Start the main http server with TLS using autocert.
 		if err := s.ListenAndServeTLS("", ""); err != nil {
-			log.WithFields(log.Fields{"auto_tls": true, "tls_hostname": tlshostname, "error": err}).Fatal("failed to configure HTTP server using auto-tls")
+			log.WithFields(log.Fields{
+				"auto_tls":     true,
+				"tls_hostname": tlshostname,
+				"error":        err,
+			}).Fatal("failed to configure HTTP server using auto-tls")
 		}
 		return
 	}
@@ -399,6 +400,16 @@ func rootCmdRun(cmd *cobra.Command, _ []string) {
 	s.TLSConfig = nil
 	if err := s.ListenAndServe(); err != nil {
 		log.WithField("error", err).Fatal("failed to configure HTTP server")
+	}
+}
+
+func writeConfiguration() {
+	if err := config.WriteToDisk(config.Get()); err != nil {
+		if errors.Is(err, syscall.EROFS) {
+			log.WithField("error", err).Debug("failed to write configuration to disk")
+		} else {
+			log.WithField("error", err).Error("failed to write configuration to disk")
+		}
 	}
 }
 

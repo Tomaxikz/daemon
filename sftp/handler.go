@@ -80,7 +80,11 @@ func NewHandler(sc *ssh.ServerConn, srv *server.Server) (*Handler, error) {
 		fs:          srv.Filesystem(),
 		events:      &events,
 		ro:          config.Get().System.Sftp.ReadOnly,
-		logger:      log.WithFields(log.Fields{"subsystem": "sftp", "user": uuid, "ip": sc.RemoteAddr()}),
+		logger: log.WithFields(log.Fields{
+			"subsystem": "sftp",
+			"user":      uuid,
+			"ip":        sc.RemoteAddr(),
+		}),
 	}, nil
 }
 

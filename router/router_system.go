@@ -31,12 +31,14 @@ func getSystemInformation(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, struct {
+		Daemon        string `json:"daemon"`
 		Architecture  string `json:"architecture"`
 		CPUCount      int    `json:"cpu_count"`
 		KernelVersion string `json:"kernel_version"`
 		OS            string `json:"os"`
 		Version       string `json:"version"`
 	}{
+		Daemon:        "wings",
 		Architecture:  i.System.Architecture,
 		CPUCount:      i.System.CPUThreads,
 		KernelVersion: i.System.KernelVersion,
@@ -53,6 +55,7 @@ func getAllServers(c *gin.Context) {
 	for i, v := range servers {
 		out[i] = v.ToAPIResponse()
 	}
+
 	c.JSON(http.StatusOK, out)
 }
 
@@ -103,7 +106,11 @@ func postCreateServer(c *gin.Context) {
 				if errors.Is(err, context.DeadlineExceeded) {
 					log.WithFields(log.Fields{"server_id": i.Server().ID(), "action": "start"}).Warn("could not acquire a lock while attempting to perform a power action")
 				} else {
-					log.WithFields(log.Fields{"server_id": i.Server().ID(), "action": "start", "error": err}).Error("encountered error processing a server power action in the background")
+					log.WithFields(log.Fields{
+						"server_id": i.Server().ID(),
+						"action":    "start",
+						"error":     err,
+					}).Error("encountered error processing a server power action in the background")
 				}
 			}
 		} else {

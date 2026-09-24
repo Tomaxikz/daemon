@@ -47,6 +47,8 @@ type DockerNetworkConfiguration struct {
 // DockerConfiguration defines the docker configuration used by the daemon when
 // interacting with containers and networks on the system.
 type DockerConfiguration struct {
+	// NetworkPolicy is node-admin configuration, not writable through Panel JSON.
+	NetworkPolicy NetworkPolicyConfiguration `json:"-" yaml:"network_policy"`
 	// Network configuration that should be used when creating a new network
 	// for containers run through the daemon.
 	Network DockerNetworkConfiguration `json:"network" yaml:"network"`
@@ -240,6 +242,7 @@ func (c RegistryConfiguration) Base64() (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	return base64.URLEncoding.EncodeToString(b), nil
 }
 
@@ -288,6 +291,7 @@ func (o Overhead) GetMultiplier(memoryLimit int64) float64 {
 		multipliers[i] = k
 		i++
 	}
+
 	sort.Ints(multipliers)
 
 	// Loop through the memory values in order (smallest to largest)
@@ -296,6 +300,7 @@ func (o Overhead) GetMultiplier(memoryLimit int64) float64 {
 		if memoryLimit > int64(m) {
 			continue
 		}
+
 		return o.Multipliers[m]
 	}
 

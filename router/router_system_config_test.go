@@ -31,7 +31,9 @@ func TestSystemConfigurationCapabilityRoute(t *testing.T) {
 	next.Token.Token = "native-collaboration-test-token"
 	next.System.FileCollaboration.Enabled = true
 	config.Set(&next)
-	t.Cleanup(func() { config.Set(previous) })
+	t.Cleanup(func() {
+		config.Set(previous)
+	})
 
 	r := gin.New()
 	protected := r.Group("/api", middleware.RequireAuthorization())

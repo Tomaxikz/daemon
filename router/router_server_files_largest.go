@@ -62,7 +62,12 @@ func getServerLargestDirectories(c *gin.Context) {
 
 var errLargestDirectoryTraversalLimit = errors.New("largest directory traversal limit exceeded")
 
-func analyzeLargestDirectories(ctx context.Context, fs *serverfs.Filesystem, root string, rootInfo ufs.FileInfo) ([]betterFilesEntry, error) {
+func analyzeLargestDirectories(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	root string,
+	rootInfo ufs.FileInfo,
+) ([]betterFilesEntry, error) {
 	aggregates := map[string]*largestDirectoryAggregate{
 		root: {path: root, info: rootInfo},
 	}
@@ -181,7 +186,9 @@ func analyzeLargestDirectories(ctx context.Context, fs *serverfs.Filesystem, roo
 		entry.SizePhysical = candidate.totalPhysical
 		result = append(result, entry)
 	}
-	sort.SliceStable(result, func(i, j int) bool { return result[i].Size > result[j].Size })
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].Size > result[j].Size
+	})
 	return result, nil
 }
 

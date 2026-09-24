@@ -68,8 +68,13 @@ type sshHandshakeError struct {
 	cause error
 }
 
-func (e *sshHandshakeError) Error() string { return e.cause.Error() }
-func (e *sshHandshakeError) Unwrap() error { return e.cause }
+func (e *sshHandshakeError) Error() string {
+	return e.cause.Error()
+}
+
+func (e *sshHandshakeError) Unwrap() error {
+	return e.cause
+}
 
 //goland:noinspection GoNameStartsWithPackageName
 type SFTPServer struct {
@@ -265,7 +270,12 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 	return nil
 }
 
-func (c *SFTPServer) handleSession(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request) {
+func (c *SFTPServer) handleSession(
+	conn *ssh.ServerConn,
+	srv *server.Server,
+	channel ssh.Channel,
+	requests <-chan *ssh.Request,
+) {
 	var requestedPty sshPtyRequest
 
 	for req := range requests {
@@ -337,7 +347,14 @@ func (c *SFTPServer) Handle(conn *ssh.ServerConn, srv *server.Server, channel ss
 }
 
 // HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
-func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
+func (c *SFTPServer) HandleShell(
+	conn *ssh.ServerConn,
+	srv *server.Server,
+	channel ssh.Channel,
+	requests <-chan *ssh.Request,
+	_ sshPtyRequest,
+	handler *Handler,
+) error {
 	defer channel.Close()
 
 	if !handler.can("control.console") {
@@ -394,7 +411,11 @@ func (c *SFTPServer) generateED25519PrivateKey() error {
 	return nil
 }
 
-func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.SftpAuthRequestType, p string) (*ssh.Permissions, error) {
+func (c *SFTPServer) makeCredentialsRequest(
+	conn ssh.ConnMetadata,
+	t remote.SftpAuthRequestType,
+	p string,
+) (*ssh.Permissions, error) {
 	request := remote.SftpAuthRequest{
 		Type:          t,
 		User:          conn.User(),
@@ -404,7 +425,12 @@ func (c *SFTPServer) makeCredentialsRequest(conn ssh.ConnMetadata, t remote.Sftp
 		ClientVersion: conn.ClientVersion(),
 	}
 
-	logger := log.WithFields(log.Fields{"subsystem": "sftp", "method": request.Type, "username": request.User, "ip": request.IP})
+	logger := log.WithFields(log.Fields{
+		"subsystem": "sftp",
+		"method":    request.Type,
+		"username":  request.User,
+		"ip":        request.IP,
+	})
 	logger.Debug("validating credentials for SFTP connection")
 
 	if !validSftpUsername(request.User) {

@@ -105,7 +105,12 @@ func postServerCopyMany(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"copied": copied, "skipped": skipped})
 }
 
-func prepareCopyMany(fs *serverfs.Filesystem, root string, input []copyManyFile, overwrite bool) ([]normalizedCopyManyFile, []betterFilesEntry, error) {
+func prepareCopyMany(
+	fs *serverfs.Filesystem,
+	root string,
+	input []copyManyFile,
+	overwrite bool,
+) ([]normalizedCopyManyFile, []betterFilesEntry, error) {
 	files := make([]normalizedCopyManyFile, 0, len(input))
 	skipped := make([]betterFilesEntry, 0)
 	destinations := make(map[string]struct{}, len(input))
@@ -151,7 +156,11 @@ func prepareCopyMany(fs *serverfs.Filesystem, root string, input []copyManyFile,
 			return nil, nil, destinationErr
 		}
 
-		files = append(files, normalizedCopyManyFile{from: from, to: to, requestedTo: requested.To})
+		files = append(files, normalizedCopyManyFile{
+			from:        from,
+			to:          to,
+			requestedTo: requested.To,
+		})
 	}
 	return files, skipped, nil
 }
@@ -167,7 +176,11 @@ type copyProgress interface {
 	AddFilesProcessed(uint64)
 }
 
-func copyManyTotal(ctx context.Context, fs *serverfs.Filesystem, files []normalizedCopyManyFile) (uint64, error) {
+func copyManyTotal(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	files []normalizedCopyManyFile,
+) (uint64, error) {
 	var total uint64
 	for _, file := range files {
 		stack := []copyWalkItem{{from: file.from, to: file.to}}
@@ -207,14 +220,24 @@ func copyManyTotal(ctx context.Context, fs *serverfs.Filesystem, files []normali
 				if ensureBetterFilesAllowed(fs, childFrom, childTo) != nil || entry.Mode()&ufs.ModeSymlink != 0 {
 					continue
 				}
-				stack = append(stack, copyWalkItem{from: childFrom, to: childTo, depth: item.depth + 1})
+				stack = append(stack, copyWalkItem{
+					from:  childFrom,
+					to:    childTo,
+					depth: item.depth + 1,
+				})
 			}
 		}
 	}
 	return total, nil
 }
 
-func copyManyPath(ctx context.Context, fs *serverfs.Filesystem, from, to string, overwrite bool, operation copyProgress) error {
+func copyManyPath(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	from, to string,
+	overwrite bool,
+	operation copyProgress,
+) error {
 	stack := []copyWalkItem{{from: from, to: to}}
 	visited := 0
 	for len(stack) > 0 {
@@ -248,7 +271,11 @@ func copyManyPath(ctx context.Context, fs *serverfs.Filesystem, from, to string,
 				if ensureBetterFilesAllowed(fs, childFrom, childTo) != nil || entry.Mode()&ufs.ModeSymlink != 0 {
 					continue
 				}
-				stack = append(stack, copyWalkItem{from: childFrom, to: childTo, depth: item.depth + 1})
+				stack = append(stack, copyWalkItem{
+					from:  childFrom,
+					to:    childTo,
+					depth: item.depth + 1,
+				})
 			}
 		case info.Mode().IsRegular():
 			if !overwrite {
@@ -282,7 +309,13 @@ func ensureCopyDestinationDirectory(fs *serverfs.Filesystem, destination string)
 	return fs.CreateDirectory(pathpkg.Base(destination), pathpkg.Dir(destination))
 }
 
-func copyManyRegularFile(ctx context.Context, fs *serverfs.Filesystem, source, destination string, sourceInfo ufs.FileInfo, operation copyProgress) error {
+func copyManyRegularFile(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	source, destination string,
+	sourceInfo ufs.FileInfo,
+	operation copyProgress,
+) error {
 	file, err := fs.UnixFS().OpenFile(source, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
 	if err != nil {
 		return err
@@ -306,7 +339,11 @@ func copyManyRegularFile(ctx context.Context, fs *serverfs.Filesystem, source, d
 		}
 	}()
 
-	reader := &copyProgressReader{ctx: ctx, reader: io.LimitReader(file, openedInfo.Size()), operation: operation}
+	reader := &copyProgressReader{
+		ctx:       ctx,
+		reader:    io.LimitReader(file, openedInfo.Size()),
+		operation: operation,
+	}
 	if err := fs.Write(temporary, reader, openedInfo.Size(), sourceInfo.Mode()&ufs.ModePerm); err != nil {
 		return err
 	}

@@ -8,171 +8,171 @@ SECURE_GO_TOOLCHAIN="go1.26.7"
 SECURE_X_TEXT_VERSION="v0.39.0"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-    BOLD="$(printf '\033[1m')"
-    DIM="$(printf '\033[2m')"
-    RESET="$(printf '\033[0m')"
-    RED="$(printf '\033[31m')"
-    GREEN="$(printf '\033[32m')"
-    YELLOW="$(printf '\033[33m')"
-    BLUE="$(printf '\033[34m')"
-    CYAN="$(printf '\033[36m')"
+	BOLD="$(printf '\033[1m')"
+	DIM="$(printf '\033[2m')"
+	RESET="$(printf '\033[0m')"
+	RED="$(printf '\033[31m')"
+	GREEN="$(printf '\033[32m')"
+	YELLOW="$(printf '\033[33m')"
+	BLUE="$(printf '\033[34m')"
+	CYAN="$(printf '\033[36m')"
 else
-    BOLD=""
-    DIM=""
-    RESET=""
-    RED=""
-    GREEN=""
-    YELLOW=""
-    BLUE=""
-    CYAN=""
+	BOLD=""
+	DIM=""
+	RESET=""
+	RED=""
+	GREEN=""
+	YELLOW=""
+	BLUE=""
+	CYAN=""
 fi
 
 SPINNER_PID=""
 BFM_UPLOAD_REFERENCE=""
 
 log() {
-    printf '%s[betterfiles]%s %s\n' "$CYAN" "$RESET" "$*"
+	printf '%s[betterfiles]%s %s\n' "$CYAN" "$RESET" "$*"
 }
 
 ok() {
-    printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$*"
+	printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$*"
 }
 
 warn() {
-    printf '%s[WARN]%s %s\n' "$YELLOW" "$RESET" "$*"
+	printf '%s[WARN]%s %s\n' "$YELLOW" "$RESET" "$*"
 }
 
 section() {
-    printf '\n%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"
+	printf '\n%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"
 }
 
 fail() {
-    printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$*" >&2
-    exit 1
+	printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$*" >&2
+	exit 1
 }
 
 banner() {
-    printf '%s%s%s\n' "$BOLD" "Better Files Wings installer" "$RESET"
-    printf '%s%s%s\n' "$DIM" "Anchor-based installer for Tomaxikz daemon Better Files features" "$RESET"
+	printf '%s%s%s\n' "$BOLD" "Better Files Wings installer" "$RESET"
+	printf '%s%s%s\n' "$DIM" "Anchor-based installer for Tomaxikz daemon Better Files features" "$RESET"
 }
 
 start_spinner() {
-    local message="$1"
-    if [ ! -t 1 ] || [ -n "${NO_COLOR:-}" ]; then
-        log "$message"
-        return
-    fi
+	local message="$1"
+	if [ ! -t 1 ] || [ -n "${NO_COLOR:-}" ]; then
+		log "$message"
+		return
+	fi
 
-    (
-        local frames='|/-\'
-        local i=0
-        while :; do
-            printf '\r%s[%s]%s %s' "$CYAN" "${frames:i++%${#frames}:1}" "$RESET" "$message"
-            sleep 0.1
-        done
-    ) &
-    SPINNER_PID="$!"
+	(
+		local frames='|/-\'
+		local i=0
+		while :; do
+			printf '\r%s[%s]%s %s' "$CYAN" "${frames:i++%${#frames}:1}" "$RESET" "$message"
+			sleep 0.1
+		done
+	) &
+	SPINNER_PID="$!"
 }
 
 stop_spinner() {
-    local status="$1"
-    local message="$2"
-    if [ -n "${SPINNER_PID:-}" ]; then
-        kill "$SPINNER_PID" >/dev/null 2>&1 || true
-        wait "$SPINNER_PID" 2>/dev/null || true
-        SPINNER_PID=""
-        printf '\r\033[K'
-    fi
+	local status="$1"
+	local message="$2"
+	if [ -n "${SPINNER_PID:-}" ]; then
+		kill "$SPINNER_PID" >/dev/null 2>&1 || true
+		wait "$SPINNER_PID" 2>/dev/null || true
+		SPINNER_PID=""
+		printf '\r\033[K'
+	fi
 
-    case "$status" in
-        ok) ok "$message" ;;
-        warn) warn "$message" ;;
-        *) fail "$message" ;;
-    esac
+	case "$status" in
+	ok) ok "$message" ;;
+	warn) warn "$message" ;;
+	*) fail "$message" ;;
+	esac
 }
 
 run_with_spinner() {
-    local message="$1"
-    shift
-    start_spinner "$message"
-    if "$@"; then
-        stop_spinner ok "$message"
-    else
-        stop_spinner error "$message failed"
-    fi
+	local message="$1"
+	shift
+	start_spinner "$message"
+	if "$@"; then
+		stop_spinner ok "$message"
+	else
+		stop_spinner error "$message failed"
+	fi
 }
 
 cleanup_spinner() {
-    if [ -n "${SPINNER_PID:-}" ]; then
-        kill "$SPINNER_PID" >/dev/null 2>&1 || true
-        wait "$SPINNER_PID" 2>/dev/null || true
-    fi
-    if [ -n "$BFM_UPLOAD_REFERENCE" ]; then
-        rm -f -- "$BFM_UPLOAD_REFERENCE"
-    fi
+	if [ -n "${SPINNER_PID:-}" ]; then
+		kill "$SPINNER_PID" >/dev/null 2>&1 || true
+		wait "$SPINNER_PID" 2>/dev/null || true
+	fi
+	if [ -n "$BFM_UPLOAD_REFERENCE" ]; then
+		rm -f -- "$BFM_UPLOAD_REFERENCE"
+	fi
 }
 
 trap cleanup_spinner EXIT
 
 need_cmd() {
-    command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+	command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
 }
 
 select_secure_go_toolchain() {
-    export GOTOOLCHAIN="$SECURE_GO_TOOLCHAIN"
-    local version
-    version="$(go version)" || fail "could not start ${SECURE_GO_TOOLCHAIN}; install Go 1.21 or newer so it can download the patched toolchain"
-    case "$version" in
-        "go version ${SECURE_GO_TOOLCHAIN} "*) ;;
-        *) fail "expected ${SECURE_GO_TOOLCHAIN}, but the selected toolchain reported: ${version}" ;;
-    esac
-    ok "using ${SECURE_GO_TOOLCHAIN}"
+	export GOTOOLCHAIN="$SECURE_GO_TOOLCHAIN"
+	local version
+	version="$(go version)" || fail "could not start ${SECURE_GO_TOOLCHAIN}; install Go 1.21 or newer so it can download the patched toolchain"
+	case "$version" in
+	"go version ${SECURE_GO_TOOLCHAIN} "*) ;;
+	*) fail "expected ${SECURE_GO_TOOLCHAIN}, but the selected toolchain reported: ${version}" ;;
+	esac
+	ok "using ${SECURE_GO_TOOLCHAIN}"
 }
 
 fetch_file() {
-    local remote_path="$1"
-    local local_path="$2"
-    local url="${RAW_BASE%/}/${remote_path}"
-    local tmp
+	local remote_path="$1"
+	local local_path="$2"
+	local url="${RAW_BASE%/}/${remote_path}"
+	local tmp
 
-    mkdir -p "$(dirname "$local_path")"
-    tmp="$(mktemp)"
-    start_spinner "download ${remote_path}"
-    curl -fsSL --retry 3 --retry-delay 1 -o "$tmp" "$url" || {
-        rm -f "$tmp"
-        stop_spinner error "failed to download ${url}"
-    }
-    if [ "${local_path%.go}" != "$local_path" ]; then
-        gofmt -w "$tmp" || {
-            rm -f "$tmp"
-            stop_spinner error "downloaded Go file is not valid: ${url}"
-        }
-    fi
+	mkdir -p "$(dirname "$local_path")"
+	tmp="$(mktemp)"
+	start_spinner "download ${remote_path}"
+	curl -fsSL --retry 3 --retry-delay 1 -o "$tmp" "$url" || {
+		rm -f "$tmp"
+		stop_spinner error "failed to download ${url}"
+	}
+	if [ "${local_path%.go}" != "$local_path" ]; then
+		gofmt -w "$tmp" || {
+			rm -f "$tmp"
+			stop_spinner error "downloaded Go file is not valid: ${url}"
+		}
+	fi
 
-    if [ -f "$local_path" ] && cmp -s "$tmp" "$local_path"; then
-        stop_spinner ok "unchanged ${local_path}"
-        rm -f "$tmp"
-        return
-    fi
+	if [ -f "$local_path" ] && cmp -s "$tmp" "$local_path"; then
+		stop_spinner ok "unchanged ${local_path}"
+		rm -f "$tmp"
+		return
+	fi
 
-    if [ -f "$local_path" ]; then
-        mkdir -p "${BACKUP_DIR}/$(dirname "$local_path")"
-        cp -p "$local_path" "${BACKUP_DIR}/${local_path}"
-        warn "backed up ${local_path}"
-    fi
+	if [ -f "$local_path" ]; then
+		mkdir -p "${BACKUP_DIR}/$(dirname "$local_path")"
+		cp -p "$local_path" "${BACKUP_DIR}/${local_path}"
+		warn "backed up ${local_path}"
+	fi
 
-    mv "$tmp" "$local_path"
-    stop_spinner ok "updated ${local_path}"
+	mv "$tmp" "$local_path"
+	stop_spinner ok "updated ${local_path}"
 }
 
 backup_local_file() {
-    local local_path="$1"
-    local target="${BACKUP_DIR}/${local_path}"
+	local local_path="$1"
+	local target="${BACKUP_DIR}/${local_path}"
 
-    [ -f "$local_path" ] || return
-    [ -f "$target" ] && return
-    mkdir -p "$(dirname "$target")"
-    cp -p "$local_path" "$target"
+	[ -f "$local_path" ] || return
+	[ -f "$target" ] && return
+	mkdir -p "$(dirname "$target")"
+	cp -p "$local_path" "$target"
 }
 
 banner
@@ -294,6 +294,7 @@ def backup(path):
     target = backup_dir / path
     if target.exists():
         return
+
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, target)
 
@@ -302,12 +303,14 @@ def read_text(path_name):
     path = Path(path_name)
     if not path.exists():
         fail(f"required file is missing: {path_name}")
+
     return path, path.read_text()
 
 
 def write_text(path, original, updated, description):
     if updated == original:
         return False
+
     backup(path)
     path.write_text(updated)
     ok(f"patched {path}: {description}")
@@ -321,6 +324,7 @@ def replace_once(path_name, old, new, present, description):
         return False
     if old not in text:
         fail(f"could not find expected source in {path_name} for {description}")
+
     return write_text(path, text, text.replace(old, new, 1), description)
 
 
@@ -331,6 +335,7 @@ def insert_after(path_name, anchor, addition, present, description):
         return False
     if anchor not in text:
         fail(f"could not find anchor in {path_name} for {description}")
+
     return write_text(path, text, text.replace(anchor, anchor + addition, 1), description)
 
 
@@ -341,6 +346,7 @@ def insert_before(path_name, anchor, addition, present, description):
         return False
     if anchor not in text:
         fail(f"could not find anchor in {path_name} for {description}")
+
     return write_text(path, text, text.replace(anchor, addition + anchor, 1), description)
 
 
@@ -349,6 +355,7 @@ def remove_once(path_name, old, description):
     if old not in text:
         ok(f"already clean {path_name}: {description}")
         return False
+
     return write_text(path, text, text.replace(old, "", 1), description)
 
 
@@ -356,6 +363,7 @@ def replace_if_present(path_name, old, new, description):
     path, text = read_text(path_name)
     if old not in text:
         return False
+
     return write_text(path, text, text.replace(old, new, 1), description)
 
 
@@ -371,18 +379,19 @@ def route_conflict_guard(path_name, route, expected_handler):
     marker = f'"{route}"'
     if marker not in text:
         return
-    expected = f'{marker}, {expected_handler}'
+
+    expected = f"{marker}, {expected_handler}"
     if expected not in text:
         fail(f"{path_name} already contains route {route} with a different handler")
 
 
-file_history_field = '''\
+file_history_field = """\
 	// FileHistory controls bounded per-file revision storage for panel file edits.
 	FileHistory FileHistoryConfiguration `json:"-" yaml:"file_history"`
 
-'''
+"""
 
-file_history_type = '''\
+file_history_type = """\
 type FileHistoryConfiguration struct {
 	Enabled             bool   `default:"true" yaml:"enabled"`
 	ZstdLevel           int    `default:"12" yaml:"zstd_level"`
@@ -393,24 +402,27 @@ type FileHistoryConfiguration struct {
 	PerServerDiskBudget uint64 `default:"209715200" yaml:"per_server_disk_budget"`
 }
 
-'''
+"""
 
-file_collaboration_field = '''\
+file_collaboration_field = """\
 	// FileCollaboration controls native Yjs collaborative editing limits.
 	FileCollaboration FileCollaborationConfiguration `json:"-" yaml:"file_collaboration"`
-'''
+"""
 
-file_collaboration_type = '''\
+file_collaboration_type = """\
 type FileCollaborationConfiguration struct {
 	Enabled     bool   `default:"true" yaml:"enabled"`
 	FileSizeCap uint64 `default:"10485760" yaml:"file_size_cap"`
 }
 
-'''
+"""
 
 insert_after(
     "config/config.go",
-    '	BackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`\n\n',
+    (
+        '\tBackupDirectory string `default:"/var/lib/pterodactyl/backups" json:"-" yaml:"backup_directory"`\n'
+        "\n"
+    ),
     file_history_field,
     "FileHistory FileHistoryConfiguration",
     "file history config field",
@@ -463,7 +475,7 @@ insert_after(
 )
 insert_after(
     "router/router.go",
-    '\trouter.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))\n',
+    "\trouter.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))\n",
     '\trouter.GET("/openapi.json", getOpenAPI)\n',
     'router.GET("/openapi.json", getOpenAPI)',
     "OpenAPI capability route",
@@ -498,7 +510,7 @@ insert_after(
     "native collaboration capability route",
 )
 
-git_routes = '''\
+git_routes = """\
 		git := server.Group("/git")
 		{
 			git.GET("/status", getServerGitStatus)
@@ -507,7 +519,7 @@ git_routes = '''\
 			git.POST("/pull", postServerGitPull)
 			git.POST("/diff", postServerGitDiff)
 		}
-'''
+"""
 insert_after(
     "router/router.go",
     '		server.POST("/commands", postServerCommands)\n',
@@ -516,14 +528,14 @@ insert_after(
     "Git API routes",
 )
 
-file_routes = '''\
+file_routes = """\
 			files.GET("/revisions", getServerFileRevisions)
 			files.GET("/revisions/:revision", getServerFileRevision)
 			files.POST("/revisions/:revision/restore", postServerFileRevisionRestore)
 			files.GET("/search", getServerFilesSearch)
 			files.GET("/archive/list", getServerArchiveList)
 			files.POST("/archive/extract", postServerArchiveExtract)
-'''
+"""
 insert_after(
     "router/router.go",
     '			files.GET("/contents", getServerFileContents)\n',
@@ -581,14 +593,14 @@ insert_after(
     "collaboration revoke route",
 )
 
-stream_cors = '''\
+stream_cors = """\
 
 		if isStreamDownloadRequest(c) {
 			c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, If-Match, If-Modified-Since, If-None-Match, If-Range, If-Unmodified-Since, Origin, Range, X-Real-IP, X-CSRF-Token")
 			c.Header("Access-Control-Expose-Headers", "Accept-Ranges, Content-Disposition, Content-Encoding, Content-Length, Content-Range, Content-Type, ETag, Last-Modified, X-Content-Type-Options, X-Request-Id")
 			c.Header("Vary", "Origin, Access-Control-Request-Headers")
 		}
-'''
+"""
 replace_once(
     "router/middleware/middleware.go",
     '\t\tc.Header("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")\n',
@@ -598,31 +610,35 @@ replace_once(
 )
 replace_once(
     "router/middleware/middleware.go",
-    '\t\tc.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")\n',
-    '''\
+    (
+        '\t\tc.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, X-Real-IP, X-CSRF-Token")\n'
+    ),
+    """\
 		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")
 		if c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/upload/file" {
 			c.Header("Access-Control-Expose-Headers", "Retry-After, Upload-Offset, X-Request-Id")
 		}
-''',
+""",
     "Upload-Complete, Upload-Length, Upload-Offset",
     "resumable upload CORS headers",
 )
 insert_after(
     "router/middleware/middleware.go",
-    '		c.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")\n',
+    (
+        '\t\tc.Header("Access-Control-Allow-Headers", "Accept, Accept-Encoding, Authorization, Cache-Control, Content-Type, Content-Length, Origin, Upload-Complete, Upload-Length, Upload-Offset, X-Real-IP, X-CSRF-Token")\n'
+    ),
     stream_cors,
     "If-Match, If-Modified-Since",
     "stream CORS headers",
 )
 replace_once(
     "router/middleware/middleware.go",
-    '''\
+    """\
 		if allowPrivateNetwork {
 			c.Header("Access-Control-Request-Private-Network", "true")
 		}
-''',
-    '''\
+""",
+    """\
 		if allowPrivateNetwork {
 			if isStreamDownloadRequest(c) {
 				c.Header("Access-Control-Allow-Private-Network", "true")
@@ -630,31 +646,31 @@ replace_once(
 				c.Header("Access-Control-Request-Private-Network", "true")
 			}
 		}
-''',
+""",
     "Access-Control-Allow-Private-Network",
     "stream private-network CORS header",
 )
 replace_if_present(
     "router/middleware/middleware.go",
-    '''\
+    """\
 func isStreamDownloadRequest(c *gin.Context) bool {
 	return c.Request != nil && c.Request.URL != nil && c.Request.URL.Path == "/download/stream"
 }
-''',
-    '''\
+""",
+    """\
 func isStreamDownloadRequest(c *gin.Context) bool {
 	if c.Request == nil || c.Request.URL == nil {
 		return false
 	}
 	return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
 }
-''',
+""",
     "directory download CORS helper",
 )
 insert_before(
     "router/middleware/middleware.go",
     "// ServerExists will ensure that the requested server exists in this setup.\n",
-    '''\
+    """\
 func isStreamDownloadRequest(c *gin.Context) bool {
 	if c.Request == nil || c.Request.URL == nil {
 		return false
@@ -662,7 +678,7 @@ func isStreamDownloadRequest(c *gin.Context) bool {
 	return c.Request.URL.Path == "/download/stream" || c.Request.URL.Path == "/download/directory"
 }
 
-''',
+""",
     'Path == "/download/directory"',
     "stream CORS helper",
 )
@@ -670,11 +686,11 @@ func isStreamDownloadRequest(c *gin.Context) bool {
 insert_before(
     "server/events.go",
     ")\n\n// Events returns the server's emitter instance.\n",
-    '''\
+    """\
 	OperationProgressEvent  = "operation progress"
 	OperationErrorEvent     = "operation error"
 	OperationCompletedEvent = "operation completed"
-''',
+""",
     "OperationProgressEvent",
     "file operation websocket events",
 )
@@ -695,57 +711,57 @@ insert_after(
 insert_after(
     "server/server.go",
     "\ts.CtxCancel()\n",
-    '''\
+    """\
 	if s.fileOperations != nil {
 		s.fileOperations.CancelAll()
 	}
-''',
+""",
     "s.fileOperations.CancelAll()",
     "server file operation cancellation cleanup",
 )
 insert_before(
     "server/server.go",
     "// ID returns the UUID for the server instance.\n",
-    '''\
+    """\
 // FileOperations returns the server-isolated manager for cancellable filesystem work.
 func (s *Server) FileOperations() *FileOperationManager {
 	return s.fileOperations
 }
 
-''',
+""",
     "func (s *Server) FileOperations()",
     "server file operation manager accessor",
 )
 insert_after(
     "router/websocket/listeners.go",
     "\tserver.TransferStatusEvent,\n",
-    '''\
+    """\
 	server.OperationProgressEvent,
 	server.OperationErrorEvent,
 	server.OperationCompletedEvent,
-''',
+""",
     "server.OperationProgressEvent",
     "file operation websocket listener allowlist",
 )
 replace_once(
     "router/websocket/listeners.go",
-    '''\
+    """\
 			if str, ok := e.Data.(string); ok {
 				message.Args = []string{str}
-''',
-    '''\
+""",
+    """\
 			if args, ok := websocketEventArgs(e.Data); ok {
 				message.Args = args
 			} else if str, ok := e.Data.(string); ok {
 				message.Args = []string{str}
-''',
+""",
     "if args, ok := websocketEventArgs(e.Data)",
     "multi-argument websocket event forwarding",
 )
 insert_before(
     "router/websocket/listeners.go",
     "// ListenForServerEvents will listen for different events happening on a server\n",
-    '''\
+    """\
 func websocketEventArgs(data interface{}) ([]string, bool) {
 	values, ok := data.([]interface{})
 	if !ok {
@@ -762,14 +778,14 @@ func websocketEventArgs(data interface{}) ([]string, bool) {
 	return args, true
 }
 
-''',
+""",
     "func websocketEventArgs",
     "multi-argument websocket event helper",
 )
 
 insert_after(
     "router/websocket/websocket.go",
-    '''\
+    """\
 	if m.Event != AuthenticationEvent {
 		if err := h.TokenValid(); err != nil {
 			h.unsafeSendJson(Message{
@@ -779,28 +795,28 @@ insert_after(
 			return nil
 		}
 	}
-''',
-    '''\
+""",
+    """\
 
 	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
 		return err
 	}
-''',
+""",
     "HandleBetterFilesCollaboration",
     "Better Files collaboration websocket handler",
 )
 insert_after(
     "router/websocket/websocket.go",
-    '''\
+    """\
 	if handled, err := h.HandleBetterFilesCollaboration(ctx, m); handled {
 		return err
 	}
-''',
-    '''\
+""",
+    """\
 	if handled, err := h.HandleNativeFileCollaboration(ctx, m); handled {
 		return err
 	}
-''',
+""",
     "HandleNativeFileCollaboration",
     "Wings-rs-compatible Yjs collaboration handler",
 )
@@ -814,22 +830,22 @@ insert_after(
 replace_once(
     "router/websocket/websocket.go",
     "\tconn.SetReadLimit(4096)\n",
-    '''\
+    """\
 	// Collaboration updates are chunked, but their base64 and JSON framing can
 	// exceed the historical 4 KiB console-message limit. The router applies the
 	// same 32 KiB bound before dispatching a decoded message.
 	conn.SetReadLimit(32_768)
-''',
+""",
     "conn.SetReadLimit(32_768)",
     "bounded collaboration websocket frame size",
 )
 insert_after(
     "router/tokens/websocket.go",
     '\tUserUUID    string   `json:"user_uuid"`\n',
-    '''\
+    """\
 	UserName    string   `json:"user_name,omitempty"`
 	UserAvatar  *string  `json:"user_avatar,omitempty"`
-''',
+""",
     '`json:"user_name,omitempty"`',
     "Wings-rs-compatible participant identity claims",
 )
@@ -843,7 +859,7 @@ insert_after(
 )
 remove_once(
     "router/websocket/limiter.go",
-    '''\
+    """\
 	// Better Files live collaboration snapshots need a small dedicated bucket.
 	// Sharing Wings' default 4/sec bucket makes editors drift a character or two
 	// behind during normal typing.
@@ -869,34 +885,38 @@ remove_once(
 		return rate.Every(time.Millisecond * 200), 10
 	}
 
-''',
+""",
     "obsolete collaboration rate buckets",
 )
 replace_if_present(
     "router/websocket/limiter.go",
-    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {\n",
+    (
+        "\tif e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e) {\n"
+    ),
     "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {\n",
     "remove native collaboration limiter names",
 )
 replace_if_present(
     "router/websocket/limiter.go",
-    "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n",
+    (
+        "\tif e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent || isBetterFilesCollaborationEvent(e) {\n"
+    ),
     "	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {\n",
     "remove legacy collaboration limiter names",
 )
 remove_once(
     "router/websocket/limiter.go",
-    '''\
+    """\
 func isBetterFilesCollaborationEvent(e Event) bool {
 	return IsBetterFilesCollaborationEvent(e)
 }
 
-''',
+""",
     "obsolete private collaboration classifier",
 )
 insert_after(
     "router/websocket/limiter.go",
-    '''\
+    """\
 func limiterName(e Event) Event {
 	if e == AuthenticationEvent || e == SendServerLogsEvent || e == SendCommandEvent {
 		return e
@@ -904,26 +924,26 @@ func limiterName(e Event) Event {
 
 	return "_default"
 }
-''',
-    '''\
+""",
+    """\
 
 // IsBetterFilesCollaborationEvent reports whether an event belongs to the
 // ordered Better Files collaboration protocol.
 func IsBetterFilesCollaborationEvent(e Event) bool {
 	return strings.HasPrefix(string(e), "betterfiles:collab:")
 }
-''',
+""",
     "func IsBetterFilesCollaborationEvent(e Event) bool",
     "collaboration event classifier",
 )
 insert_after(
     "router/websocket/limiter.go",
-    '''\
+    """\
 func IsBetterFilesCollaborationEvent(e Event) bool {
 	return strings.HasPrefix(string(e), "betterfiles:collab:")
 }
-''',
-    '''\
+""",
+    """\
 
 // IsFileCollaborationEvent reports whether an event is part of either file
 // collaboration protocol. These stateful events must never be individually
@@ -931,7 +951,7 @@ func IsBetterFilesCollaborationEvent(e Event) bool {
 func IsFileCollaborationEvent(e Event) bool {
 	return IsBetterFilesCollaborationEvent(e) || IsNativeFileCollaborationEvent(e)
 }
-''',
+""",
     "func IsFileCollaborationEvent(e Event) bool",
     "lossless collaboration event classifier",
 )
@@ -943,39 +963,39 @@ require_contains(
 
 replace_once(
     "router/websocket/websocket.go",
-    '''\
+    """\
 	if h.IsThrottled(m.Event) {
 		return nil
 	}
-''',
-    '''\
+""",
+    """\
 	// Collaboration messages are bounded and processed synchronously by the
 	// router. Dropping one update or chunk here would corrupt protocol state.
 	if !IsFileCollaborationEvent(m.Event) && h.IsThrottled(m.Event) {
 		return nil
 	}
-''',
+""",
     "!IsFileCollaborationEvent(m.Event) && h.IsThrottled(m.Event)",
     "lossless collaboration event handling",
 )
 
 replace_once(
     "router/router_server_ws.go",
-    '''\
+    """\
 	// There is a separate rate limiter that applies to individual message types
 	// within the actual websocket logic handler. _This_ rate limiter just exists
 	// to avoid enormous floods of data through the socket since we need to parse
 	// JSON each time. This rate limit realistically should never be hit since this
 	// would require sending 50+ messages a second over the websocket (no more than
 	// 10 per 200ms).
-''',
-    '''\
+""",
+    """\
 	// There is a separate rate limiter that applies to individual message types
 	// within the actual websocket logic handler. This limiter protects ordinary
 	// control traffic. Stateful collaboration events bypass both limiters and are
 	// processed synchronously below, matching Wings-rs behavior. Silently dropping
 	// one collaboration chunk would desynchronize the document.
-''',
+""",
     "This limiter protects ordinary",
     "accurate collaboration limiter documentation",
 )
@@ -983,7 +1003,7 @@ replace_once(
 insert_after(
     "router/router_server_ws.go",
     "\tvar throttled bool\n\trl := rate.NewLimiter(rate.Every(time.Millisecond*200), 10)\n",
-    '''\
+    """\
 	allowOrdinaryMessage := func() bool {
 		if !rl.Allow() {
 			if !throttled {
@@ -996,14 +1016,14 @@ insert_after(
 		throttled = false
 		return true
 	}
-''',
+""",
     "allowOrdinaryMessage := func() bool",
     "lossless collaboration message admission",
 )
 insert_before(
     "router/router_server_ws.go",
     "\n\tfor {\n",
-    '''\
+    """\
 	handleMessage := func(msg websocket.Message) {
 		if err := handler.HandleInbound(ctx, msg); err != nil {
 			if errors.Is(err, server.ErrSuspended) {
@@ -1013,13 +1033,13 @@ insert_before(
 			}
 		}
 	}
-''',
+""",
     "handleMessage := func(msg websocket.Message)",
     "ordered collaboration message handler",
 )
 remove_once(
     "router/router_server_ws.go",
-    '''\
+    """\
 		if !rl.Allow() {
 			if !throttled {
 				throttled = true
@@ -1030,18 +1050,18 @@ remove_once(
 
 		throttled = false
 
-''',
+""",
     "pre-decode global collaboration throttle",
 )
 replace_once(
     "router/router_server_ws.go",
-    '''\
+    """\
 		var j websocket.Message
 		if err := json.Unmarshal(p, &j); err != nil {
 			continue
 		}
-''',
-    '''\
+""",
+    """\
 		var j websocket.Message
 		if err := json.Unmarshal(p, &j); err != nil {
 			allowOrdinaryMessage()
@@ -1051,13 +1071,13 @@ replace_once(
 		if !websocket.IsFileCollaborationEvent(j.Event) && !allowOrdinaryMessage() {
 			continue
 		}
-''',
+""",
     "!websocket.IsFileCollaborationEvent(j.Event) && !allowOrdinaryMessage()",
     "collaboration bypass for global event limiter",
 )
 replace_if_present(
     "router/router_server_ws.go",
-    '''\
+    """\
 		go func(msg websocket.Message) {
 			if err := handler.HandleInbound(ctx, msg); err != nil {
 				if errors.Is(err, server.ErrSuspended) {
@@ -1067,8 +1087,8 @@ replace_if_present(
 				}
 			}
 		}(j)
-''',
-    '''\
+""",
+    """\
 		// Authentication and collaboration messages are stateful protocols. Keep
 		// their WebSocket wire order instead of racing them in separate goroutines.
         if j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {
@@ -1076,12 +1096,14 @@ replace_if_present(
 			continue
 		}
 		go handleMessage(j)
-''',
+""",
     "ordered collaboration message dispatch",
 )
 replace_if_present(
     "router/router_server_ws.go",
-    "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {\n",
+    (
+        "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsBetterFilesCollaborationEvent(j.Event) || websocket.IsNativeFileCollaborationEvent(j.Event) {\n"
+    ),
     "\t\tif j.Event == websocket.AuthenticationEvent || websocket.IsFileCollaborationEvent(j.Event) {\n",
     "simplify ordered collaboration dispatch",
 )
@@ -1098,7 +1120,7 @@ remove_once(
 )
 insert_after(
     "router/router_server_files.go",
-    '''\
+    """\
 				if err := fs.Rename(pf, pt); err != nil {
 					// Return nil if the error is an is not exists.
 					if errors.Is(err, os.ErrNotExist) {
@@ -1110,52 +1132,52 @@ insert_after(
 					}
 					return err
 				}
-''',
+""",
     "				s.RenameFileHistory(pf, pt)\n",
     "RenameFileHistory",
     "file history rename hook",
 )
 replace_once(
     "router/router_server_files.go",
-    '''\
+    """\
 			default:
 				return s.Filesystem().Delete(pi)
-''',
-    '''\
+""",
+    """\
 			default:
 				if err := s.Filesystem().Delete(pi); err != nil {
 					return err
 				}
 				s.ForgetFileHistory(pi)
 				return nil
-''',
+""",
     "ForgetFileHistory",
     "file history delete hook",
 )
 insert_after(
     "router/router_server_files.go",
-    '''\
+    """\
 	if c.Request.ContentLength == -1 {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "Missing Content-Length",
 		})
 		return
 	}
-''',
-    '''\
+""",
+    """\
 
 	var before []byte
 	trackRevision := server.ShouldRecordFileHistory(f, uint64(c.Request.ContentLength))
 	if trackRevision {
 		before, _ = captureFileRevisionContent(s, f)
 	}
-''',
+""",
     "trackRevision := server.ShouldRecordFileHistory",
     "file history write pre-image",
 )
 insert_after(
     "router/router_server_files.go",
-    '''\
+    """\
 	if err := s.Filesystem().Write(f, c.Request.Body, c.Request.ContentLength, 0o644); err != nil {
 		if filesystem.IsErrorCode(err, filesystem.ErrCodeIsDirectory) {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
@@ -1167,8 +1189,8 @@ insert_after(
 		middleware.CaptureAndAbort(c, err)
 		return
 	}
-''',
-    '''\
+""",
+    """\
 
 	if trackRevision {
 		after, ok := captureFileRevisionContent(s, f)
@@ -1181,7 +1203,7 @@ insert_after(
 			}
 		}
 	}
-''',
+""",
     "X-File-Revision-Id",
     "file history write post-image",
 )
@@ -1193,7 +1215,7 @@ reference = Path(os.environ["BFM_UPLOAD_REFERENCE"]).read_text()
 marker = "const (\n\tmaxMultipartUploadFiles"
 if marker not in reference or "func multipartUploadTargets(" not in reference:
     fail("downloaded upload reference does not contain folder batch support")
-replacement = reference[reference.index(marker):].rstrip() + "\n"
+replacement = reference[reference.index(marker) :].rstrip() + "\n"
 start_marker = marker if marker in upload_text else "func postServerUploadFiles("
 if start_marker not in upload_text:
     fail("could not find the multipart upload implementation")
@@ -1204,13 +1226,29 @@ supported_upload_tails = {
     "48a9395f79ff7222c6ec5c2a3036058f7d3b4fcd0bb75a0358a01bfd1d731253",  # fork 60f5d30
     "29bd47fe8a93d57490cc39391adfa89d530c2c728dd13fa49af2483722083620",  # previous addon-only patch
 }
-if old_tail != replacement and hashlib.sha256(old_tail.encode()).hexdigest() not in supported_upload_tails:
-    fail("custom multipart upload source differs from supported versions; review the folder batch patch")
-write_text(upload_path, upload_text, upload_text[:upload_start] + replacement, "folder batch uploads")
+if (
+    old_tail != replacement
+    and hashlib.sha256(old_tail.encode()).hexdigest() not in supported_upload_tails
+):
+    fail(
+        "custom multipart upload source differs from supported versions; review the folder batch patch"
+    )
+write_text(
+    upload_path, upload_text, upload_text[:upload_start] + replacement, "folder batch uploads"
+)
 _, upload_text = read_text("router/router_server_files.go")
 if "models." not in upload_text:
-    remove_once("router/router_server_files.go", '\t"github.com/pterodactyl/wings/internal/models"\n', "unused upload activity import")
-for import_path in ("encoding/json", "io/fs", "unicode/utf8", "github.com/pterodactyl/wings/internal/ufs"):
+    remove_once(
+        "router/router_server_files.go",
+        '\t"github.com/pterodactyl/wings/internal/models"\n',
+        "unused upload activity import",
+    )
+for import_path in (
+    "encoding/json",
+    "io/fs",
+    "unicode/utf8",
+    "github.com/pterodactyl/wings/internal/ufs",
+):
     insert_after(
         "router/router_server_files.go",
         "import (\n",
@@ -1218,83 +1256,87 @@ for import_path in ("encoding/json", "io/fs", "unicode/utf8", "github.com/pterod
         '"' + import_path + '"',
         "folder batch upload import " + import_path,
     )
-
 PY
+
+section "Applying shared core fixes"
+for source in .github/scripts/apply_core_fixes.py server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go; do
+	fetch_file "$source" "$source"
+done
+run_with_spinner "fix core lock copies" python3 .github/scripts/apply_core_fixes.py --backup "$BACKUP_DIR"
+run_with_spinner "format core fixes" gofmt -w server/resources.go server/server.go router/downloader/downloader.go router/router.go server/filesystem/filesystem_test.go server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go
 
 section "Formatting and building"
 run_with_spinner "format Go files" gofmt -w \
-    config/config.go \
-    environment/docker/client_accessor.go \
-    router/betterfiles_entry.go \
-    router/betterfiles_paths.go \
-    router/betterfiles_paths_test.go \
-    router/betterfiles_test_helpers_test.go \
-    router/betterfiles_http_test.go \
-    router/middleware/middleware.go \
-    router/middleware/middleware_test.go \
-    router/router.go \
-    router/router_cdn_stream.go \
-    router/router_download_directory.go \
-    router/router_download_directory_test.go \
-    router/router_download_directory_http_test.go \
-    router/router_download_helpers.go \
-    router/router_download_helpers_test.go \
-    router/router_file_operations.go \
-    router/router_file_operations_test.go \
-    router/router_openapi.go \
-    router/router_openapi_test.go \
-    router/router_upload_batch_test.go \
-    router/router_resumable_upload.go \
-    router/router_resumable_upload_test.go \
-    router/router_system_config.go \
-    router/router_system_config_test.go \
-    router/router_server_archive_nbt.go \
-    router/router_server_betterfiles_collaboration.go \
-    router/router_server_files.go \
-    router/router_server_files_copy_many.go \
-    router/router_server_files_copy_many_test.go \
-    router/router_server_files_fingerprints.go \
-    router/router_server_files_fingerprints_test.go \
-    router/router_server_files_largest.go \
-    router/router_server_files_largest_test.go \
-    router/router_server_files_rename.go \
-    router/router_server_files_revisions.go \
-    router/router_server_files_search.go \
-    router/router_server_files_search_v2.go \
-    router/router_server_files_search_v2_test.go \
-    router/router_server_git.go \
-    router/router_server_git_test.go \
-    router/router_server_ws.go \
-    router/tokens/websocket.go \
-    router/websocket/betterfiles_collaboration.go \
-    router/websocket/betterfiles_collaboration_ot.go \
-    router/websocket/betterfiles_collaboration_ot_test.go \
-    router/websocket/file_collaboration_yjs.go \
-    router/websocket/file_collaboration_yjs_test.go \
-    router/websocket/listeners.go \
-    router/websocket/listeners_operation_test.go \
-    router/websocket/limiter.go \
-    router/websocket/websocket.go \
-    server/events.go \
-    server/file_operations.go \
-    server/file_operations_test.go \
-    server/file_history.go \
-    server/file_history_test.go \
-    server/filesystem/replace.go \
-    server/filesystem/upload.go \
-    server/filesystem/upload_test.go \
-    server/server.go
+	config/config.go \
+	environment/docker/client_accessor.go \
+	router/betterfiles_entry.go \
+	router/betterfiles_paths.go \
+	router/betterfiles_paths_test.go \
+	router/betterfiles_test_helpers_test.go \
+	router/betterfiles_http_test.go \
+	router/middleware/middleware.go \
+	router/middleware/middleware_test.go \
+	router/router.go \
+	router/router_cdn_stream.go \
+	router/router_download_directory.go \
+	router/router_download_directory_test.go \
+	router/router_download_directory_http_test.go \
+	router/router_download_helpers.go \
+	router/router_download_helpers_test.go \
+	router/router_file_operations.go \
+	router/router_file_operations_test.go \
+	router/router_openapi.go \
+	router/router_openapi_test.go \
+	router/router_upload_batch_test.go \
+	router/router_resumable_upload.go \
+	router/router_resumable_upload_test.go \
+	router/router_system_config.go \
+	router/router_system_config_test.go \
+	router/router_server_archive_nbt.go \
+	router/router_server_betterfiles_collaboration.go \
+	router/router_server_files.go \
+	router/router_server_files_copy_many.go \
+	router/router_server_files_copy_many_test.go \
+	router/router_server_files_fingerprints.go \
+	router/router_server_files_fingerprints_test.go \
+	router/router_server_files_largest.go \
+	router/router_server_files_largest_test.go \
+	router/router_server_files_rename.go \
+	router/router_server_files_revisions.go \
+	router/router_server_files_search.go \
+	router/router_server_files_search_v2.go \
+	router/router_server_files_search_v2_test.go \
+	router/router_server_git.go \
+	router/router_server_git_test.go \
+	router/router_server_ws.go \
+	router/tokens/websocket.go \
+	router/websocket/betterfiles_collaboration.go \
+	router/websocket/betterfiles_collaboration_ot.go \
+	router/websocket/betterfiles_collaboration_ot_test.go \
+	router/websocket/file_collaboration_yjs.go \
+	router/websocket/file_collaboration_yjs_test.go \
+	router/websocket/listeners.go \
+	router/websocket/listeners_operation_test.go \
+	router/websocket/limiter.go \
+	router/websocket/websocket.go \
+	server/events.go \
+	server/file_operations.go \
+	server/file_operations_test.go \
+	server/file_history.go \
+	server/file_history_test.go \
+	server/filesystem/replace.go \
+	server/filesystem/upload.go \
+	server/filesystem/upload_test.go \
+	server/server.go
 run_with_spinner "test Better Files packages" go test ./router ./router/middleware ./router/websocket ./server ./server/filesystem
 if [ "${BETTERFILES_RACE:-0}" = "1" ]; then
-    run_with_spinner "race-test Better Files packages" go test -race ./router ./router/middleware ./router/websocket ./server ./server/filesystem
+	run_with_spinner "race-test Better Files packages" go test -race ./router ./router/middleware ./router/websocket ./server ./server/filesystem
 fi
-# The supported Wings base has inherited copylock and unreachable-code findings.
-# Keep every other standard vet analyzer fatal for installer validation.
-run_with_spinner "vet Wings packages" go vet -copylocks=false -unreachable=false ./...
+run_with_spinner "vet Wings packages" go vet ./...
 run_with_spinner "compile Wings packages" go build ./...
 
 section "Done"
 ok "Better Files Wings edits are installed and validation succeeded."
 if [ -d "$BACKUP_DIR" ]; then
-    log "backups, if any, are in: ${BACKUP_DIR}"
+	log "backups, if any, are in: ${BACKUP_DIR}"
 fi

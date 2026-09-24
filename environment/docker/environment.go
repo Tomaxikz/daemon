@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/pterodactyl/wings/environment"
 	"github.com/pterodactyl/wings/events"
+	"github.com/pterodactyl/wings/internal/networkpolicy"
 	"github.com/pterodactyl/wings/remote"
 	"github.com/pterodactyl/wings/system"
 )
@@ -26,7 +28,15 @@ type Metadata struct {
 var _ environment.ProcessEnvironment = (*Environment)(nil)
 
 type Environment struct {
-	mu sync.RWMutex
+	mu                 sync.RWMutex
+	networkMu          sync.Mutex
+	networkStatus      atomic.Pointer[networkpolicy.Status]
+	networkReconcile   atomic.Bool
+	networkMonitor     atomic.Bool
+	networkVerified    atomic.Bool
+	networkMonitorStop context.CancelFunc
+	networkContainerID string
+	networkDeleted     bool
 
 	// The public identifier for this environment. In this case it is the Docker container
 	// name that will be used for all instances created under it.
@@ -97,6 +107,7 @@ func (e *Environment) SetStream(s *types.HijackedResponse) {
 func (e *Environment) IsAttached() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+
 	return e.stream != nil
 }
 
@@ -118,8 +129,10 @@ func (e *Environment) Exists() (bool, error) {
 		if client.IsErrNotFound(err) {
 			return false, nil
 		}
+
 		return false, err
 	}
+
 	return true, nil
 }
 
@@ -137,6 +150,7 @@ func (e *Environment) IsRunning(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+
 	return c.State.Running, nil
 }
 
@@ -157,15 +171,18 @@ func (e *Environment) ExitState() (uint32, bool, error) {
 		if client.IsErrNotFound(err) {
 			return 1, false, nil
 		}
+
 		return 0, false, errors.WrapIf(err, "environment/docker: failed to inspect container")
 	}
 	if c.State.ExitCode < 0 {
 		return 0, c.State.OOMKilled, fmt.Errorf("environment/docker: invalid negative container exit code %d", c.State.ExitCode)
 	}
+
 	const maxUint32 = int64(1<<32 - 1)
 	if int64(c.State.ExitCode) > maxUint32 {
 		return 0, c.State.OOMKilled, fmt.Errorf("environment/docker: invalid oversized container exit code %d", c.State.ExitCode)
 	}
+
 	return uint32(c.State.ExitCode), c.State.OOMKilled, nil // #nosec G115 -- range checked above.
 }
 

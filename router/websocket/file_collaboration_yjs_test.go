@@ -34,7 +34,14 @@ func nativeFileCollabTestPeer(t *testing.T, state []byte) (*crdt.Doc, *crdt.YTex
 	return doc, text
 }
 
-func nativeFileCollabTestInsert(t *testing.T, doc *crdt.Doc, text *crdt.YText, stateVector crdt.StateVector, index int, value string) []byte {
+func nativeFileCollabTestInsert(
+	t *testing.T,
+	doc *crdt.Doc,
+	text *crdt.YText,
+	stateVector crdt.StateVector,
+	index int,
+	value string,
+) []byte {
 	t.Helper()
 	doc.Transact(func(transaction *crdt.Transaction) {
 		text.Insert(transaction, index, value, nil)
@@ -101,7 +108,9 @@ func nativeFileCollabTestSocket(t *testing.T) (*gws.Conn, *gws.Conn) {
 	t.Helper()
 	serverConn := make(chan *gws.Conn, 1)
 	httpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := (&gws.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}).Upgrade(w, r, nil)
+		conn, err := (&gws.Upgrader{CheckOrigin: func(*http.Request) bool {
+			return true
+		}}).Upgrade(w, r, nil)
 		if err != nil {
 			return
 		}
@@ -122,7 +131,11 @@ func nativeFileCollabTestSocket(t *testing.T) (*gws.Conn, *gws.Conn) {
 	return serverSide, client
 }
 
-func nativeFileCollabTestHandler(t *testing.T, s *server.Server, user string) (*Handler, *gws.Conn, context.Context) {
+func nativeFileCollabTestHandler(
+	t *testing.T,
+	s *server.Server,
+	user string,
+) (*Handler, *gws.Conn, context.Context) {
 	t.Helper()
 	serverSide, client := nativeFileCollabTestSocket(t)
 	// NumericDate has second precision; move issuance to the next second so it
@@ -208,16 +221,22 @@ func TestNativeFileCollabWebsocketFlow(t *testing.T) {
 	split := len(update) / 2
 	require.Greater(t, split, 0)
 
-	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabUpdateEvent, Args: []string{
-		path, "0", base64.StdEncoding.EncodeToString(update[:split]),
-	}}))
+	require.NoError(t, sender.HandleInbound(senderCtx, Message{
+		Event: FileCollabUpdateEvent,
+		Args: []string{
+			path, "0", base64.StdEncoding.EncodeToString(update[:split]),
+		},
+	}))
 	session := nativeFileCollabRegistry.sessions[nativeFileCollabKey(serverUUID, path)]
 	require.NotNil(t, session)
 	require.Equal(t, "hello", session.text.ToString(), "an incomplete chunk must not mutate the document")
 
-	require.NoError(t, sender.HandleInbound(senderCtx, Message{Event: FileCollabUpdateEvent, Args: []string{
-		path, "1", base64.StdEncoding.EncodeToString(update[split:]),
-	}}))
+	require.NoError(t, sender.HandleInbound(senderCtx, Message{
+		Event: FileCollabUpdateEvent,
+		Args: []string{
+			path, "1", base64.StdEncoding.EncodeToString(update[split:]),
+		},
+	}))
 	updateMessage := nativeFileCollabRequireEvent(t, recipientConn, FileCollabUpdateEvent, 2)
 	require.Equal(t, path, updateMessage.Args[0])
 	require.Equal(t, base64.StdEncoding.EncodeToString(update), updateMessage.Args[1])
@@ -323,11 +342,13 @@ func TestNativeFileCollabRejectsMalformedYjsUpdate(t *testing.T) {
 
 func TestNativeFileCollabParticipantMatchesWingsRsShape(t *testing.T) {
 	avatar := "https://panel.example/avatar.png"
-	payload, err := json.Marshal([]nativeFileCollabParticipant{{
-		User:   "user-uuid",
-		Name:   "Panel User",
-		Avatar: &avatar,
-	}})
+	payload, err := json.Marshal([]nativeFileCollabParticipant{
+		{
+			User:   "user-uuid",
+			Name:   "Panel User",
+			Avatar: &avatar,
+		},
+	})
 	require.NoError(t, err)
 	require.JSONEq(t, `[{"user":"user-uuid","name":"Panel User","avatar":"https://panel.example/avatar.png"}]`, string(payload))
 }

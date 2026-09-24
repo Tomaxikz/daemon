@@ -15,13 +15,44 @@ func TestCleanDownloadFilePath(t *testing.T) {
 		want string
 		ok   bool
 	}{
-		{name: "relative file", in: "foo/bar.txt", want: "/foo/bar.txt", ok: true},
-		{name: "absolute file", in: "/foo/bar.txt", want: "/foo/bar.txt", ok: true},
-		{name: "backslashes", in: `foo\bar.txt`, want: "/foo/bar.txt", ok: true},
-		{name: "empty", in: "", ok: false},
-		{name: "root", in: "/", ok: false},
-		{name: "traversal", in: "/foo/../bar.txt", ok: false},
-		{name: "nul byte", in: "foo\x00bar.txt", ok: false},
+		{
+			name: "relative file",
+			in:   "foo/bar.txt",
+			want: "/foo/bar.txt",
+			ok:   true,
+		},
+		{
+			name: "absolute file",
+			in:   "/foo/bar.txt",
+			want: "/foo/bar.txt",
+			ok:   true,
+		},
+		{
+			name: "backslashes",
+			in:   `foo\bar.txt`,
+			want: "/foo/bar.txt",
+			ok:   true,
+		},
+		{
+			name: "empty",
+			in:   "",
+			ok:   false,
+		},
+		{
+			name: "root",
+			in:   "/",
+			ok:   false,
+		},
+		{
+			name: "traversal",
+			in:   "/foo/../bar.txt",
+			ok:   false,
+		},
+		{
+			name: "nul byte",
+			in:   "foo\x00bar.txt",
+			ok:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -44,14 +75,48 @@ func TestCleanUploadFilename(t *testing.T) {
 		want string
 		ok   bool
 	}{
-		{name: "simple", in: "world.zip", want: "world.zip", ok: true},
-		{name: "spaces", in: "my world.zip", want: "my world.zip", ok: true},
-		{name: "empty", in: "", ok: false},
-		{name: "dot", in: ".", ok: false},
-		{name: "dot dot", in: "..", ok: false},
-		{name: "forward slash", in: "../world.zip", ok: false},
-		{name: "nested path", in: "saves/world.zip", ok: false},
-		{name: "backslash", in: `saves\world.zip`, ok: false},
+		{
+			name: "simple",
+			in:   "world.zip",
+			want: "world.zip",
+			ok:   true,
+		},
+		{
+			name: "spaces",
+			in:   "my world.zip",
+			want: "my world.zip",
+			ok:   true,
+		},
+		{
+			name: "empty",
+			in:   "",
+			ok:   false,
+		},
+		{
+			name: "dot",
+			in:   ".",
+			ok:   false,
+		},
+		{
+			name: "dot dot",
+			in:   "..",
+			ok:   false,
+		},
+		{
+			name: "forward slash",
+			in:   "../world.zip",
+			ok:   false,
+		},
+		{
+			name: "nested path",
+			in:   "saves/world.zip",
+			ok:   false,
+		},
+		{
+			name: "backslash",
+			in:   `saves\world.zip`,
+			ok:   false,
+		},
 	}
 
 	for _, tt := range tests {

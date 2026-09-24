@@ -129,7 +129,9 @@ func postServerFilesSearch(c *gin.Context) {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.DisallowUnknownFields()
 	if !utf8.Valid(body) || decoder.Decode(&data) != nil || data == nil {
-		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid search JSON, field type, or unsupported field. Only the documented V2 filters are accepted."})
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid search JSON, field type, or unsupported field. Only the documented V2 filters are accepted.",
+		})
 		return
 	}
 	var extra interface{}
@@ -228,7 +230,9 @@ func validateSearchV2Payload(data *searchV2Payload) error {
 func compileSearchV2Patterns(patterns []string, insensitive bool) ([]searchV2Pattern, error) {
 	result := make([]searchV2Pattern, 0, len(patterns))
 	for _, pattern := range patterns {
-		if !utf8.ValidString(pattern) || len(pattern) > betterFilesMaxPathLength || strings.ContainsAny(pattern, "\x00\r\n") {
+		if !utf8.ValidString(pattern) ||
+			len(pattern) > betterFilesMaxPathLength ||
+			strings.ContainsAny(pattern, "\x00\r\n") {
 			return nil, errors.New("invalid path pattern")
 		}
 		if strings.HasPrefix(pattern, "#") {
@@ -420,7 +424,11 @@ func searchV2GlobBytes(value string, insensitive bool) string {
 	return out.String()
 }
 
-func searchV2PathDecision(serverPath string, directory bool, filter *searchV2PathFilter) (bool, bool) {
+func searchV2PathDecision(
+	serverPath string,
+	directory bool,
+	filter *searchV2PathFilter,
+) (bool, bool) {
 	if filter == nil {
 		return true, false
 	}
@@ -461,7 +469,13 @@ func openSearchV2Root(ctx context.Context, fs *serverfs.Filesystem, root string)
 	return current, nil
 }
 
-func runSearchV2(ctx context.Context, fs *serverfs.Filesystem, root string, data searchV2Payload, budget *searchV2Budget) ([]betterFilesEntry, error) {
+func runSearchV2(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	root string,
+	data searchV2Payload,
+	budget *searchV2Budget,
+) ([]betterFilesEntry, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -544,7 +558,11 @@ func runSearchV2(ctx context.Context, fs *serverfs.Filesystem, root string, data
 				return nil, err
 			}
 			budget.directoriesVisited++
-			stack = append(stack, searchV2Directory{file: child, path: fullPath, depth: frame.depth + 1})
+			stack = append(stack, searchV2Directory{
+				file:  child,
+				path:  fullPath,
+				depth: frame.depth + 1,
+			})
 			continue
 		}
 		if !included || !info.Mode().IsRegular() {
@@ -602,7 +620,15 @@ func (r *searchV2Reader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func searchV2File(ctx context.Context, fs *serverfs.Filesystem, parent int, name, relative string, data searchV2Payload, matcher *searchV2Matcher, budget *searchV2Budget) (betterFilesEntry, bool, error) {
+func searchV2File(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	parent int,
+	name, relative string,
+	data searchV2Payload,
+	matcher *searchV2Matcher,
+	budget *searchV2Budget,
+) (betterFilesEntry, bool, error) {
 	var empty betterFilesEntry
 	// A concurrently replaced regular file must not turn this open into a FIFO wait.
 	file, err := fs.UnixFS().OpenFileat(parent, name, ufs.O_RDONLY|ufs.O_NOFOLLOW|unix.O_NONBLOCK, 0)
@@ -627,7 +653,11 @@ func searchV2File(ctx context.Context, fs *serverfs.Filesystem, parent int, name
 	if scanned {
 		limit = filter.readLimit()
 	}
-	reader := io.LimitReader(&searchV2Reader{ctx: ctx, reader: file, budget: budget}, limit)
+	reader := io.LimitReader(&searchV2Reader{
+		ctx:    ctx,
+		reader: file,
+		budget: budget,
+	}, limit)
 	var head [searchV2HeadBytes]byte
 	n, readErr := io.ReadFull(reader, head[:])
 	if readErr != nil && readErr != io.EOF && readErr != io.ErrUnexpectedEOF {
@@ -689,12 +719,21 @@ func newSearchV2Matcher(query string, caseInsensitive bool) *searchV2Matcher {
 		}
 		failure[i] = matched
 	}
-	return &searchV2Matcher{pattern: pattern, failure: failure, caseInsensitive: caseInsensitive}
+	return &searchV2Matcher{
+		pattern:         pattern,
+		failure:         failure,
+		caseInsensitive: caseInsensitive,
+	}
 }
 
 // The KMP state spans read boundaries. Byte matching preserves UTF-8 literals
 // and upstream ASCII-only case folding without allocating whole file contents.
-func streamSearchV2Text(ctx context.Context, reader io.Reader, limit int64, matcher *searchV2Matcher) (bool, error) {
+func streamSearchV2Text(
+	ctx context.Context,
+	reader io.Reader,
+	limit int64,
+	matcher *searchV2Matcher,
+) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}

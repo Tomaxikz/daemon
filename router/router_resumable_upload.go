@@ -120,7 +120,9 @@ func newResumableUploadAdmissionRegistry(global, perServer, perToken int) *resum
 func (r *resumableUploadAdmissionRegistry) acquire(serverID, tokenID string) (func(), bool) {
 	tokenKey := serverID + "\x00" + tokenID
 	r.mu.Lock()
-	if r.global >= r.globalLimit || r.byServer[serverID] >= r.perServerLimit || r.byToken[tokenKey] >= r.perTokenLimit {
+	if r.global >= r.globalLimit ||
+		r.byServer[serverID] >= r.perServerLimit ||
+		r.byToken[tokenKey] >= r.perTokenLimit {
 		r.mu.Unlock()
 		return nil, false
 	}
@@ -494,7 +496,11 @@ type resumableUploadDeadlineReader struct {
 	supported  bool
 }
 
-func newResumableUploadDeadlineReader(writer http.ResponseWriter, reader io.Reader, timeout time.Duration) *resumableUploadDeadlineReader {
+func newResumableUploadDeadlineReader(
+	writer http.ResponseWriter,
+	reader io.Reader,
+	timeout time.Duration,
+) *resumableUploadDeadlineReader {
 	return &resumableUploadDeadlineReader{
 		reader:     reader,
 		controller: http.NewResponseController(writer),

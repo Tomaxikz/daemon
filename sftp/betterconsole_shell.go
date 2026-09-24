@@ -22,7 +22,12 @@ import (
 const betterConsoleShellCliName = ".wings"
 const betterConsoleShellMaxLineBytes = 4096
 
-func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Server, handler *Handler, ip string) {
+func (c *SFTPServer) serveBetterConsoleCli(
+	channel ssh.Channel,
+	srv *server.Server,
+	handler *Handler,
+	ip string,
+) {
 	logOutput := make(chan []byte, 128)
 	installOutput := make(chan []byte, 32)
 	eventOutput := make(chan []byte, 32)
@@ -81,7 +86,9 @@ func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Serv
 				if e.Topic == server.InstallOutputEvent && !canReceiveInstall {
 					continue
 				}
-				if e.Topic != server.ConsoleOutputEvent && e.Topic != server.DaemonMessageEvent && e.Topic != server.InstallOutputEvent {
+				if e.Topic != server.ConsoleOutputEvent &&
+					e.Topic != server.DaemonMessageEvent &&
+					e.Topic != server.InstallOutputEvent {
 					continue
 				}
 				term.writeConsole(betterConsoleEventString(e.Data))
@@ -148,7 +155,13 @@ func (c *SFTPServer) serveBetterConsoleCli(channel ssh.Channel, srv *server.Serv
 	}
 }
 
-func (c *SFTPServer) handleBetterConsoleShellCliCommand(term *betterConsoleSshTerminal, srv *server.Server, handler *Handler, activity server.RequestActivity, line string) {
+func (c *SFTPServer) handleBetterConsoleShellCliCommand(
+	term *betterConsoleSshTerminal,
+	srv *server.Server,
+	handler *Handler,
+	activity server.RequestActivity,
+	line string,
+) {
 	parts := strings.Fields(line)
 	if len(parts) < 2 {
 		term.writeLine("Usage: " + betterConsoleShellCliName + " <help|power|stats>")
@@ -181,7 +194,13 @@ func (c *SFTPServer) handleBetterConsoleShellCliCommand(term *betterConsoleSshTe
 	}
 }
 
-func (c *SFTPServer) handleBetterConsoleShellPower(term *betterConsoleSshTerminal, srv *server.Server, handler *Handler, activity server.RequestActivity, parts []string) {
+func (c *SFTPServer) handleBetterConsoleShellPower(
+	term *betterConsoleSshTerminal,
+	srv *server.Server,
+	handler *Handler,
+	activity server.RequestActivity,
+	parts []string,
+) {
 	if len(parts) < 3 {
 		term.writeLine("Usage: " + betterConsoleShellCliName + " power <start|restart|stop|kill>")
 		return

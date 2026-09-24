@@ -38,7 +38,11 @@ func removeAll(fs unixFS, path string) error {
 	// The rmdir system call does not permit removing ".",
 	// so we don't permit it either.
 	if endsWithDot(path) {
-		return &PathError{Op: "removeall", Path: path, Err: unix.EINVAL}
+		return &PathError{
+			Op:   "removeall",
+			Path: path,
+			Err:  unix.EINVAL,
+		}
 	}
 
 	// Simple case: if Remove works, we're done.
@@ -126,7 +130,11 @@ func removeContentsFrom(fs unixFS, parent File, base string) error {
 			if errors.Is(err, ErrNotExist) {
 				return nil
 			}
-			recurseErr = &PathError{Op: "openfdat", Path: base, Err: err}
+			recurseErr = &PathError{
+				Op:   "openfdat",
+				Path: base,
+				Err:  err,
+			}
 			break
 		}
 
@@ -140,7 +148,11 @@ func removeContentsFrom(fs unixFS, parent File, base string) error {
 				if errors.Is(readErr, ErrNotExist) {
 					return nil
 				}
-				return &PathError{Op: "readdirnames", Path: base, Err: readErr}
+				return &PathError{
+					Op:   "readdirnames",
+					Path: base,
+					Err:  readErr,
+				}
 			}
 
 			respSize = len(names)
@@ -196,7 +208,11 @@ func removeAllFrom(fs unixFS, parent File, base string) error {
 	// whose contents need to be removed.
 	// Otherwise, just return the error.
 	if err != unix.EISDIR && err != unix.EPERM && err != unix.EACCES {
-		return &PathError{Op: "unlinkat", Path: base, Err: err}
+		return &PathError{
+			Op:   "unlinkat",
+			Path: base,
+			Err:  err,
+		}
 	}
 
 	// Is this a directory we need to recurse into?
@@ -208,11 +224,19 @@ func removeAllFrom(fs unixFS, parent File, base string) error {
 		if errors.Is(statErr, ErrNotExist) {
 			return nil
 		}
-		return &PathError{Op: "fstatat", Path: base, Err: statErr}
+		return &PathError{
+			Op:   "fstatat",
+			Path: base,
+			Err:  statErr,
+		}
 	}
 	if statInfo.Mode&unix.S_IFMT != unix.S_IFDIR {
 		// Not a directory; return the error from the unix.Unlinkat.
-		return &PathError{Op: "unlinkat", Path: base, Err: err}
+		return &PathError{
+			Op:   "unlinkat",
+			Path: base,
+			Err:  err,
+		}
 	}
 
 	// Remove all contents will remove the contents of the directory.

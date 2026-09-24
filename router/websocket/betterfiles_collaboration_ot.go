@@ -142,7 +142,8 @@ func (d *betterFilesCollabDocument) resolveBase(changes []betterFilesCollabTextE
 	if baseLength < 0 {
 		return 0, "", errBetterFilesCollabInvalidEdit
 	}
-	if betterFilesCollabContentHash(d.Content) == baseHash && betterFilesCollabUTF16Len(d.Content) == baseLength {
+	if betterFilesCollabContentHash(d.Content) == baseHash &&
+		betterFilesCollabUTF16Len(d.Content) == baseLength {
 		return d.Revision, d.Content, nil
 	}
 
@@ -169,7 +170,8 @@ func (d *betterFilesCollabDocument) resolveBase(changes []betterFilesCollabTextE
 			return 0, "", fmt.Errorf("reconstruct collaboration patch base: %w", err)
 		}
 	}
-	if betterFilesCollabContentHash(baseContent) != baseHash || betterFilesCollabUTF16Len(baseContent) != baseLength {
+	if betterFilesCollabContentHash(baseContent) != baseHash ||
+		betterFilesCollabUTF16Len(baseContent) != baseLength {
 		return 0, "", errBetterFilesCollabBaseNotFound
 	}
 
@@ -238,7 +240,11 @@ func betterFilesCollabOperationToChanges(content string, operation *ot.Operation
 			sourceRune += int(value.N)
 		case ot.Insert:
 			if pending == nil {
-				pending = &betterFilesCollabTextEdit{RangeOffset: prefix[sourceRune], BaseHash: baseHash, BaseLength: baseLength}
+				pending = &betterFilesCollabTextEdit{
+					RangeOffset: prefix[sourceRune],
+					BaseHash:    baseHash,
+					BaseLength:  baseLength,
+				}
 			}
 			pending.Text += value.Text
 		case ot.Delete:
@@ -247,7 +253,11 @@ func betterFilesCollabOperationToChanges(content string, operation *ot.Operation
 				return nil, errBetterFilesCollabInvalidEdit
 			}
 			if pending == nil {
-				pending = &betterFilesCollabTextEdit{RangeOffset: prefix[sourceRune], BaseHash: baseHash, BaseLength: baseLength}
+				pending = &betterFilesCollabTextEdit{
+					RangeOffset: prefix[sourceRune],
+					BaseHash:    baseHash,
+					BaseLength:  baseLength,
+				}
 			}
 			pending.RangeLength += prefix[end] - prefix[sourceRune]
 			sourceRune = end

@@ -31,12 +31,36 @@ type directoryArchiveFormat struct {
 }
 
 var directoryArchiveFormats = map[string]directoryArchiveFormat{
-	"tar":      {name: "tar", extension: "tar", mime: "application/x-tar"},
-	"tar_gz":   {name: "tar_gz", extension: "tar.gz", mime: "application/gzip"},
-	"tar_xz":   {name: "tar_xz", extension: "tar.xz", mime: "application/x-xz"},
-	"tar_bz2":  {name: "tar_bz2", extension: "tar.bz2", mime: "application/x-bzip2"},
-	"tar_zstd": {name: "tar_zstd", extension: "tar.zst", mime: "application/zstd"},
-	"zip":      {name: "zip", extension: "zip", mime: "application/zip"},
+	"tar": {
+		name:      "tar",
+		extension: "tar",
+		mime:      "application/x-tar",
+	},
+	"tar_gz": {
+		name:      "tar_gz",
+		extension: "tar.gz",
+		mime:      "application/gzip",
+	},
+	"tar_xz": {
+		name:      "tar_xz",
+		extension: "tar.xz",
+		mime:      "application/x-xz",
+	},
+	"tar_bz2": {
+		name:      "tar_bz2",
+		extension: "tar.bz2",
+		mime:      "application/x-bzip2",
+	},
+	"tar_zstd": {
+		name:      "tar_zstd",
+		extension: "tar.zst",
+		mime:      "application/zstd",
+	},
+	"zip": {
+		name:      "zip",
+		extension: "zip",
+		mime:      "application/zip",
+	},
 }
 
 const (
@@ -99,7 +123,11 @@ func abortDirectoryDownload(c *gin.Context) {
 func safeArchiveFilename(value string) string {
 	var builder strings.Builder
 	for _, character := range value {
-		if character > unicode.MaxASCII || character < 0x20 || character == 0x7f || character == '/' || character == '\\' {
+		if character > unicode.MaxASCII ||
+			character < 0x20 ||
+			character == 0x7f ||
+			character == '/' ||
+			character == '\\' {
 			builder.WriteByte('_')
 		} else {
 			builder.WriteRune(character)
@@ -111,7 +139,13 @@ func safeArchiveFilename(value string) string {
 	return builder.String()
 }
 
-func streamDirectoryArchive(ctx context.Context, output io.Writer, fs *serverfs.Filesystem, root string, format directoryArchiveFormat) error {
+func streamDirectoryArchive(
+	ctx context.Context,
+	output io.Writer,
+	fs *serverfs.Filesystem,
+	root string,
+	format directoryArchiveFormat,
+) error {
 	if format.name == "zip" {
 		writer := zip.NewWriter(output)
 		err := writeZipDirectory(ctx, writer, fs, root)
@@ -142,7 +176,9 @@ func streamDirectoryArchive(ctx context.Context, output io.Writer, fs *serverfs.
 func directoryArchiveCompressor(output io.Writer, format string) (io.Writer, func() error, error) {
 	switch format {
 	case "tar":
-		return output, func() error { return nil }, nil
+		return output, func() error {
+			return nil
+		}, nil
 	case "tar_gz":
 		writer, err := gzip.NewWriterLevel(output, gzip.DefaultCompression)
 		if err != nil {
@@ -178,7 +214,12 @@ type directoryArchiveItem struct {
 	depth int
 }
 
-func writeTarDirectory(ctx context.Context, writer *tar.Writer, fs *serverfs.Filesystem, root string) error {
+func writeTarDirectory(
+	ctx context.Context,
+	writer *tar.Writer,
+	fs *serverfs.Filesystem,
+	root string,
+) error {
 	buffer := make([]byte, 64*1024)
 	return walkDirectoryArchive(ctx, fs, root, func(item directoryArchiveItem, info ufs.FileInfo, file io.Reader) error {
 		header, err := tar.FileInfoHeader(info, "")
@@ -206,7 +247,12 @@ func writeTarDirectory(ctx context.Context, writer *tar.Writer, fs *serverfs.Fil
 	})
 }
 
-func writeZipDirectory(ctx context.Context, writer *zip.Writer, fs *serverfs.Filesystem, root string) error {
+func writeZipDirectory(
+	ctx context.Context,
+	writer *zip.Writer,
+	fs *serverfs.Filesystem,
+	root string,
+) error {
 	buffer := make([]byte, 64*1024)
 	return walkDirectoryArchive(ctx, fs, root, func(item directoryArchiveItem, info ufs.FileInfo, file io.Reader) error {
 		header, err := zip.FileInfoHeader(info)
@@ -250,7 +296,11 @@ func walkDirectoryArchive(
 	}
 	stack := make([]directoryArchiveItem, 0, len(entries))
 	for i := len(entries) - 1; i >= 0; i-- {
-		stack = append(stack, directoryArchiveItem{path: pathpkg.Join(root, entries[i].Name()), rel: entries[i].Name(), depth: 1})
+		stack = append(stack, directoryArchiveItem{
+			path:  pathpkg.Join(root, entries[i].Name()),
+			rel:   entries[i].Name(),
+			depth: 1,
+		})
 	}
 
 	visited := 0
@@ -264,7 +314,9 @@ func walkDirectoryArchive(
 		if visited > maxDirectoryArchiveEntries || item.depth > maxDirectoryArchiveDepth {
 			return errors.New("directory archive traversal limit exceeded")
 		}
-		if pathpkg.IsAbs(item.rel) || hasParentPathComponent(item.rel) || ensureBetterFilesAllowed(fs, item.path) != nil {
+		if pathpkg.IsAbs(item.rel) ||
+			hasParentPathComponent(item.rel) ||
+			ensureBetterFilesAllowed(fs, item.path) != nil {
 			continue
 		}
 		info, err := fs.UnixFS().Lstat(item.path)

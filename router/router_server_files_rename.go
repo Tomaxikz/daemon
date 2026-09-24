@@ -88,7 +88,11 @@ func putServerRenameFilesSafe(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
-func prepareRenameFiles(fs *serverfs.Filesystem, root string, input []safeRenameFile) ([]normalizedRenameFile, error) {
+func prepareRenameFiles(
+	fs *serverfs.Filesystem,
+	root string,
+	input []safeRenameFile,
+) ([]normalizedRenameFile, error) {
 	normalized := make([]normalizedRenameFile, 0, len(input))
 	destinations := make(map[string]struct{}, len(input))
 	for _, requested := range input {

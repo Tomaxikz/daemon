@@ -23,7 +23,9 @@ type testCopyProgress struct {
 func (p *testCopyProgress) AddBytesProcessed(value uint64) {
 	p.bytes.Add(value)
 	if p.started != nil && value > 0 {
-		p.once.Do(func() { close(p.started) })
+		p.once.Do(func() {
+			close(p.started)
+		})
 	}
 }
 

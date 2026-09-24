@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/pterodactyl/wings/environment"
+	"github.com/pterodactyl/wings/internal/networkpolicy"
 )
 
 type EggConfiguration struct {
@@ -50,6 +51,7 @@ type Configuration struct {
 	Labels map[string]string `json:"labels"`
 
 	Allocations           environment.Allocations `json:"allocations"`
+	NetworkPolicy         *networkpolicy.Policy   `json:"network_policy,omitempty"`
 	Build                 environment.Limits      `json:"build"`
 	CrashDetectionEnabled bool                    `json:"crash_detection_enabled"`
 	Mounts                []Mount                 `json:"mounts"`
@@ -64,6 +66,7 @@ type Configuration struct {
 func (s *Server) Config() *Configuration {
 	s.cfg.mu.RLock()
 	defer s.cfg.mu.RUnlock()
+
 	return &s.cfg
 }
 
@@ -71,23 +74,27 @@ func (s *Server) Config() *Configuration {
 func (s *Server) DiskSpace() int64 {
 	s.cfg.mu.RLock()
 	defer s.cfg.mu.RUnlock()
+
 	return s.cfg.Build.DiskSpace * 1024.0 * 1024.0
 }
 
 func (s *Server) MemoryLimit() int64 {
 	s.cfg.mu.RLock()
 	defer s.cfg.mu.RUnlock()
+
 	return s.cfg.Build.MemoryLimit
 }
 
 func (c *Configuration) GetUuid() string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
+
 	return c.Uuid
 }
 
 func (c *Configuration) SetSuspended(s bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
 	c.Suspended = s
 }

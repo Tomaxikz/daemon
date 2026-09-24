@@ -24,6 +24,17 @@ import (
 // a bootable state. This ensures that unexpected container deletion while Wings
 // is running does not result in the server becoming un-bootable.
 func (e *Environment) OnBeforeStart(ctx context.Context) error {
+	e.networkMu.Lock()
+	defer e.networkMu.Unlock()
+
+	if err := e.beginNetworkChange(); err != nil {
+		return err
+	}
+
+	return e.onBeforeStart(ctx)
+}
+
+func (e *Environment) onBeforeStart(ctx context.Context) error {
 	// Always destroy and re-create the server container to ensure that synced data from the Panel is used.
 	if err := e.client.ContainerRemove(ctx, e.Id, container.RemoveOptions{RemoveVolumes: true}); err != nil {
 		if !client.IsErrNotFound(err) {
@@ -38,7 +49,7 @@ func (e *Environment) OnBeforeStart(ctx context.Context) error {
 	// This won't actually run an installation process however, it is just here to ensure the
 	// environment gets created properly if it is missing and the server is started. We're making
 	// an assumption that all the files will still exist at this point.
-	if err := e.Create(); err != nil {
+	if err := e.create(); err != nil {
 		return err
 	}
 
@@ -49,6 +60,13 @@ func (e *Environment) OnBeforeStart(ctx context.Context) error {
 // listeners for the console. If a container does not exist, or needs to be
 // rebuilt that will happen in the call to OnBeforeStart().
 func (e *Environment) Start(ctx context.Context) error {
+	e.networkMu.Lock()
+	defer e.networkMu.Unlock()
+
+	if err := e.beginNetworkChange(); err != nil {
+		return err
+	}
+
 	sawError := false
 
 	// If sawError is set to true there was an error somewhere in the pipeline that
@@ -79,7 +97,11 @@ func (e *Environment) Start(ctx context.Context) error {
 			e.SetState(environment.ProcessRunningState)
 			e.applyCpuBurst(ctx)
 
-			return e.Attach(ctx)
+			if err := e.reconcileNetwork(ctx); err != nil {
+				return err
+			}
+
+			return e.attach(ctx)
 		}
 
 		// Truncate the log file, so we don't end up outputting a bunch of useless log information
@@ -101,7 +123,7 @@ func (e *Environment) Start(ctx context.Context) error {
 	// Run the before start function and wait for it to finish. This will validate that the container
 	// exists on the system, and rebuild the container if that is required for server booting to
 	// occur.
-	if err := e.OnBeforeStart(ctx); err != nil {
+	if err := e.onBeforeStart(ctx); err != nil {
 		return errors.WrapIf(err, "environment/docker: failed to run pre-boot process")
 	}
 
@@ -117,12 +139,15 @@ func (e *Environment) Start(ctx context.Context) error {
 	//
 	// By explicitly attaching to the instance before we start it, we can immediately
 	// react to errors/output stopping/etc. when starting.
-	if err := e.Attach(actx); err != nil {
+	if err := e.attach(actx); err != nil {
 		return errors.WrapIf(err, "environment/docker: failed to attach to container")
 	}
 
 	if err := e.client.ContainerStart(actx, e.Id, container.StartOptions{}); err != nil {
 		return errors.WrapIf(err, "environment/docker: failed to start container")
+	}
+	if err := e.finishNetworkStart(actx); err != nil {
+		return err
 	}
 
 	e.applyCpuBurst(actx)
@@ -200,6 +225,7 @@ func (e *Environment) Stop(ctx context.Context) error {
 			e.SetState(environment.ProcessOfflineState)
 			return nil
 		}
+
 		return errors.Wrap(err, "environment/docker: cannot stop container")
 	}
 
@@ -214,7 +240,11 @@ func (e *Environment) Stop(ctx context.Context) error {
 // Calls to Environment.Terminate() in this function use the context passed
 // through since we don't want to prevent termination of the server instance
 // just because the context.WithTimeout() has expired.
-func (e *Environment) WaitForStop(ctx context.Context, duration time.Duration, terminate bool) error {
+func (e *Environment) WaitForStop(
+	ctx context.Context,
+	duration time.Duration,
+	terminate bool,
+) error {
 	tctx, cancel := context.WithTimeout(context.Background(), duration)
 	defer cancel()
 
@@ -242,6 +272,7 @@ func (e *Environment) WaitForStop(ctx context.Context, duration time.Duration, t
 		if terminate && errors.Is(err, context.DeadlineExceeded) {
 			return doTermination("stop")
 		}
+
 		return err
 	}
 
@@ -255,6 +286,7 @@ func (e *Environment) WaitForStop(ctx context.Context, duration time.Duration, t
 			if terminate {
 				return doTermination("parent-context")
 			}
+
 			return err
 		}
 	case err := <-errChan:
@@ -285,6 +317,7 @@ func (e *Environment) SignalContainer(ctx context.Context, signal string) error 
 		if client.IsErrNotFound(err) {
 			return nil
 		}
+
 		return errors.WithStack(err)
 	}
 

@@ -34,7 +34,12 @@ type RequestActivity struct {
 // Event returns the underlying logged event from the RequestEvent instance and sets the
 // specific event and metadata on it.
 func (ra RequestActivity) Event(event models.Event, metadata models.ActivityMeta) *models.Activity {
-	a := models.Activity{Server: ra.server, IP: ra.ip, Event: event, Metadata: metadata}
+	a := models.Activity{
+		Server:   ra.server,
+		IP:       ra.ip,
+		Event:    event,
+		Metadata: metadata,
+	}
 
 	return a.SetUser(ra.user)
 }
@@ -48,7 +53,11 @@ func (ra RequestActivity) SetUser(u string) RequestActivity {
 }
 
 func (s *Server) NewRequestActivity(user string, ip string) RequestActivity {
-	return RequestActivity{server: s.ID(), user: user, ip: ip}
+	return RequestActivity{
+		server: s.ID(),
+		user:   user,
+		ip:     ip,
+	}
 }
 
 // SaveActivity saves an activity entry to the database in a background routine. If an error is

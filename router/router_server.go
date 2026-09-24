@@ -75,7 +75,8 @@ func postServerPower(c *gin.Context) {
 	//
 	// We don't really care about any of the other actions at this point, they'll all result
 	// in the process being stopped, which should have happened anyways if the server is suspended.
-	if (data.Action == server.PowerActionStart || data.Action == server.PowerActionRestart) && s.IsSuspended() {
+	if (data.Action == server.PowerActionStart || data.Action == server.PowerActionRestart) &&
+		s.IsSuspended() {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 			"error": "Cannot start or restart a server that is suspended.",
 		})
@@ -95,7 +96,11 @@ func postServerPower(c *gin.Context) {
 			} else if errors.Is(err, server.ErrIsRunning) {
 				// Do nothing, this isn't something we care about for logging,
 			} else {
-				s.Log().WithFields(log.Fields{"action": data.Action, "wait_seconds": data.WaitSeconds, "error": err}).
+				s.Log().WithFields(log.Fields{
+					"action":       data.Action,
+					"wait_seconds": data.WaitSeconds,
+					"error":        err,
+				}).
 					Error("encountered error processing a server power action in the background")
 			}
 		}

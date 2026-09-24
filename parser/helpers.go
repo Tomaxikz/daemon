@@ -180,7 +180,11 @@ func setValueAtPath(c *gabs.Container, path string, value interface{}) error {
 
 // Sets the value at a specific pathway, but checks if we were looking for a specific
 // value or not before doing it.
-func (cfr *ConfigurationFileReplacement) SetAtPathway(c *gabs.Container, path string, value string) error {
+func (cfr *ConfigurationFileReplacement) SetAtPathway(
+	c *gabs.Container,
+	path string,
+	value string,
+) error {
 	if cfr.IfValue == "" {
 		return setValueAtPath(c, path, cfr.getKeyValue(value))
 	}

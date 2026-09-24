@@ -45,6 +45,14 @@ func (nw noopWriter) Write(b []byte) (int, error) {
 // for the purposes of attaching to the container, a second context is created
 // within the function for managing polling.
 func (e *Environment) Attach(ctx context.Context) error {
+	if err := e.ReconcileNetwork(ctx); err != nil {
+		return err
+	}
+
+	return e.attach(ctx)
+}
+
+func (e *Environment) attach(ctx context.Context) error {
 	if e.IsAttached() {
 		return nil
 	}
@@ -88,6 +96,7 @@ func (e *Environment) Attach(ctx context.Context) error {
 		if err := system.ScanReader(e.stream.Reader, func(v []byte) {
 			e.logCallbackMx.Lock()
 			defer e.logCallbackMx.Unlock()
+
 			e.logCallback(v)
 		}); err != nil && err != io.EOF {
 			log.WithField("error", err).WithField("container_id", e.Id).Warn("error processing scanner line in console output")
@@ -117,6 +126,7 @@ func (e *Environment) InSituUpdate() error {
 		if client.IsErrNotFound(err) {
 			return nil
 		}
+
 		return errors.Wrap(err, "environment/docker: could not inspect container")
 	}
 
@@ -144,6 +154,17 @@ func (e *Environment) InSituUpdate() error {
 // currently available for it. If the container already exists it will be
 // returned.
 func (e *Environment) Create() error {
+	e.networkMu.Lock()
+	defer e.networkMu.Unlock()
+
+	if err := e.beginNetworkChange(); err != nil {
+		return err
+	}
+
+	return e.create()
+}
+
+func (e *Environment) create() error {
 	ctx := context.Background()
 
 	// If the container already exists don't hit the user with an error, just return
@@ -178,6 +199,7 @@ func (e *Environment) Create() error {
 	for key := range confLabels {
 		labels[key] = confLabels[key]
 	}
+
 	labels["Service"] = "Pterodactyl"
 	labels["ContainerType"] = "server_process"
 
@@ -267,8 +289,15 @@ func (e *Environment) Create() error {
 		UsernsMode:  container.UsernsMode(cfg.Docker.UsernsMode),
 	}
 
-	if _, err := e.client.ContainerCreate(ctx, conf, hostConf, nil, nil, e.Id); err != nil {
+	if err := e.prepareNetwork(ctx, conf, hostConf); err != nil {
+		return err
+	}
+	created, err := e.client.ContainerCreate(ctx, conf, hostConf, nil, nil, e.Id)
+	if err != nil {
 		return errors.Wrap(err, "environment/docker: failed to create container")
+	}
+	if err := e.bindNetworkRuntime(ctx, created.ID, hostConf); err != nil {
+		return errors.Wrap(err, "environment/docker: failed to save runtime binding; container was not started")
 	}
 
 	return nil
@@ -277,6 +306,13 @@ func (e *Environment) Create() error {
 // Destroy will remove the Docker container from the server. If the container
 // is currently running it will be forcibly stopped by Docker.
 func (e *Environment) Destroy() error {
+	e.networkMu.Lock()
+	defer e.networkMu.Unlock()
+
+	if e.networkMonitorStop != nil {
+		e.networkMonitorStop()
+		e.networkMonitorStop = nil
+	}
 	// We set it to stopping than offline to prevent crash detection from being triggered.
 	e.SetState(environment.ProcessStoppingState)
 
@@ -293,10 +329,13 @@ func (e *Environment) Destroy() error {
 	//
 	// @see https://github.com/pterodactyl/panel/issues/2001
 	if err != nil && client.IsErrNotFound(err) {
-		return nil
+		return e.removeNetworkPolicy(context.Background())
+	}
+	if err != nil {
+		return err
 	}
 
-	return err
+	return e.removeNetworkPolicy(context.Background())
 }
 
 // SendCommand sends the specified command to the stdin of the running container
@@ -334,6 +373,7 @@ func (e *Environment) Readlog(lines int) ([]string, error) {
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
+
 	defer r.Close()
 
 	var out []string
@@ -412,6 +452,7 @@ func (e *Environment) ensureImageExists(img string) error {
 
 		return errors.Wrapf(err, "environment/docker: failed to pull \"%s\" image for server", safeImage)
 	}
+
 	defer out.Close()
 
 	e.Events().Publish(environment.DockerImagePullStarted, "")
@@ -449,5 +490,6 @@ func (e *Environment) convertMounts() []mount.Mount {
 			ReadOnly: m.ReadOnly,
 		}
 	}
+
 	return out
 }

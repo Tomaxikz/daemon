@@ -6,154 +6,154 @@ BACKUP_ROOT="${TOMAXIKZ_BACKUP_ROOT:-.tomaxikz-betterconsole-backups}"
 BACKUP_DIR="${BACKUP_ROOT}/$(date -u +%Y%m%dT%H%M%SZ)"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-    BOLD="$(printf '\033[1m')"
-    DIM="$(printf '\033[2m')"
-    RESET="$(printf '\033[0m')"
-    RED="$(printf '\033[31m')"
-    GREEN="$(printf '\033[32m')"
-    YELLOW="$(printf '\033[33m')"
-    BLUE="$(printf '\033[34m')"
-    CYAN="$(printf '\033[36m')"
+	BOLD="$(printf '\033[1m')"
+	DIM="$(printf '\033[2m')"
+	RESET="$(printf '\033[0m')"
+	RED="$(printf '\033[31m')"
+	GREEN="$(printf '\033[32m')"
+	YELLOW="$(printf '\033[33m')"
+	BLUE="$(printf '\033[34m')"
+	CYAN="$(printf '\033[36m')"
 else
-    BOLD=""
-    DIM=""
-    RESET=""
-    RED=""
-    GREEN=""
-    YELLOW=""
-    BLUE=""
-    CYAN=""
+	BOLD=""
+	DIM=""
+	RESET=""
+	RED=""
+	GREEN=""
+	YELLOW=""
+	BLUE=""
+	CYAN=""
 fi
 
 SPINNER_PID=""
 
 log() {
-    printf '%s[betterconsole]%s %s\n' "$CYAN" "$RESET" "$*"
+	printf '%s[betterconsole]%s %s\n' "$CYAN" "$RESET" "$*"
 }
 
 ok() {
-    printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$*"
+	printf '%s[OK]%s %s\n' "$GREEN" "$RESET" "$*"
 }
 
 warn() {
-    printf '%s[WARN]%s %s\n' "$YELLOW" "$RESET" "$*"
+	printf '%s[WARN]%s %s\n' "$YELLOW" "$RESET" "$*"
 }
 
 section() {
-    printf '\n%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"
+	printf '\n%s==>%s %s%s%s\n' "$BLUE" "$RESET" "$BOLD" "$*" "$RESET"
 }
 
 fail() {
-    printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$*" >&2
-    exit 1
+	printf '%s[ERROR]%s %s\n' "$RED" "$RESET" "$*" >&2
+	exit 1
 }
 
 banner() {
-    printf '%s%s%s\n' "$BOLD" "Better Console Wings installer" "$RESET"
-    printf '%s%s%s\n' "$DIM" "Anchor-based installer for Tomaxikz daemon Better Console features" "$RESET"
+	printf '%s%s%s\n' "$BOLD" "Better Console Wings installer" "$RESET"
+	printf '%s%s%s\n' "$DIM" "Anchor-based installer for Tomaxikz daemon Better Console features" "$RESET"
 }
 
 start_spinner() {
-    local message="$1"
-    if [ ! -t 1 ] || [ -n "${NO_COLOR:-}" ]; then
-        log "$message"
-        return
-    fi
+	local message="$1"
+	if [ ! -t 1 ] || [ -n "${NO_COLOR:-}" ]; then
+		log "$message"
+		return
+	fi
 
-    (
-        local frames='|/-\'
-        local i=0
-        while :; do
-            printf '\r%s[%s]%s %s' "$CYAN" "${frames:i++%${#frames}:1}" "$RESET" "$message"
-            sleep 0.1
-        done
-    ) &
-    SPINNER_PID="$!"
+	(
+		local frames='|/-\'
+		local i=0
+		while :; do
+			printf '\r%s[%s]%s %s' "$CYAN" "${frames:i++%${#frames}:1}" "$RESET" "$message"
+			sleep 0.1
+		done
+	) &
+	SPINNER_PID="$!"
 }
 
 stop_spinner() {
-    local status="$1"
-    local message="$2"
-    if [ -n "${SPINNER_PID:-}" ]; then
-        kill "$SPINNER_PID" >/dev/null 2>&1 || true
-        wait "$SPINNER_PID" 2>/dev/null || true
-        SPINNER_PID=""
-        printf '\r\033[K'
-    fi
+	local status="$1"
+	local message="$2"
+	if [ -n "${SPINNER_PID:-}" ]; then
+		kill "$SPINNER_PID" >/dev/null 2>&1 || true
+		wait "$SPINNER_PID" 2>/dev/null || true
+		SPINNER_PID=""
+		printf '\r\033[K'
+	fi
 
-    case "$status" in
-        ok) ok "$message" ;;
-        warn) warn "$message" ;;
-        *) fail "$message" ;;
-    esac
+	case "$status" in
+	ok) ok "$message" ;;
+	warn) warn "$message" ;;
+	*) fail "$message" ;;
+	esac
 }
 
 run_with_spinner() {
-    local message="$1"
-    shift
-    start_spinner "$message"
-    if "$@"; then
-        stop_spinner ok "$message"
-    else
-        stop_spinner error "$message failed"
-    fi
+	local message="$1"
+	shift
+	start_spinner "$message"
+	if "$@"; then
+		stop_spinner ok "$message"
+	else
+		stop_spinner error "$message failed"
+	fi
 }
 
 cleanup_spinner() {
-    if [ -n "${SPINNER_PID:-}" ]; then
-        kill "$SPINNER_PID" >/dev/null 2>&1 || true
-        wait "$SPINNER_PID" 2>/dev/null || true
-    fi
+	if [ -n "${SPINNER_PID:-}" ]; then
+		kill "$SPINNER_PID" >/dev/null 2>&1 || true
+		wait "$SPINNER_PID" 2>/dev/null || true
+	fi
 }
 
 trap cleanup_spinner EXIT
 
 need_cmd() {
-    command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+	command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
 }
 
 fetch_file() {
-    local remote_path="$1"
-    local local_path="$2"
-    local url="${RAW_BASE%/}/${remote_path}"
-    local tmp
+	local remote_path="$1"
+	local local_path="$2"
+	local url="${RAW_BASE%/}/${remote_path}"
+	local tmp
 
-    mkdir -p "$(dirname "$local_path")"
-    case "$local_path" in
-        *.go) tmp="$(mktemp --suffix=.go)" ;;
-        *) tmp="$(mktemp)" ;;
-    esac
+	mkdir -p "$(dirname "$local_path")"
+	case "$local_path" in
+	*.go) tmp="$(mktemp --suffix=.go)" ;;
+	*) tmp="$(mktemp)" ;;
+	esac
 
-    start_spinner "download ${remote_path}"
-    curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -o "$tmp" "$url" || {
-        rm -f "$tmp"
-        if [ -f "$local_path" ]; then
-            stop_spinner warn "could not download ${remote_path}; keeping existing ${local_path}"
-            return
-        fi
-        stop_spinner error "failed to download ${url}"
-    }
-    if [ "${local_path%.go}" != "$local_path" ]; then
-        gofmt -w "$tmp" || {
-            rm -f "$tmp"
-            stop_spinner error "downloaded Go file is not valid: ${url}"
-        }
-    fi
+	start_spinner "download ${remote_path}"
+	curl -fsSL --retry 5 --retry-delay 1 --retry-all-errors -o "$tmp" "$url" || {
+		rm -f "$tmp"
+		if [ -f "$local_path" ]; then
+			stop_spinner warn "could not download ${remote_path}; keeping existing ${local_path}"
+			return
+		fi
+		stop_spinner error "failed to download ${url}"
+	}
+	if [ "${local_path%.go}" != "$local_path" ]; then
+		gofmt -w "$tmp" || {
+			rm -f "$tmp"
+			stop_spinner error "downloaded Go file is not valid: ${url}"
+		}
+	fi
 
-    if [ -f "$local_path" ] && cmp -s "$tmp" "$local_path"; then
-        stop_spinner ok "unchanged ${local_path}"
-        rm -f "$tmp"
-        return
-    fi
+	if [ -f "$local_path" ] && cmp -s "$tmp" "$local_path"; then
+		stop_spinner ok "unchanged ${local_path}"
+		rm -f "$tmp"
+		return
+	fi
 
-    if [ -f "$local_path" ]; then
-        mkdir -p "${BACKUP_DIR}/$(dirname "$local_path")"
-        cp -p "$local_path" "${BACKUP_DIR}/${local_path}"
-        warn "backed up ${local_path}"
-    fi
+	if [ -f "$local_path" ]; then
+		mkdir -p "${BACKUP_DIR}/$(dirname "$local_path")"
+		cp -p "$local_path" "${BACKUP_DIR}/${local_path}"
+		warn "backed up ${local_path}"
+	fi
 
-    mv "$tmp" "$local_path"
-    stop_spinner ok "updated ${local_path}"
+	mv "$tmp" "$local_path"
+	stop_spinner ok "updated ${local_path}"
 }
 
 banner
@@ -210,6 +210,7 @@ def backup(path):
     target = backup_dir / path
     if target.exists():
         return
+
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(path, target)
 
@@ -218,12 +219,14 @@ def read_text(path_name):
     path = Path(path_name)
     if not path.exists():
         fail(f"required file is missing: {path_name}")
+
     return path, path.read_text()
 
 
 def write_text(path, original, updated, description):
     if updated == original:
         return False
+
     backup(path)
     path.write_text(updated)
     ok(f"patched {path}: {description}")
@@ -237,6 +240,7 @@ def replace_once(path_name, old, new, present, description):
         return False
     if old not in text:
         fail(f"could not find expected source in {path_name} for {description}")
+
     return write_text(path, text, text.replace(old, new, 1), description)
 
 
@@ -247,6 +251,7 @@ def insert_after(path_name, anchor, addition, present, description):
         return False
     if anchor not in text:
         fail(f"could not find anchor in {path_name} for {description}")
+
     return write_text(path, text, text.replace(anchor, anchor + addition, 1), description)
 
 
@@ -257,6 +262,7 @@ def insert_before(path_name, anchor, addition, present, description):
         return False
     if anchor not in text:
         fail(f"could not find anchor in {path_name} for {description}")
+
     return write_text(path, text, text.replace(anchor, addition + anchor, 1), description)
 
 
@@ -265,20 +271,21 @@ def remove_once(path_name, old, description):
     if old not in text:
         ok(f"already clean {path_name}: {description}")
         return False
+
     return write_text(path, text, text.replace(old, "", 1), description)
 
 
-sftp_shell_field = '''\
+sftp_shell_field = """\
 	// Shell controls the optional interactive SSH shell exposed through the SFTP listener.
 	Shell SftpShellConfiguration `yaml:"shell"`
-'''
-sftp_shell_type = '''\
+"""
+sftp_shell_type = """\
 
 type SftpShellConfiguration struct {
 	// Enabled allows authenticated SFTP users to open the Better Console SSH CLI.
 	Enabled bool `default:"true" yaml:"enabled"`
 }
-'''
+"""
 insert_after(
     "config/config.go",
     '	ReadOnly bool `default:"false" yaml:"read_only"`\n',
@@ -316,15 +323,15 @@ remove_once(
 )
 replace_once(
     "environment/docker/container.go",
-    '''\
+    """\
 func (e *Environment) ensureImageExists(img string) error {
 	e.Events().Publish(environment.DockerImagePullStarted, "")
 	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
 
-''',
-    '''\
+""",
+    """\
 func (e *Environment) ensureImageExists(img string) error {
-''',
+""",
     "safeImage := betterConsoleDockerPullSafeImageRef(img)",
     "move Docker pull events after successful pull",
 )
@@ -345,25 +352,27 @@ replace_once(
 replace_once(
     "environment/docker/container.go",
     '		return errors.Wrapf(err, "environment/docker: failed to pull \\"%s\\" image for server", img)\n',
-    '		return errors.Wrapf(err, "environment/docker: failed to pull \\"%s\\" image for server", safeImage)\n',
-    "failed to pull \\\"%s\\\" image for server\", safeImage",
+    (
+        '\t\treturn errors.Wrapf(err, "environment/docker: failed to pull \\"%s\\" image for server", safeImage)\n'
+    ),
+    'failed to pull \\"%s\\" image for server", safeImage',
     "sanitized pull error",
 )
 replace_once(
     "environment/docker/container.go",
     '	log.WithField("image", img).Debug("pulling docker image... this could take a bit of time")\n',
-    '''\
+    """\
 	e.Events().Publish(environment.DockerImagePullStarted, "")
 	defer e.Events().Publish(environment.DockerImagePullCompleted, "")
 
 	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
-''',
+""",
     'log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")',
     "structured Docker pull start",
 )
 replace_once(
     "environment/docker/container.go",
-    '''\
+    """\
 	for scanner.Scan() {
 		b := scanner.Bytes()
 		status, _ := jsonparser.GetString(b, "status")
@@ -371,14 +380,14 @@ replace_once(
 
 		e.Events().Publish(environment.DockerImagePullStatus, status+" "+progress)
 	}
-''',
-    '''\
+""",
+    """\
 	for scanner.Scan() {
 		if payload := betterConsoleDockerPullProgress(img, scanner.Bytes()); payload != "" {
 			e.Events().Publish(environment.DockerImagePullStatus, payload)
 		}
 	}
-''',
+""",
     "betterConsoleDockerPullProgress(img, scanner.Bytes())",
     "structured Docker pull progress",
 )
@@ -406,23 +415,25 @@ replace_once(
 )
 replace_once(
     "server/install.go",
-    '	log.WithField("image", ip.Script.ContainerImage).Debug("pulling docker image... this could take a bit of time")\n',
-    '''\
+    (
+        '\tlog.WithField("image", ip.Script.ContainerImage).Debug("pulling docker image... this could take a bit of time")\n'
+    ),
+    """\
 	log.WithField("image", safeImage).Debug("pulling docker image... this could take a bit of time")
 	ip.Server.Events().Publish(ImagePullStartedEvent, "")
 	defer ip.Server.Events().Publish(ImagePullCompletedEvent, "")
-''',
+""",
     'ip.Server.Events().Publish(ImagePullStartedEvent, "")',
     "installer image pull start events",
 )
 replace_once(
     "server/install.go",
-    '''\
+    """\
 	for scanner.Scan() {
 		log.Debug(scanner.Text())
 	}
-''',
-    '''\
+""",
+    """\
 	for scanner.Scan() {
 		log.Debug(betterConsoleDockerPullSafeText(scanner.Text()))
 		payload := betterConsoleDockerPullProgress(ip.Script.ContainerImage, scanner.Bytes())
@@ -433,7 +444,7 @@ replace_once(
 			ip.Server.Sink(system.InstallSink).Push([]byte(line))
 		}
 	}
-''',
+""",
     "betterConsoleDockerPullProgress(ip.Script.ContainerImage, scanner.Bytes())",
     "installer image pull progress",
 )
@@ -447,7 +458,7 @@ replace_once(
 insert_before(
     "server/install.go",
     "// resourceLimits returns resource limits for the installation container. This\n",
-    '''\
+    """\
 func (ip *InstallationProcess) streamRawInstallOutput(reader io.Reader) error {
 	buf := make([]byte, 4096)
 	for {
@@ -467,22 +478,22 @@ func (ip *InstallationProcess) streamRawInstallOutput(reader io.Reader) error {
 	}
 }
 
-''',
+""",
     "func (ip *InstallationProcess) streamRawInstallOutput",
     "raw installer output helper",
 )
 
 replace_once(
     "server/listeners.go",
-    '''\
+    """\
 					case environment.DockerImagePullStatus:
 						s.Events().Publish(InstallOutputEvent, e.Data)
 					case environment.DockerImagePullStarted:
 						s.PublishConsoleOutputFromDaemon("Pulling Docker container image, this could take a few minutes to complete...")
 					case environment.DockerImagePullCompleted:
 						s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")
-''',
-    '''\
+""",
+    """\
 					case environment.DockerImagePullStatus:
 						s.Events().Publish(ImagePullProgressEvent, e.Data)
 						if str, ok := e.Data.(string); ok {
@@ -496,15 +507,15 @@ replace_once(
 					case environment.DockerImagePullCompleted:
 						s.Events().Publish(ImagePullCompletedEvent, "")
 						s.PublishConsoleOutputFromDaemon("Finished pulling Docker container image")
-''',
+""",
     "s.Events().Publish(ImagePullProgressEvent, e.Data)",
     "server image pull events",
 )
 
 insert_after(
     "router/websocket/listeners.go",
-    "import (\n\t\"context\"\n\t\"encoding/json\"\n",
-    "\t\"strings\"\n",
+    'import (\n\t"context"\n\t"encoding/json"\n',
+    '\t"strings"\n',
     '"strings"',
     "strings import for event guard",
 )
@@ -513,11 +524,19 @@ path, text = read_text("router/websocket/listeners.go")
 if "betterConsoleListenerEvents" in text:
     ok("already patched router/websocket/listeners.go: Better Console event list")
 elif "serverImporterListenerEvents" in text and "}, serverImporterListenerEvents...)" in text:
-    text2 = text.replace("}, serverImporterListenerEvents...)", "}, append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)", 1)
+    text2 = text.replace(
+        "}, serverImporterListenerEvents...)",
+        "}, append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)",
+        1,
+    )
     write_text(path, text, text2, "Better Console event list with existing importer events")
 elif "var e = []string{" in text:
     text2 = text.replace("var e = []string{", "var e = append([]string{", 1)
-    text2 = text2.replace('	server.TransferStatusEvent,\n}\n', '	server.TransferStatusEvent,\n}, betterConsoleListenerEvents...)\n', 1)
+    text2 = text2.replace(
+        "	server.TransferStatusEvent,\n}\n",
+        "	server.TransferStatusEvent,\n}, betterConsoleListenerEvents...)\n",
+        1,
+    )
     if text2 == text:
         fail("could not find event list end in router/websocket/listeners.go")
     write_text(path, text, text2, "Better Console event list")
@@ -527,7 +546,7 @@ else:
 insert_after(
     "router/websocket/listeners.go",
     "}, betterConsoleListenerEvents...)\n",
-    '''\
+    """\
 
 var allowedServerEvents = func() map[string]struct{} {
 	events := make(map[string]struct{}, len(e))
@@ -536,15 +555,18 @@ var allowedServerEvents = func() map[string]struct{} {
 	}
 	return events
 }()
-''',
+""",
     "var allowedServerEvents = func() map[string]struct{}",
     "allowed websocket event guard map",
 )
-if "append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)" in Path("router/websocket/listeners.go").read_text():
+if (
+    "append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)"
+    in Path("router/websocket/listeners.go").read_text()
+):
     insert_after(
         "router/websocket/listeners.go",
         "}, append(betterConsoleListenerEvents, serverImporterListenerEvents...)...)\n",
-        '''\
+        """\
 
 var allowedServerEvents = func() map[string]struct{} {
 	events := make(map[string]struct{}, len(e))
@@ -553,73 +575,73 @@ var allowedServerEvents = func() map[string]struct{} {
 	}
 	return events
 }()
-''',
+""",
         "var allowedServerEvents = func() map[string]struct{}",
         "allowed websocket event guard map",
     )
 
 insert_after(
     "router/websocket/listeners.go",
-    '''\
+    """\
 	eventChan := make(chan []byte)
 	logOutput := make(chan []byte, 8)
 	installOutput := make(chan []byte, 4)
-''',
-    '''\
+""",
+    """\
 	canReceiveInstall := false
 	if jwt := h.GetJwt(); jwt != nil {
 		canReceiveInstall = jwt.HasPermission(PermissionReceiveInstall)
 	}
-''',
+""",
     "canReceiveInstall := false",
     "install event permission flag",
 )
 replace_once(
     "router/websocket/listeners.go",
-    '''\
+    """\
 	h.server.Events().On(eventChan) // TODO: make a sinky
 	h.server.Sink(system.LogSink).On(logOutput)
 	h.server.Sink(system.InstallSink).On(installOutput)
-''',
-    '''\
+""",
+    """\
 	h.server.Events().On(eventChan) // TODO: make a sinky
 	h.server.Sink(system.LogSink).On(logOutput)
 	if canReceiveInstall {
 		h.server.Sink(system.InstallSink).On(installOutput)
 	}
-''',
+""",
     "if canReceiveInstall {\n\t\th.server.Sink(system.InstallSink).On(installOutput)",
     "permission-aware install sink registration",
 )
 insert_after(
     "router/websocket/listeners.go",
-    '''\
+    """\
 			if err := events.DecodeTo(b, &e); err != nil {
 				continue
 			}
-''',
-    '''\
+""",
+    """\
 			if _, ok := allowedServerEvents[e.Topic]; !ok && !strings.HasPrefix(e.Topic, server.BackupCompletedEvent+":") {
 				continue
 			}
-''',
+""",
     "allowedServerEvents[e.Topic]",
     "unknown websocket event guard",
 )
 replace_once(
     "router/websocket/listeners.go",
-    '''\
+    """\
 	h.server.Events().Off(eventChan)
 	h.server.Sink(system.LogSink).Off(logOutput)
 	h.server.Sink(system.InstallSink).Off(installOutput)
-''',
-    '''\
+""",
+    """\
 	h.server.Events().Off(eventChan)
 	h.server.Sink(system.LogSink).Off(logOutput)
 	if canReceiveInstall {
 		h.server.Sink(system.InstallSink).Off(installOutput)
 	}
-''',
+""",
     "if canReceiveInstall {\n\t\th.server.Sink(system.InstallSink).Off(installOutput)",
     "permission-aware install sink cleanup",
 )
@@ -639,7 +661,7 @@ insert_after(
     "SFTP security imports",
 )
 path, text = read_text("sftp/server.go")
-security_constants = '''\
+security_constants = """\
 const (
 	sshHandshakeTimeout              = 10 * time.Second
 	sftpCredentialValidationTimeout = 8 * time.Second
@@ -666,7 +688,7 @@ func (l *sshSessionLimiter) acquire() bool {
 func (l *sshSessionLimiter) release() {
 	l.active.Add(-1)
 }
-'''
+"""
 if "type sshSessionLimiter struct" in text:
     ok("already patched sftp/server.go: SFTP security limits")
 else:
@@ -681,15 +703,15 @@ else:
     write_text(path, text, text2, "SFTP security limits")
 insert_after(
     "sftp/server.go",
-    '''\
+    """\
 type SFTPServer struct {
 	manager  *server.Manager
 	BasePath string
 	ReadOnly bool
 	Listen   string
 }
-''',
-    '''\
+""",
+    """\
 
 type sshPtyRequest struct {
 	Term   string
@@ -698,25 +720,25 @@ type sshPtyRequest struct {
 	Width  uint32
 	Height uint32
 }
-''',
+""",
     "type sshPtyRequest struct",
     "SFTP shell PTY request type",
 )
 replace_once(
     "sftp/server.go",
-    '''\
+    """\
 			KeyExchanges: []string{
 				"curve25519-sha256", "curve25519-sha256@libssh.org",
-''',
-    '''\
+""",
+    """\
 			KeyExchanges: []string{
 				ssh.KeyExchangeMLKEM768X25519,
 				"curve25519-sha256", "curve25519-sha256@libssh.org",
-''',
+""",
     "ssh.KeyExchangeMLKEM768X25519",
     "post-quantum SFTP key exchange",
 )
-sftp_accept_old = '''\
+sftp_accept_old = """\
 func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
 	// Before beginning a handshake must be performed on the incoming net.Conn
 	sconn, chans, reqs, err := ssh.NewServerConn(conn, config)
@@ -758,8 +780,8 @@ func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) erro
 
 	return nil
 }
-'''
-sftp_accept_new = '''\
+"""
+sftp_accept_new = """\
 func (c *SFTPServer) AcceptInbound(conn net.Conn, config *ssh.ServerConfig) error {
 	// Before beginning a handshake must be performed on the incoming net.Conn
 	_ = conn.SetDeadline(time.Now().Add(sshHandshakeTimeout))
@@ -851,7 +873,7 @@ func (c *SFTPServer) handleSession(conn *ssh.ServerConn, srv *server.Server, cha
 
 	_ = channel.Close()
 }
-'''
+"""
 replace_once(
     "sftp/server.go",
     sftp_accept_old,
@@ -868,24 +890,24 @@ insert_after(
 )
 insert_after(
     "sftp/server.go",
-    '''\
+    """\
 		if ch.ChannelType() != "session" {
 			_ = ch.Reject(ssh.UnknownChannelType, "unknown channel type")
 			continue
 		}
-''',
-    '''\
+""",
+    """\
 		if !sessions.acquire() {
 			_ = ch.Reject(ssh.ResourceShortage, "too many active session channels")
 			continue
 		}
-''',
+""",
     "too many active session channels",
     "SFTP session channel limit",
 )
 replace_once(
     "sftp/server.go",
-    '''\
+    """\
 		channel, requests, err := ch.Accept()
 		if err != nil {
 			continue
@@ -896,8 +918,8 @@ replace_once(
 		} else {
 			_ = channel.Close()
 		}
-''',
-    '''\
+""",
+    """\
 		channel, requests, err := ch.Accept()
 		if err != nil {
 			sessions.release()
@@ -913,13 +935,13 @@ replace_once(
 			sessions.release()
 			_ = channel.Close()
 		}
-''',
+""",
     "defer sessions.release()",
     "SFTP session limiter cleanup",
 )
 replace_once(
     "sftp/server.go",
-    '''\
+    """\
 	ctx := srv.Sftp().Context(handler.User())
 	rs := sftp.NewRequestServer(channel, handler.Handlers())
 
@@ -930,8 +952,8 @@ replace_once(
 			_ = rs.Close()
 		}
 	}()
-''',
-    '''\
+""",
+    """\
 	ctx := srv.Sftp().Context(handler.User())
 	rs := sftp.NewRequestServer(channel, handler.Handlers())
 	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
@@ -939,14 +961,14 @@ replace_once(
 		_ = rs.Close()
 	})
 	defer stopRevocation()
-''',
+""",
     "stopRevocation := closeSftpSessionOnRevocation(ctx",
     "leak-free SFTP session revocation",
 )
 insert_before(
     "sftp/server.go",
     "// Generates a new ED25519 private key that is used for host authentication when\n",
-    '''\
+    """\
 // HandleShell starts the optional Better Console SSH CLI for the authenticated user's server.
 func (c *SFTPServer) HandleShell(conn *ssh.ServerConn, srv *server.Server, channel ssh.Channel, requests <-chan *ssh.Request, _ sshPtyRequest, handler *Handler) error {
 	defer channel.Close()
@@ -979,38 +1001,38 @@ func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func
 	return context.AfterFunc(ctx, closeSession)
 }
 
-''',
+""",
     "func (c *SFTPServer) HandleShell",
     "Better Console SFTP shell handler",
 )
 insert_after(
     "sftp/server.go",
-    '''\
+    """\
 	if !handler.can("control.console") {
 		_, _ = io.WriteString(channel, "Permission denied: control.console\\r\\n")
 		return nil
 	}
-''',
-    '''\
+""",
+    """\
 	ctx := srv.Sftp().Context(handler.User())
 	stopRevocation := closeSftpSessionOnRevocation(ctx, func() {
 		srv.Log().WithField("user", conn.User()).Warn("sftp: terminating active shell session")
 		_ = channel.Close()
 	})
 	defer stopRevocation()
-''',
+""",
     "terminating active shell session",
     "SFTP shell session revocation",
 )
 insert_before(
     "sftp/server.go",
     "// Generates a new ED25519 private key that is used for host authentication when\n",
-    '''\
+    """\
 func closeSftpSessionOnRevocation(ctx context.Context, closeSession func()) func() bool {
 	return context.AfterFunc(ctx, closeSession)
 }
 
-''',
+""",
     "func closeSftpSessionOnRevocation",
     "SFTP session revocation helper",
 )
@@ -1024,18 +1046,18 @@ replace_once(
 replace_once(
     "sftp/server.go",
     "\tresp, err := c.manager.Client().ValidateSftpCredentials(context.Background(), request)\n",
-    '''\
+    """\
 	ctx, cancel := context.WithTimeout(context.Background(), sftpCredentialValidationTimeout)
 	defer cancel()
 	resp, err := c.manager.Client().ValidateSftpCredentials(ctx, request)
-''',
+""",
     "ValidateSftpCredentials(ctx, request)",
     "SFTP credential request timeout",
 )
 insert_before(
     "sftp/server.go",
     "// PrivateKeyPath returns the path the host private key for this server instance.\n",
-    '''\
+    """\
 func validSftpUsername(username string) bool {
 	if username == "" || len(username) > maxSftpUsernameBytes || !utf8.ValidString(username) {
 		return false
@@ -1048,7 +1070,7 @@ func validSftpUsername(username string) bool {
 	return validUsernameRegexp.MatchString(username)
 }
 
-''',
+""",
     "func validSftpUsername",
     "SFTP username validator",
 )
@@ -1061,50 +1083,162 @@ replace_once(
 )
 
 # Keep source edits aligned with the current downloaded SFTP regression tests.
-insert_after("sftp/server.go", "import (\n", '\tstderrors "errors"\n', 'stderrors "errors"', "SFTP handshake errors import")
+insert_after(
+    "sftp/server.go",
+    "import (\n",
+    '\tstderrors "errors"\n',
+    'stderrors "errors"',
+    "SFTP handshake errors import",
+)
 insert_after("sftp/server.go", "import (\n", '\t"io"\n', '"io"', "SFTP handshake EOF import")
-insert_before("sftp/server.go", "//goland:noinspection GoNameStartsWithPackageName\n",
-    "// sshHandshakeError identifies failures that occur before an inbound client\n// completes the SSH handshake. These errors are controlled by remote clients\n// and are routine noise on a public SFTP port, not daemon failures.\ntype sshHandshakeError struct {\n\tcause error\n}\n\nfunc (e *sshHandshakeError) Error() string { return e.cause.Error() }\nfunc (e *sshHandshakeError) Unwrap() error { return e.cause }\n\n", "type sshHandshakeError struct", "SFTP handshake error type")
-insert_before("sftp/server.go", "// AcceptInbound handles an inbound connection to the instance and determines if we should\n",
-    "// logInboundSFTPError keeps client-controlled handshake failures out of the\n// error log. Public SFTP listeners are continuously hit by scanners, obsolete\n// SSH clients, and non-SSH protocols; logging those with stack traces creates\n// noise without identifying a daemon fault. Unexpected post-handshake errors\n// remain error-level and retain their full diagnostic context.\nfunc logInboundSFTPError(err error, remoteAddress string) {\n\tvar handshakeErr *sshHandshakeError\n\tif stderrors.As(err, &handshakeErr) {\n\t\tlog.WithFields(log.Fields{\n\t\t\t\"ip\":     remoteAddress,\n\t\t\t\"reason\": sshHandshakeRejectionReason(handshakeErr.cause),\n\t\t}).Debug(\"sftp: rejected inbound SSH handshake\")\n\t\treturn\n\t}\n\n\tlog.WithError(err).WithField(\"ip\", remoteAddress).Error(\"sftp: failed to accept inbound connection\")\n}\n\n// sshHandshakeRejectionReason returns a bounded, non-sensitive description of\n// a rejected handshake. In particular, it avoids logging attacker-controlled\n// algorithm lists or malformed version strings.\nfunc sshHandshakeRejectionReason(err error) string {\n\tif stderrors.Is(err, io.EOF) {\n\t\treturn \"connection closed before handshake completed\"\n\t}\n\n\tvar netErr net.Error\n\tif stderrors.As(err, &netErr) && netErr.Timeout() {\n\t\treturn \"handshake timed out\"\n\t}\n\n\tmessage := strings.ToLower(err.Error())\n\tswitch {\n\tcase strings.Contains(message, \"overflow reading version string\"):\n\t\treturn \"invalid SSH version string\"\n\tcase strings.Contains(message, \"no common algorithm for key exchange\"):\n\t\treturn \"no compatible key-exchange algorithm\"\n\tcase strings.Contains(message, \"no common algorithm for host key\"):\n\t\treturn \"no compatible host-key algorithm\"\n\tcase strings.Contains(message, \"no common algorithm for cipher\"):\n\t\treturn \"no compatible cipher\"\n\tcase strings.Contains(message, \"no common algorithm for mac\"):\n\t\treturn \"no compatible message-authentication algorithm\"\n\tcase strings.Contains(message, \"unable to authenticate\"):\n\t\treturn \"authentication rejected\"\n\tcase strings.Contains(message, \"connection reset by peer\"),\n\t\tstrings.Contains(message, \"broken pipe\"),\n\t\tstrings.Contains(message, \"unexpected eof\"):\n\t\treturn \"connection closed during handshake\"\n\tdefault:\n\t\treturn \"SSH handshake rejected\"\n\t}\n}\n\n", "func sshHandshakeRejectionReason", "bounded SFTP handshake logging")
+insert_before(
+    "sftp/server.go",
+    "//goland:noinspection GoNameStartsWithPackageName\n",
+    (
+        "// sshHandshakeError identifies failures that occur before an inbound client\n"
+        "// completes the SSH handshake. These errors are controlled by remote clients\n"
+        "// and are routine noise on a public SFTP port, not daemon failures.\n"
+        "type sshHandshakeError struct {\n"
+        "\tcause error\n"
+        "}\n"
+        "\n"
+        "func (e *sshHandshakeError) Error() string { return e.cause.Error() }\n"
+        "func (e *sshHandshakeError) Unwrap() error { return e.cause }\n"
+        "\n"
+    ),
+    "type sshHandshakeError struct",
+    "SFTP handshake error type",
+)
+insert_before(
+    "sftp/server.go",
+    "// AcceptInbound handles an inbound connection to the instance and determines if we should\n",
+    (
+        "// logInboundSFTPError keeps client-controlled handshake failures out of the\n"
+        "// error log. Public SFTP listeners are continuously hit by scanners, obsolete\n"
+        "// SSH clients, and non-SSH protocols; logging those with stack traces creates\n"
+        "// noise without identifying a daemon fault. Unexpected post-handshake errors\n"
+        "// remain error-level and retain their full diagnostic context.\n"
+        "func logInboundSFTPError(err error, remoteAddress string) {\n"
+        "\tvar handshakeErr *sshHandshakeError\n"
+        "\tif stderrors.As(err, &handshakeErr) {\n"
+        "\t\tlog.WithFields(log.Fields{\n"
+        '\t\t\t"ip":     remoteAddress,\n'
+        '\t\t\t"reason": sshHandshakeRejectionReason(handshakeErr.cause),\n'
+        '\t\t}).Debug("sftp: rejected inbound SSH handshake")\n'
+        "\t\treturn\n"
+        "\t}\n"
+        "\n"
+        '\tlog.WithError(err).WithField("ip", remoteAddress).Error("sftp: failed to accept inbound connection")\n'
+        "}\n"
+        "\n"
+        "// sshHandshakeRejectionReason returns a bounded, non-sensitive description of\n"
+        "// a rejected handshake. In particular, it avoids logging attacker-controlled\n"
+        "// algorithm lists or malformed version strings.\n"
+        "func sshHandshakeRejectionReason(err error) string {\n"
+        "\tif stderrors.Is(err, io.EOF) {\n"
+        '\t\treturn "connection closed before handshake completed"\n'
+        "\t}\n"
+        "\n"
+        "\tvar netErr net.Error\n"
+        "\tif stderrors.As(err, &netErr) && netErr.Timeout() {\n"
+        '\t\treturn "handshake timed out"\n'
+        "\t}\n"
+        "\n"
+        "\tmessage := strings.ToLower(err.Error())\n"
+        "\tswitch {\n"
+        '\tcase strings.Contains(message, "overflow reading version string"):\n'
+        '\t\treturn "invalid SSH version string"\n'
+        '\tcase strings.Contains(message, "no common algorithm for key exchange"):\n'
+        '\t\treturn "no compatible key-exchange algorithm"\n'
+        '\tcase strings.Contains(message, "no common algorithm for host key"):\n'
+        '\t\treturn "no compatible host-key algorithm"\n'
+        '\tcase strings.Contains(message, "no common algorithm for cipher"):\n'
+        '\t\treturn "no compatible cipher"\n'
+        '\tcase strings.Contains(message, "no common algorithm for mac"):\n'
+        '\t\treturn "no compatible message-authentication algorithm"\n'
+        '\tcase strings.Contains(message, "unable to authenticate"):\n'
+        '\t\treturn "authentication rejected"\n'
+        '\tcase strings.Contains(message, "connection reset by peer"),\n'
+        '\t\tstrings.Contains(message, "broken pipe"),\n'
+        '\t\tstrings.Contains(message, "unexpected eof"):\n'
+        '\t\treturn "connection closed during handshake"\n'
+        "\tdefault:\n"
+        '\t\treturn "SSH handshake rejected"\n'
+        "\t}\n"
+        "}\n"
+        "\n"
+    ),
+    "func sshHandshakeRejectionReason",
+    "bounded SFTP handshake logging",
+)
 path, text = read_text("sftp/server.go")
-replacement = 'logInboundSFTPError(err, conn.RemoteAddr().String())'
+replacement = "logInboundSFTPError(err, conn.RemoteAddr().String())"
 if replacement not in text:
-    for logger in ('log.WithField("error", err)', 'log.WithError(err)'):
-        original = logger + '.WithField("ip", conn.RemoteAddr().String()).Error("sftp: failed to accept inbound connection")'
+    for logger in ('log.WithField("error", err)', "log.WithError(err)"):
+        original = (
+            logger
+            + '.WithField("ip", conn.RemoteAddr().String()).Error("sftp: failed to accept inbound connection")'
+        )
         if original in text:
-            write_text(path, text, text.replace(original, replacement, 1), "classify SFTP handshake failures")
+            write_text(
+                path,
+                text,
+                text.replace(original, replacement, 1),
+                "classify SFTP handshake failures",
+            )
             break
     else:
         fail("could not find SFTP handshake failure logging")
-replace_once("sftp/server.go",
-    'sconn, chans, reqs, err := ssh.NewServerConn(conn, config)\n\tif err != nil {\n\t\treturn errors.WithStack(err)\n\t}',
-    'sconn, chans, reqs, err := ssh.NewServerConn(conn, config)\n\tif err != nil {\n\t\treturn &sshHandshakeError{cause: err}\n\t}',
-    'return &sshHandshakeError{cause: err}', "preserve the handshake error cause")
+replace_once(
+    "sftp/server.go",
+    (
+        "sconn, chans, reqs, err := ssh.NewServerConn(conn, config)\n"
+        "\tif err != nil {\n"
+        "\t\treturn errors.WithStack(err)\n"
+        "\t}"
+    ),
+    (
+        "sconn, chans, reqs, err := ssh.NewServerConn(conn, config)\n"
+        "\tif err != nil {\n"
+        "\t\treturn &sshHandshakeError{cause: err}\n"
+        "\t}"
+    ),
+    "return &sshHandshakeError{cause: err}",
+    "preserve the handshake error cause",
+)
 PY
+
+section "Applying shared core fixes"
+for source in .github/scripts/apply_core_fixes.py server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go; do
+	fetch_file "$source" "$source"
+done
+run_with_spinner "fix core lock copies" python3 .github/scripts/apply_core_fixes.py --backup "$BACKUP_DIR"
+run_with_spinner "format core fixes" gofmt -w server/resources.go server/server.go router/downloader/downloader.go router/router.go server/filesystem/filesystem_test.go server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go
 
 section "Formatting and building"
 run_with_spinner "format Go files" gofmt -w \
-    config/config.go \
-    environment/docker/betterconsole_pull_progress.go \
-    environment/docker/betterconsole_pull_progress_test.go \
-    environment/docker/container.go \
-    router/websocket/betterconsole_events.go \
-    router/websocket/listeners.go \
-    router/websocket/listeners_test.go \
-    router/websocket/websocket.go \
-    server/betterconsole_events.go \
-    server/betterconsole_pull_progress.go \
-    server/betterconsole_pull_progress_test.go \
-    server/install.go \
-    server/listeners.go \
-    sftp/betterconsole_shell.go \
-    sftp/server.go \
-    sftp/server_security_test.go
+	config/config.go \
+	environment/docker/betterconsole_pull_progress.go \
+	environment/docker/betterconsole_pull_progress_test.go \
+	environment/docker/container.go \
+	router/websocket/betterconsole_events.go \
+	router/websocket/listeners.go \
+	router/websocket/listeners_test.go \
+	router/websocket/websocket.go \
+	server/betterconsole_events.go \
+	server/betterconsole_pull_progress.go \
+	server/betterconsole_pull_progress_test.go \
+	server/install.go \
+	server/listeners.go \
+	sftp/betterconsole_shell.go \
+	sftp/server.go \
+	sftp/server_security_test.go
+run_with_spinner "test core fixes" go test ./server ./router/downloader
+run_with_spinner "vet Wings packages" go vet ./...
 run_with_spinner "build Wings" go build
 
 section "Done"
 ok "Better Console Wings edits are installed and the build succeeded."
 if [ -d "$BACKUP_DIR" ]; then
-    log "backups, if any, are in: ${BACKUP_DIR}"
+	log "backups, if any, are in: ${BACKUP_DIR}"
 fi

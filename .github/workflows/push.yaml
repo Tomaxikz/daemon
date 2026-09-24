@@ -3,7 +3,7 @@ name: Build, Test and Release
 on:
   push:
     branches: [develop]
-    tags: ['v*']
+    tags: ['v*', 'better-wings-v*']
   pull_request:
     branches: [develop]
   workflow_dispatch:
@@ -39,6 +39,10 @@ jobs:
         run: |
           go mod download
           go mod verify
+      - name: Vet
+        env:
+          GOTOOLCHAIN: local
+        run: go vet -mod=readonly ./...
       - name: Test
         env:
           CGO_ENABLED: '0'
@@ -68,7 +72,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        addon: [betterfiles, betterconsole, networkstats, full]
+        addon: [betterfiles, betterconsole, networkstats, networkpolicy, full]
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
@@ -120,7 +124,8 @@ jobs:
     if: >-
       github.repository == 'Tomaxikz/daemon' &&
       github.event_name != 'pull_request' &&
-      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
+      (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v') ||
+       startsWith(github.ref, 'refs/tags/better-wings-v'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     concurrency:

@@ -30,7 +30,11 @@ func (fs *UnixFS) mkdirAll(name string, mode FileMode) ([]string, error) {
 		if dir.IsDir() {
 			return nil, nil
 		}
-		return nil, &PathError{Op: "mkdir", Path: name, Err: ErrNotDirectory}
+		return nil, &PathError{
+			Op:   "mkdir",
+			Path: name,
+			Err:  ErrNotDirectory,
+		}
 	}
 
 	// Slow path: make sure parent exists and then call Mkdir for path.

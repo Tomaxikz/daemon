@@ -14,10 +14,12 @@ import (
 	"emperror.dev/errors"
 	"github.com/apex/log"
 	"github.com/creasty/defaults"
+	"github.com/google/uuid"
 
 	"github.com/pterodactyl/wings/config"
 	"github.com/pterodactyl/wings/environment"
 	"github.com/pterodactyl/wings/events"
+	"github.com/pterodactyl/wings/internal/networkpolicy"
 	"github.com/pterodactyl/wings/remote"
 	"github.com/pterodactyl/wings/server/filesystem"
 	"github.com/pterodactyl/wings/system"
@@ -34,6 +36,7 @@ type Server struct {
 
 	emitterLock sync.Mutex
 	powerLock   *system.Locker
+	syncMu      sync.Mutex
 
 	// Maintains the configuration for the server. This is the data that gets returned by the Panel
 	// such as build settings and container images.
@@ -100,6 +103,7 @@ func New(client remote.Client) (*Server, error) {
 	if err := defaults.Set(&s.cfg); err != nil {
 		return nil, errors.Wrap(err, "server: could not set defaults for server configuration")
 	}
+
 	s.resources.State = system.NewAtomicString(environment.ProcessOfflineState)
 	s.fileOperations = NewFileOperationManager(&s)
 	return &s, nil
@@ -191,15 +195,20 @@ func (s *Server) Log() *log.Entry {
 // This also means mass actions can be performed against servers on the Panel
 // and they will automatically sync with Wings when the server is started.
 func (s *Server) Sync() error {
-	cfg, err := s.client.GetServerConfiguration(s.Context(), s.ID())
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
+	id := s.ID()
+	cfg, err := s.client.GetServerConfiguration(s.Context(), id)
 	if err != nil {
 		if err := remote.AsRequestError(err); err != nil && err.StatusCode() == http.StatusNotFound {
 			return &serverDoesNotExist{}
 		}
+
 		return errors.WithStackIf(err)
 	}
 
-	if err := s.SyncWithConfiguration(cfg); err != nil {
+	if err := s.syncWithConfiguration(cfg, id); err != nil {
 		return errors.WithStackIf(err)
 	}
 
@@ -207,7 +216,9 @@ func (s *Server) Sync() error {
 	// it changes.
 	s.fs.SetDiskLimit(s.DiskSpace())
 
-	s.SyncWithEnvironment()
+	if err := s.syncWithEnvironment(false); err != nil {
+		return err
+	}
 
 	// If the server is suspended immediately disconnect all open websocket connections
 	// and any connected SFTP clients. We don't need to worry about revoking any JWTs
@@ -223,36 +234,150 @@ func (s *Server) Sync() error {
 }
 
 // SyncWithConfiguration accepts a configuration object for a server and will
-// sync all of the values with the existing server state. This only replaces the
-// existing configuration and process configuration for the server. The
-// underlying environment will not be affected. This is because this function
-// can be called from scoped where the server may not be fully initialized,
-// therefore other things like the filesystem and environment may not exist yet.
+// sync all of the values with the existing server state. If an environment is
+// already present, it must accept the staged network policy and allocation
+// snapshot before any server configuration is published.
 func (s *Server) SyncWithConfiguration(cfg remote.ServerConfigurationResponse) error {
-	c := Configuration{
-		CrashDetectionEnabled: config.Get().System.CrashDetection.CrashDetectionEnabled,
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
+	trustedID := ""
+	if s.Environment != nil {
+		trustedID = s.ID()
 	}
-	if err := json.Unmarshal(cfg.Settings, &c); err != nil {
+	return s.syncWithConfiguration(cfg, trustedID)
+}
+
+type networkPolicyConfigError struct {
+	cause         error
+	configuration *Configuration
+}
+
+func (e *networkPolicyConfigError) Error() string {
+	return "invalid network_policy configuration: " + e.cause.Error()
+}
+
+func (e *networkPolicyConfigError) Unwrap() error {
+	return e.cause
+}
+
+func (s *Server) syncWithConfiguration(cfg remote.ServerConfigurationResponse, trustedID string) error {
+	c, err := stageConfiguration(cfg.Settings, trustedID)
+	if err != nil {
+		var policyErr *networkPolicyConfigError
+		if errors.As(err, &policyErr) && s.Environment != nil {
+			return s.rejectNetworkPolicy(policyErr)
+		}
+
 		return errors.WithStackIf(err)
 	}
 
+	if s.Environment != nil {
+		settings := environment.Settings{
+			Mounts:      s.Environment.Config().Mounts(),
+			Allocations: c.Allocations,
+			Limits:      c.Build,
+			Labels:      c.Labels,
+		}
+		if e, ok := s.Environment.(networkPolicyEnvironment); ok {
+			if err := e.SetNetworkSettings(s.Context(), settings, c.NetworkPolicy); err != nil {
+				return err
+			}
+		} else if c.NetworkPolicy != nil {
+			return errors.New("network_policy is unsupported by this environment")
+		}
+	}
+
+	s.commitConfiguration(c, cfg.ProcessConfiguration)
+	return nil
+}
+
+func stageConfiguration(settings json.RawMessage, trustedID string) (*Configuration, error) {
+	c := &Configuration{
+		CrashDetectionEnabled: config.Get().System.CrashDetection.CrashDetectionEnabled,
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(settings, &fields); err != nil {
+		return c, err
+	}
+
+	rawPolicy, hasPolicy := fields["network_policy"]
+	if hasPolicy {
+		fields["network_policy"] = json.RawMessage("null")
+	}
+	staged, err := json.Marshal(fields)
+	if err != nil {
+		return c, err
+	}
+	if err := json.Unmarshal(staged, c); err != nil {
+		return c, err
+	}
+	if trustedID != "" {
+		trusted, err := uuid.Parse(trustedID)
+		if err != nil || trusted.String() != trustedID {
+			return c, errors.New("trusted server UUID is not canonical")
+		}
+
+		incoming, err := uuid.Parse(c.Uuid)
+		if err != nil || incoming.String() != c.Uuid || incoming != trusted {
+			return c, errors.New("configuration UUID does not match the trusted server UUID")
+		}
+	}
+
+	if hasPolicy && !bytes.Equal(bytes.TrimSpace(rawPolicy), []byte("null")) {
+		var policy networkpolicy.Policy
+		if err := networkpolicy.Decode(rawPolicy, &policy); err != nil {
+			return c, &networkPolicyConfigError{cause: err, configuration: c}
+		}
+
+		limits := config.Get().Docker.NetworkPolicy
+		ceiling := networkpolicy.Bandwidth{Upload: limits.MaxUploadBPS, Download: limits.MaxDownloadBPS}
+		if err := policy.Validate(c.Allocations.Mappings, ceiling); err != nil {
+			return c, &networkPolicyConfigError{cause: err, configuration: c}
+		}
+
+		c.NetworkPolicy = &policy
+	}
+
+	return c, nil
+}
+
+func (s *Server) rejectNetworkPolicy(policyErr *networkPolicyConfigError) error {
+	e, ok := s.Environment.(networkPolicyEnvironment)
+	if !ok {
+		return policyErr
+	}
+	if err := e.RejectNetworkPolicy(s.Context(), policyErr); err != nil {
+		return err
+	}
+
+	return policyErr
+}
+
+func (s *Server) commitConfiguration(c *Configuration, process *remote.ProcessConfiguration) {
 	s.cfg.mu.Lock()
 	defer s.cfg.mu.Unlock()
 
-	// Lock the new configuration. Since we have the deferred Unlock above we need
-	// to make sure that the NEW configuration object is already locked since that
-	// defer is running on the memory address for "s.cfg.mu" which we're explicitly
-	// changing on the next line.
-	c.mu.Lock()
-
-	//goland:noinspection GoVetCopyLock
-	s.cfg = c
+	// Keep the mutex: readers may already be waiting on it.
+	s.cfg.Uuid = c.Uuid
+	s.cfg.Meta = c.Meta
+	s.cfg.Suspended = c.Suspended
+	s.cfg.Invocation = c.Invocation
+	s.cfg.SkipEggScripts = c.SkipEggScripts
+	s.cfg.EnvVars = c.EnvVars
+	s.cfg.Labels = c.Labels
+	s.cfg.Allocations = c.Allocations
+	s.cfg.NetworkPolicy = c.NetworkPolicy
+	s.cfg.Build = c.Build
+	s.cfg.CrashDetectionEnabled = c.CrashDetectionEnabled
+	s.cfg.Mounts = c.Mounts
+	s.cfg.Egg = c.Egg
+	s.cfg.Container = c.Container
 
 	s.Lock()
-	s.procConfig = cfg.ProcessConfiguration
+	s.procConfig = process
 	s.Unlock()
-
-	return nil
 }
 
 // Reads the log file for a server up to a specified number of bytes.
@@ -349,7 +474,8 @@ func (s *Server) OnStateChange() {
 	// automatically attempt to start the process back up for the user. This is done in a
 	// separate thread as to not block any actions currently taking place in the flow
 	// that called this function.
-	if (prevState == environment.ProcessStartingState || prevState == environment.ProcessRunningState) && s.Environment.State() == environment.ProcessOfflineState {
+	if (prevState == environment.ProcessStartingState || prevState == environment.ProcessRunningState) &&
+		s.Environment.State() == environment.ProcessOfflineState {
 		s.Log().Info("detected server as entering a crashed state; running crash handler")
 
 		go func(server *Server) {

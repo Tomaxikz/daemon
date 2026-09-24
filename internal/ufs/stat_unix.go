@@ -27,12 +27,29 @@ type fileStat struct {
 
 var _ FileInfo = (*fileStat)(nil)
 
-func (fs *fileStat) Size() int64        { return fs.size }
-func (fs *fileStat) Mode() FileMode     { return fs.mode }
-func (fs *fileStat) ModTime() time.Time { return fs.modTime }
-func (fs *fileStat) Sys() any           { return &fs.sys }
-func (fs *fileStat) Name() string       { return fs.name }
-func (fs *fileStat) IsDir() bool        { return fs.Mode().IsDir() }
+func (fs *fileStat) Size() int64 {
+	return fs.size
+}
+
+func (fs *fileStat) Mode() FileMode {
+	return fs.mode
+}
+
+func (fs *fileStat) ModTime() time.Time {
+	return fs.modTime
+}
+
+func (fs *fileStat) Sys() any {
+	return &fs.sys
+}
+
+func (fs *fileStat) Name() string {
+	return fs.name
+}
+
+func (fs *fileStat) IsDir() bool {
+	return fs.Mode().IsDir()
+}
 
 func fillFileStatFromSys(fs *fileStat, name string) {
 	fs.name = basename(name)

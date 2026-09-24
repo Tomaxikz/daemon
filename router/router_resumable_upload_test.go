@@ -29,8 +29,12 @@ func TestResumableUploadBehavior(t *testing.T) {
 	token := signBetterFilesUploadToken(t, s.ID())
 	var activities atomic.Int64
 	previousActivity := saveUploadActivity
-	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) { activities.Add(1) }
-	t.Cleanup(func() { saveUploadActivity = previousActivity })
+	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {
+		activities.Add(1)
+	}
+	t.Cleanup(func() {
+		saveUploadActivity = previousActivity
+	})
 
 	total := int64(11)
 	first := performResumableRequest(handler, http.MethodPatch, token, "/uploads", "hello.txt", 0, &total, false, bytes.NewBufferString("hello "))
@@ -60,7 +64,9 @@ func TestResumableUploadIncorrectOffsetAndFinalLengthRollback(t *testing.T) {
 	token := signBetterFilesUploadToken(t, s.ID())
 	previousActivity := saveUploadActivity
 	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-	t.Cleanup(func() { saveUploadActivity = previousActivity })
+	t.Cleanup(func() {
+		saveUploadActivity = previousActivity
+	})
 
 	total := int64(4)
 	require.Equal(t, http.StatusOK, performResumableRequest(handler, http.MethodPatch, token, "/", "offset.txt", 0, &total, false, bytes.NewBufferString("ab")).Code)
@@ -140,7 +146,9 @@ func TestResumableUploadTokenIsBoundToOneTargetAndRetiredOnCompletion(t *testing
 	token := signBetterFilesUploadToken(t, s.ID())
 	previousActivity := saveUploadActivity
 	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-	t.Cleanup(func() { saveUploadActivity = previousActivity })
+	t.Cleanup(func() {
+		saveUploadActivity = previousActivity
+	})
 	total := int64(4)
 
 	first := performResumableRequest(handler, http.MethodPatch, token, "/", "bound.txt", 0, &total, false, bytes.NewBufferString("ab"))
@@ -285,7 +293,9 @@ func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
 	token := signBetterFilesUploadToken(t, s.ID())
 	previousActivity := saveUploadActivity
 	saveUploadActivity = func(_ *server.Server, _, _, _, _ string) {}
-	t.Cleanup(func() { saveUploadActivity = previousActivity })
+	t.Cleanup(func() {
+		saveUploadActivity = previousActivity
+	})
 	timedHandler := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		ctx := context.WithValue(request.Context(), resumableUploadIdleTimeoutContextKey{}, 50*time.Millisecond)
 		handler.ServeHTTP(writer, request.WithContext(ctx))
@@ -297,10 +307,16 @@ func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
 	require.NoError(t, err)
 	connection, err := net.DialTimeout("tcp", serverURL.Host, time.Second)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = connection.Close() })
+	t.Cleanup(func() {
+		_ = connection.Close()
+	})
 	require.NoError(t, connection.SetDeadline(time.Now().Add(2*time.Second)))
 
-	query := url.Values{"token": {token}, "directory": {"/"}, "file": {"stalled.txt"}}
+	query := url.Values{
+		"token":     {token},
+		"directory": {"/"},
+		"file":      {"stalled.txt"},
+	}
 	requestTarget := "/upload/file?" + query.Encode()
 	_, err = fmt.Fprintf(connection,
 		"PATCH %s HTTP/1.1\r\nHost: %s\r\nContent-Type: application/offset+octet-stream\r\nUpload-Offset: 0\r\nUpload-Length: 5\r\nContent-Length: 5\r\nConnection: close\r\n\r\n",
@@ -314,7 +330,9 @@ func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
 	started := time.Now()
 	response, err := http.ReadResponse(bufio.NewReader(connection), &http.Request{Method: http.MethodPatch})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = response.Body.Close() })
+	t.Cleanup(func() {
+		_ = response.Body.Close()
+	})
 	require.Equal(t, http.StatusRequestTimeout, response.StatusCode)
 	require.Less(t, time.Since(started), time.Second)
 
@@ -337,7 +355,9 @@ func TestResumableUploadIdleBodyTimesOutAndReleasesResources(t *testing.T) {
 	retryRequest.Header.Set("Upload-Complete", "?1")
 	retryResponse, err := testServer.Client().Do(retryRequest)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = retryResponse.Body.Close() })
+	t.Cleanup(func() {
+		_ = retryResponse.Body.Close()
+	})
 	require.Equal(t, http.StatusOK, retryResponse.StatusCode)
 	require.Equal(t, []byte("hello"), readServerHTTPFixture(t, s, "/stalled.txt"))
 }

@@ -131,7 +131,12 @@ type fileHistoryStore struct {
 
 var fileHistoryStores sync.Map
 
-func (s *Server) RecordFileRevision(path string, before []byte, after []byte, user string) (int64, error) {
+func (s *Server) RecordFileRevision(
+	path string,
+	before []byte,
+	after []byte,
+	user string,
+) (int64, error) {
 	cfg := config.Get().System.FileHistory
 	if !ShouldRecordFileHistory(path, uint64(len(after))) || isLikelyBinaryHistoryContent(after) {
 		return 0, nil
@@ -243,7 +248,13 @@ func (s *fileHistoryStore) init() error {
 	return err
 }
 
-func (s *fileHistoryStore) record(path string, before []byte, after []byte, user string, cfg config.FileHistoryConfiguration) (int64, error) {
+func (s *fileHistoryStore) record(
+	path string,
+	before []byte,
+	after []byte,
+	user string,
+	cfg config.FileHistoryConfiguration,
+) (int64, error) {
 	if bytes.Equal(before, after) {
 		return 0, nil
 	}
@@ -457,7 +468,14 @@ func currentHistoryChainLength(q historyQuerier, fileID int64, chainID int64) (i
 	return count, err
 }
 
-func insertHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte, createdMs int64, level int) (int64, error) {
+func insertHistorySnapshot(
+	tx *sql.Tx,
+	fileID int64,
+	user string,
+	content []byte,
+	createdMs int64,
+	level int,
+) (int64, error) {
 	payload, err := encodeHistorySnapshot(content, level)
 	if err != nil {
 		return 0, err
@@ -465,7 +483,14 @@ func insertHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte
 	return insertEncodedHistorySnapshot(tx, fileID, user, content, payload, createdMs)
 }
 
-func insertEncodedHistorySnapshot(tx *sql.Tx, fileID int64, user string, content []byte, payload []byte, createdMs int64) (int64, error) {
+func insertEncodedHistorySnapshot(
+	tx *sql.Tx,
+	fileID int64,
+	user string,
+	content []byte,
+	payload []byte,
+	createdMs int64,
+) (int64, error) {
 	res, err := tx.Exec(`
 		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
 		VALUES (?, 0, ?, ?, NULLIF(?, ''), NULL, ?, ?)`,
@@ -483,7 +508,17 @@ func insertEncodedHistorySnapshot(tx *sql.Tx, fileID int64, user string, content
 	return id, nil
 }
 
-func insertCompactHistoryRevision(tx *sql.Tx, fileID int64, baseID int64, chainID int64, base []byte, user string, content []byte, createdMs int64, level int) (int64, error) {
+func insertCompactHistoryRevision(
+	tx *sql.Tx,
+	fileID int64,
+	baseID int64,
+	chainID int64,
+	base []byte,
+	user string,
+	content []byte,
+	createdMs int64,
+	level int,
+) (int64, error) {
 	snapshotPayload, err := encodeHistorySnapshot(content, level)
 	if err != nil {
 		return 0, err
@@ -495,7 +530,16 @@ func insertCompactHistoryRevision(tx *sql.Tx, fileID int64, baseID int64, chainI
 	return insertEncodedHistoryDelta(tx, fileID, baseID, chainID, user, content, deltaPayload, createdMs)
 }
 
-func insertEncodedHistoryDelta(tx *sql.Tx, fileID int64, baseID int64, chainID int64, user string, content []byte, payload []byte, createdMs int64) (int64, error) {
+func insertEncodedHistoryDelta(
+	tx *sql.Tx,
+	fileID int64,
+	baseID int64,
+	chainID int64,
+	user string,
+	content []byte,
+	payload []byte,
+	createdMs int64,
+) (int64, error) {
 	res, err := tx.Exec(`
 		INSERT INTO revisions(file_id, chain_id, created, size, user_id, base_id, payload, content_hash)
 		VALUES (?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?)`,
@@ -506,7 +550,12 @@ func insertEncodedHistoryDelta(tx *sql.Tx, fileID int64, baseID int64, chainID i
 	return res.LastInsertId()
 }
 
-func pruneHistory(tx *sql.Tx, fileID int64, protectedChain sql.NullInt64, cfg config.FileHistoryConfiguration) error {
+func pruneHistory(
+	tx *sql.Tx,
+	fileID int64,
+	protectedChain sql.NullInt64,
+	cfg config.FileHistoryConfiguration,
+) error {
 	if err := pruneOldHistoryChains(tx, fileID, maxUint64(cfg.KeepChains, 1)); err != nil {
 		return err
 	}
@@ -522,7 +571,12 @@ func pruneHistory(tx *sql.Tx, fileID int64, protectedChain sql.NullInt64, cfg co
 	}
 }
 
-func pruneServerHistory(tx *sql.Tx, protectedFileID int64, protectedChain sql.NullInt64, cfg config.FileHistoryConfiguration) error {
+func pruneServerHistory(
+	tx *sql.Tx,
+	protectedFileID int64,
+	protectedChain sql.NullInt64,
+	cfg config.FileHistoryConfiguration,
+) error {
 	if cfg.PerServerDiskBudget == 0 {
 		return nil
 	}
@@ -566,7 +620,12 @@ func pruneOldHistoryChains(tx *sql.Tx, fileID int64, keepChains uint64) error {
 	return err
 }
 
-func dropOldestHistoryChain(tx *sql.Tx, fileID int64, protected sql.NullInt64, minChains uint64) (uint64, error) {
+func dropOldestHistoryChain(
+	tx *sql.Tx,
+	fileID int64,
+	protected sql.NullInt64,
+	minChains uint64,
+) (uint64, error) {
 	var count int64
 	if err := tx.QueryRow("SELECT COUNT(DISTINCT chain_id) FROM revisions WHERE file_id = ?", fileID).Scan(&count); err != nil {
 		return 0, err
@@ -593,7 +652,11 @@ func dropOldestHistoryChain(tx *sql.Tx, fileID int64, protected sql.NullInt64, m
 	return freed, err
 }
 
-func dropGloballyOldestHistoryChain(tx *sql.Tx, protectedFileID int64, protectedChain sql.NullInt64) (uint64, error) {
+func dropGloballyOldestHistoryChain(
+	tx *sql.Tx,
+	protectedFileID int64,
+	protectedChain sql.NullInt64,
+) (uint64, error) {
 	query := `
 		SELECT r.file_id, r.chain_id
 		FROM revisions r

@@ -9,13 +9,48 @@ func TestCpuBurstMicroseconds(t *testing.T) {
 		percent  int64
 		expected int64
 	}{
-		{name: "full quota", quota: 200_000, percent: 100, expected: 200_000},
-		{name: "half quota", quota: 200_000, percent: 50, expected: 100_000},
-		{name: "zero percent", quota: 200_000, percent: 0, expected: 0},
-		{name: "percent above kernel cap", quota: 200_000, percent: 150, expected: 200_000},
-		{name: "negative percent", quota: 200_000, percent: -50, expected: 0},
-		{name: "no quota", quota: 0, percent: 100, expected: 0},
-		{name: "negative quota", quota: -1, percent: 100, expected: 0},
+		{
+			name:     "full quota",
+			quota:    200_000,
+			percent:  100,
+			expected: 200_000,
+		},
+		{
+			name:     "half quota",
+			quota:    200_000,
+			percent:  50,
+			expected: 100_000,
+		},
+		{
+			name:     "zero percent",
+			quota:    200_000,
+			percent:  0,
+			expected: 0,
+		},
+		{
+			name:     "percent above kernel cap",
+			quota:    200_000,
+			percent:  150,
+			expected: 200_000,
+		},
+		{
+			name:     "negative percent",
+			quota:    200_000,
+			percent:  -50,
+			expected: 0,
+		},
+		{
+			name:     "no quota",
+			quota:    0,
+			percent:  100,
+			expected: 0,
+		},
+		{
+			name:     "negative quota",
+			quota:    -1,
+			percent:  100,
+			expected: 0,
+		},
 	}
 
 	for _, tt := range tests {

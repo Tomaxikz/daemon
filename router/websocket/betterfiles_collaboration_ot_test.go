@@ -8,7 +8,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func betterFilesTestEdit(base string, offset int, length int, text string) betterFilesCollabTextEdit {
+func betterFilesTestEdit(
+	base string,
+	offset int,
+	length int,
+	text string,
+) betterFilesCollabTextEdit {
 	return betterFilesCollabTextEdit{
 		RangeOffset: offset,
 		RangeLength: length,
@@ -33,13 +38,15 @@ func TestBetterFilesCollabAppliesMonacoReplacement(t *testing.T) {
 	require.Equal(t, "first line\nnew line\nlast line", betterFilesTestContent(document))
 	require.False(t, result.Transformed)
 	require.Equal(t, int64(1), result.Revision)
-	require.Equal(t, []betterFilesCollabTextEdit{{
-		RangeOffset: 11,
-		RangeLength: 8,
-		Text:        "new line",
-		BaseHash:    betterFilesCollabContentHash("first line\nold line\nlast line"),
-		BaseLength:  betterFilesCollabUTF16Len("first line\nold line\nlast line"),
-	}}, result.Changes)
+	require.Equal(t, []betterFilesCollabTextEdit{
+		{
+			RangeOffset: 11,
+			RangeLength: 8,
+			Text:        "new line",
+			BaseHash:    betterFilesCollabContentHash("first line\nold line\nlast line"),
+			BaseLength:  betterFilesCollabUTF16Len("first line\nold line\nlast line"),
+		},
+	}, result.Changes)
 }
 
 func TestBetterFilesCollabTransformsConcurrentInserts(t *testing.T) {

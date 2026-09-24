@@ -204,7 +204,12 @@ func allowsContentSearch(name string) bool {
 	return false
 }
 
-func contentMatches(fs *serverfs.Filesystem, displayPath string, queryLower string, size int64) bool {
+func contentMatches(
+	fs *serverfs.Filesystem,
+	displayPath string,
+	queryLower string,
+	size int64,
+) bool {
 	if size <= 0 || size > maxContentBytes {
 		return false
 	}
@@ -441,7 +446,10 @@ func (sc *searchContext) worker(wg *sync.WaitGroup) {
 					}
 
 					if !nameMatches {
-						if !sc.contentSearch || isDir || !entry.Mode().IsRegular() || !contentMatches(sc.fs, fullPath, sc.queryLower, entry.Size()) {
+						if !sc.contentSearch ||
+							isDir ||
+							!entry.Mode().IsRegular() ||
+							!contentMatches(sc.fs, fullPath, sc.queryLower, entry.Size()) {
 							goto scanSubdirs
 						}
 					}

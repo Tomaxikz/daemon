@@ -50,7 +50,11 @@ func TestSSHHandshakeRejectionReason(t *testing.T) {
 		err      error
 		expected string
 	}{
-		{name: "eof", err: io.EOF, expected: "connection closed before handshake completed"},
+		{
+			name:     "eof",
+			err:      io.EOF,
+			expected: "connection closed before handshake completed",
+		},
 		{
 			name:     "invalid version",
 			err:      errors.New("ssh: overflow reading version string"),
@@ -104,7 +108,9 @@ func TestSSHHandshakeRejectionReason(t *testing.T) {
 func TestSftpSessionClosesOnUserRevocation(t *testing.T) {
 	bag := system.NewContextBag(context.Background())
 	closed := make(chan struct{})
-	stop := closeSftpSessionOnRevocation(bag.Context("user-uuid"), func() { close(closed) })
+	stop := closeSftpSessionOnRevocation(bag.Context("user-uuid"), func() {
+		close(closed)
+	})
 	defer stop()
 
 	bag.Cancel("user-uuid")

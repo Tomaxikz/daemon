@@ -23,7 +23,6 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 	router.Use(gin.Recovery())
 	if err := router.SetTrustedProxies(config.Get().Api.TrustedProxies); err != nil {
 		panic(errors.WithStack(err))
-		return nil
 	}
 	router.Use(middleware.AttachRequestID(), middleware.CaptureErrors(), middleware.SetAccessControlHeaders())
 	router.Use(middleware.AttachServerManager(m), middleware.AttachApiClient(client))
@@ -83,6 +82,11 @@ func Configure(m *wserver.Manager, client remote.Client) *gin.Engine {
 		server.DELETE("", deleteServer)
 		server.GET("/logs", getServerLogs)
 		server.GET("/stats/protocols", getServerProtocolStats)
+		server.GET("/network-policy/capabilities", getNetworkCapabilities)
+		server.GET("/network-policy", getNetworkPolicy)
+		server.GET("/network-policy/status", getNetworkPolicy)
+		server.PUT("/network-policy", putNetworkPolicy)
+		server.POST("/network-policy/reconcile", reconcileNetworkPolicy)
 		server.POST("/power", postServerPower)
 		server.POST("/commands", postServerCommands)
 		git := server.Group("/git")

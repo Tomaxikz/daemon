@@ -103,7 +103,11 @@ func IsErrorCode(err error, code ErrorCode) bool {
 
 // NewBadPathResolution returns a new BadPathResolution error.
 func NewBadPathResolution(path string, resolved string) error {
-	return errors.WithStackDepth(&Error{code: ErrCodePathResolution, path: path, resolved: resolved}, 1)
+	return errors.WithStackDepth(&Error{
+		code:     ErrCodePathResolution,
+		path:     path,
+		resolved: resolved,
+	}, 1)
 }
 
 // wrapError wraps the provided error as a Filesystem error and attaches the
@@ -113,5 +117,9 @@ func wrapError(err error, resolved string) error {
 	if err == nil || IsFilesystemError(err) {
 		return err
 	}
-	return errors.WithStackDepth(&Error{code: ErrCodeUnknownError, err: err, resolved: resolved}, 1)
+	return errors.WithStackDepth(&Error{
+		code:     ErrCodeUnknownError,
+		err:      err,
+		resolved: resolved,
+	}, 1)
 }

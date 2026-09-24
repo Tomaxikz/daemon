@@ -221,7 +221,12 @@ func newGitRunner(ctx context.Context, s *wserver.Server, env *docker.Environmen
 	return runner
 }
 
-func (r *gitRunner) exec(ctx context.Context, args []string, workDir string, remotes ...validatedGitRepositoryURL) (*gitResponse, error) {
+func (r *gitRunner) exec(
+	ctx context.Context,
+	args []string,
+	workDir string,
+	remotes ...validatedGitRepositoryURL,
+) (*gitResponse, error) {
 	// Network commands always run in the isolated helper. In the server container,
 	// a tenant can observe the command line and race a matching .git/config entry
 	// into place before Git reads it. The helper has its own PID namespace, keeping
@@ -246,7 +251,11 @@ func (r *gitRunner) exec(ctx context.Context, args []string, workDir string, rem
 	return execInContainer(ctx, r.env, cmd, workDir)
 }
 
-func (r *gitRunner) execOffline(ctx context.Context, args []string, workDir string) (*gitResponse, error) {
+func (r *gitRunner) execOffline(
+	ctx context.Context,
+	args []string,
+	workDir string,
+) (*gitResponse, error) {
 	helperRunner := *r
 	helperRunner.bin = "git"
 	helperRunner.helper = true
@@ -968,7 +977,12 @@ func gitInstallEnv() []string {
 	}
 }
 
-func execGitInHelperContainer(ctx context.Context, runner *gitRunner, cmd []string, workDir string) (*gitResponse, error) {
+func execGitInHelperContainer(
+	ctx context.Context,
+	runner *gitRunner,
+	cmd []string,
+	workDir string,
+) (*gitResponse, error) {
 	helperImage, err := ensureGitHelperImage(ctx, runner.env)
 	if err != nil {
 		return nil, err
@@ -1237,12 +1251,17 @@ func normalizeGitDiffPath(raw string) (string, error) {
 	if len(cleaned) > 4096 || strings.ContainsAny(cleaned, "\x00\n\r\\") {
 		return "", fmt.Errorf("Diff path is invalid.")
 	}
-	if strings.HasPrefix(cleaned, "/") || strings.HasPrefix(cleaned, "-") || strings.HasPrefix(cleaned, ":") {
+	if strings.HasPrefix(cleaned, "/") ||
+		strings.HasPrefix(cleaned, "-") ||
+		strings.HasPrefix(cleaned, ":") {
 		return "", fmt.Errorf("Diff path is not allowed.")
 	}
 
 	normalized := path.Clean(cleaned)
-	if normalized == "." || normalized == ".." || strings.HasPrefix(normalized, "../") || strings.Contains(normalized, "/../") {
+	if normalized == "." ||
+		normalized == ".." ||
+		strings.HasPrefix(normalized, "../") ||
+		strings.Contains(normalized, "/../") {
 		return "", fmt.Errorf("Diff path must stay inside the repository.")
 	}
 
@@ -1353,7 +1372,11 @@ func gitCurlOptResolve(host string, port string, ip net.IP) string {
 }
 
 func validateGitTargetDirectory(name string) error {
-	if name == "." || name == ".." || strings.Contains(name, "..") || strings.HasPrefix(name, "-") || strings.HasPrefix(name, ".") {
+	if name == "." ||
+		name == ".." ||
+		strings.Contains(name, "..") ||
+		strings.HasPrefix(name, "-") ||
+		strings.HasPrefix(name, ".") {
 		return fmt.Errorf("Target directory name is not allowed.")
 	}
 	if !gitTargetDirectoryPattern.MatchString(name) {
@@ -1555,7 +1578,14 @@ func gitRepositoryHost(raw string) string {
 }
 
 func isBlockedGitIP(ip net.IP) bool {
-	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+	if ip == nil ||
+		ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified() {
 		return true
 	}
 	for _, block := range gitBlockedNetworks {
@@ -1582,11 +1612,23 @@ func getContainerUser() string {
 	return strconv.Itoa(cfg.System.User.Uid) + ":" + strconv.Itoa(cfg.System.User.Gid)
 }
 
-func execInContainer(ctx context.Context, env *docker.Environment, cmd []string, workDir string) (*gitResponse, error) {
+func execInContainer(
+	ctx context.Context,
+	env *docker.Environment,
+	cmd []string,
+	workDir string,
+) (*gitResponse, error) {
 	return execInContainerAsUser(ctx, env, cmd, workDir, getContainerUser(), gitSafeEnv)
 }
 
-func execInContainerAsUser(ctx context.Context, env *docker.Environment, cmd []string, workDir string, user string, execEnv []string) (*gitResponse, error) {
+func execInContainerAsUser(
+	ctx context.Context,
+	env *docker.Environment,
+	cmd []string,
+	workDir string,
+	user string,
+	execEnv []string,
+) (*gitResponse, error) {
 	cli := env.Client()
 
 	execConfig := container.ExecOptions{

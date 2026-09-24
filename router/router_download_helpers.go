@@ -29,7 +29,11 @@ func (df *downloadFile) Close() error {
 	return df.file.Close()
 }
 
-func openDownloadFile(c *gin.Context, fs *serverfs.Filesystem, filePath string) (*downloadFile, bool) {
+func openDownloadFile(
+	c *gin.Context,
+	fs *serverfs.Filesystem,
+	filePath string,
+) (*downloadFile, bool) {
 	info, err := fs.UnixFS().Lstat(filePath)
 	if err != nil {
 		abortDownloadFileError(c, err)
@@ -88,7 +92,13 @@ func abortDownloadFileError(c *gin.Context, err error) {
 	middleware.CaptureAndAbort(c, err)
 }
 
-func serveDownloadFile(c *gin.Context, df *downloadFile, disposition string, inline bool, fixedSize bool) {
+func serveDownloadFile(
+	c *gin.Context,
+	df *downloadFile,
+	disposition string,
+	inline bool,
+	fixedSize bool,
+) {
 	c.Header("Accept-Ranges", "bytes")
 	c.Header("Content-Disposition", disposition+"; filename="+strconv.Quote(df.info.Name()))
 	c.Header("Content-Type", downloadContentType(df, inline))

@@ -80,7 +80,9 @@ func (s *Server) handleServerCrash() error {
 	// an automatic reboot of the process. Return an error that can be handled.
 	//
 	// If timeout is set to 0, always reboot the server (this is probably a terrible idea, but some people want it)
-	if timeout != 0 && !c.IsZero() && c.Add(time.Second*time.Duration(config.Get().System.CrashDetection.Timeout)).After(time.Now()) {
+	if timeout != 0 &&
+		!c.IsZero() &&
+		c.Add(time.Second*time.Duration(config.Get().System.CrashDetection.Timeout)).After(time.Now()) {
 		s.PublishConsoleOutputFromDaemon("Aborting automatic restart, last crash occurred less than " + strconv.Itoa(timeout) + " seconds ago.")
 		return &crashTooFrequent{}
 	}

@@ -244,7 +244,8 @@ func (a *Archive) withFilesCallback() walkFunc {
 			//
 			// The slashes are added in the prefix checks to prevent partial name matches from being
 			// included in the archive.
-			if f != relative && !strings.HasPrefix(strings.TrimSuffix(relative, "/")+"/", strings.TrimSuffix(f, "/")+"/") {
+			if f != relative &&
+				!strings.HasPrefix(strings.TrimSuffix(relative, "/")+"/", strings.TrimSuffix(f, "/")+"/") {
 				continue
 			}
 

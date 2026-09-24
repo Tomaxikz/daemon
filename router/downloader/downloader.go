@@ -43,7 +43,10 @@ func init() {
 		if ip == nil {
 			return c, errors.WithStack(ErrInvalidIPAddress)
 		}
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsInterfaceLocalMulticast() {
+		if ip.IsLoopback() ||
+			ip.IsLinkLocalUnicast() ||
+			ip.IsLinkLocalMulticast() ||
+			ip.IsInterfaceLocalMulticast() {
 			return c, errors.WithStack(ErrInternalResolution)
 		}
 		for _, block := range internalRanges {
@@ -162,8 +165,7 @@ func ByID(dlid string) *Download {
 	return instance.find(dlid)
 }
 
-//goland:noinspection GoVetCopyLock
-func (dl Download) MarshalJSON() ([]byte, error) {
+func (dl *Download) MarshalJSON() ([]byte, error) {
 	return json.Marshal(struct {
 		Identifier string
 		Progress   float64
@@ -339,5 +341,7 @@ func mustParseCIDR(ip string) *net.IPNet {
 }
 
 func IsDownloadError(err error) bool {
-	return errors.Is(err, ErrDownloadFailed) || errors.Is(err, ErrInvalidIPAddress) || errors.Is(err, ErrInternalResolution)
+	return errors.Is(err, ErrDownloadFailed) ||
+		errors.Is(err, ErrInvalidIPAddress) ||
+		errors.Is(err, ErrInternalResolution)
 }

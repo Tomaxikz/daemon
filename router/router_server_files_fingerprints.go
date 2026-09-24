@@ -82,7 +82,12 @@ func validFingerprintAlgorithm(value string) bool {
 	}
 }
 
-func fingerprintFiles(ctx context.Context, fs *serverfs.Filesystem, algorithm string, jobs []fingerprintJob) map[string]string {
+func fingerprintFiles(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	algorithm string,
+	jobs []fingerprintJob,
+) map[string]string {
 	workerCount := runtime.NumCPU()
 	if workerCount < 1 {
 		workerCount = 1
@@ -108,7 +113,11 @@ func fingerprintFiles(ctx context.Context, fs *serverfs.Filesystem, algorithm st
 			for job := range jobChannel {
 				value, err := fingerprintOneFile(ctx, fs, algorithm, job.path, buffer)
 				select {
-				case resultChannel <- fingerprintResult{key: job.key, value: value, valid: err == nil}:
+				case resultChannel <- fingerprintResult{
+					key:   job.key,
+					value: value,
+					valid: err == nil,
+				}:
 				case <-ctx.Done():
 					return
 				}
@@ -139,7 +148,12 @@ func fingerprintFiles(ctx context.Context, fs *serverfs.Filesystem, algorithm st
 	return result
 }
 
-func fingerprintOneFile(ctx context.Context, fs *serverfs.Filesystem, algorithm, filePath string, buffer []byte) (string, error) {
+func fingerprintOneFile(
+	ctx context.Context,
+	fs *serverfs.Filesystem,
+	algorithm, filePath string,
+	buffer []byte,
+) (string, error) {
 	info, err := betterFilesLstat(fs, filePath)
 	if err != nil || !info.Mode().IsRegular() {
 		return "", errBetterFilesInvalidPath

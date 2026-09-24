@@ -362,8 +362,16 @@ func TestGitNetworkAndOfflineCommandShapes(t *testing.T) {
 
 func TestCombineGitResponsesUsesFinalExitCode(t *testing.T) {
 	combined := combineGitResponses(
-		&gitResponse{Stdout: "fetch stdout\n", Stderr: "fetch stderr\n", ExitCode: 0},
-		&gitResponse{Stdout: "merge stdout\n", Stderr: "merge stderr\n", ExitCode: 1},
+		&gitResponse{
+			Stdout:   "fetch stdout\n",
+			Stderr:   "fetch stderr\n",
+			ExitCode: 0,
+		},
+		&gitResponse{
+			Stdout:   "merge stdout\n",
+			Stderr:   "merge stderr\n",
+			ExitCode: 1,
+		},
 	)
 	require.Equal(t, "fetch stdout\nmerge stdout\n", combined.Stdout)
 	require.Equal(t, "fetch stderr\nmerge stderr\n", combined.Stderr)

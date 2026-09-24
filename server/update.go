@@ -1,12 +1,20 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"time"
 
 	"github.com/pterodactyl/wings/environment/docker"
 
 	"github.com/pterodactyl/wings/environment"
+	"github.com/pterodactyl/wings/internal/networkpolicy"
 )
+
+type networkPolicyEnvironment interface {
+	SetNetworkSettings(context.Context, environment.Settings, *networkpolicy.Policy) error
+	RejectNetworkPolicy(context.Context, error) error
+}
 
 // SyncWithEnvironment updates the environment for the server to match any of
 // the changed data. This pushes new settings and environment variables to the
@@ -18,18 +26,33 @@ import (
 // This functionality allows a server's resources limits to be modified on the
 // fly and have them apply right away allowing for dynamic resource allocation
 // and responses to abusive server processes.
-func (s *Server) SyncWithEnvironment() {
+func (s *Server) SyncWithEnvironment() error {
+	s.syncMu.Lock()
+	defer s.syncMu.Unlock()
+
+	return s.syncWithEnvironment(true)
+}
+
+func (s *Server) syncWithEnvironment(applyNetwork bool) error {
 	s.Log().Debug("syncing server settings with environment")
 
 	cfg := s.Config()
 
 	// Update the environment settings using the new information from this server.
-	s.Environment.Config().SetSettings(environment.Settings{
+	settings := environment.Settings{
 		Mounts:      s.Mounts(),
 		Allocations: cfg.Allocations,
 		Limits:      cfg.Build,
 		Labels:      cfg.Labels,
-	})
+	}
+	if e, ok := s.Environment.(networkPolicyEnvironment); ok && applyNetwork {
+		if err := e.SetNetworkSettings(s.Context(), settings, cfg.NetworkPolicy); err != nil {
+			return err
+		}
+	} else if applyNetwork && cfg.NetworkPolicy != nil {
+		return errors.New("network_policy is unsupported by this environment")
+	}
+	s.Environment.Config().SetSettings(settings)
 
 	// For Docker specific environments we also want to update the configured image
 	// and stop configuration.
@@ -67,4 +90,5 @@ func (s *Server) SyncWithEnvironment() {
 			}(s)
 		}
 	}
+	return nil
 }

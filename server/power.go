@@ -182,7 +182,9 @@ func (s *Server) onBeforeStart() error {
 
 	// Ensure we sync the server information with the environment so that any new environment variables
 	// and process resource limits are correctly applied.
-	s.SyncWithEnvironment()
+	if err := s.SyncWithEnvironment(); err != nil {
+		return err
+	}
 
 	// If a server has unlimited disk space, we don't care enough to block the startup to check remaining.
 	// However, we should trigger a size anyway, as it'd be good to kick it off for other processes.

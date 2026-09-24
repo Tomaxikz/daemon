@@ -15,6 +15,7 @@ OLD_COMMIT = "b" * 40
 
 class FakePublisher(release.Publisher):
     """In-memory GitHub release/ref service: tests cannot publish anything."""
+
     def __init__(self):
         super().__init__("Tomaxikz/daemon")
         self.tags = {}
@@ -25,9 +26,15 @@ class FakePublisher(release.Publisher):
 
     def release_response(self, value):
         result = {key: value[key] for key in value if key != "data"}
-        result["assets"] = [{"id": f"{value['id']}-{name}", "name": name, "size": len(data),
-                             "digest": "sha256:" + hashlib.sha256(data).hexdigest()}
-                            for name, data in value["data"].items()]
+        result["assets"] = [
+            {
+                "id": f"{value['id']}-{name}",
+                "name": name,
+                "size": len(data),
+                "digest": "sha256:" + hashlib.sha256(data).hexdigest(),
+            }
+            for name, data in value["data"].items()
+        ]
         return copy.deepcopy(result)
 
     def api(self, method, route, payload=None, missing=False):
@@ -48,20 +55,30 @@ class FakePublisher(release.Publisher):
             # GitHub's tag endpoint returns published releases, not drafts.
             if value is None or value["draft"]:
                 return None
+
             return self.release_response(value)
         if route.startswith("releases?per_page=100&page="):
             page = int(route.split("page=")[-1])
             values = sorted(self.releases.values(), key=lambda item: item["id"], reverse=True)
-            return [self.release_response(value) for value in values[(page-1)*100:page*100]]
+            return [self.release_response(value) for value in values[(page - 1) * 100 : page * 100]]
         if method == "GET" and route.startswith("releases/") and route.split("/")[-1].isdigit():
-            value = next((value for value in self.releases.values() if value["id"] == int(route.split("/")[-1])), None)
+            value = next(
+                (
+                    value
+                    for value in self.releases.values()
+                    if value["id"] == int(route.split("/")[-1])
+                ),
+                None,
+            )
             if value is None:
                 raise RuntimeError("gh: Not Found (HTTP 404)")
+
             return self.release_response(value)
         if route == "releases/latest":
             for value in self.releases.values():
                 if value.get("make_latest") == "true":
                     return self.api("GET", "releases/tags/" + value["tag_name"])
+
             return None
         if route == "releases" and method == "POST":
             value = {"id": len(self.releases) + 1, "body": "", "data": {}, **payload}
@@ -73,14 +90,21 @@ class FakePublisher(release.Publisher):
             del value["data"][name]
             return None
         if route.startswith("releases/") and method == "PATCH":
-            value = next(value for value in self.releases.values() if value["id"] == int(route.split("/")[1]))
+            value = next(
+                value for value in self.releases.values() if value["id"] == int(route.split("/")[1])
+            )
+            if payload.get("make_latest") == "true":
+                for previous in self.releases.values():
+                    previous["make_latest"] = "false"
             value.update(payload)
             return self.release_response(value)
+
         raise AssertionError((method, route, payload))
 
     def upload(self, tag, directory):
         if not self.releases[tag]["draft"]:
             raise AssertionError("Assets must never be replaced while publicly downloadable")
+
         for file in sorted(directory.iterdir()):
             self.releases[tag]["data"][file.name] = file.read_bytes()
             if self.fail_upload:
@@ -98,9 +122,15 @@ class ReleaseTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.metadata = {"schema_version": 1, "commit": COMMIT, "repository": "Tomaxikz/daemon",
-                         "ref": "refs/heads/develop", "version": "dev-" + COMMIT[:12],
-                         "go_version": "go1.26.7", "workflow_url": "https://github.com/Tomaxikz/daemon/actions/runs/1"}
+        self.metadata = {
+            "schema_version": 1,
+            "commit": COMMIT,
+            "repository": "Tomaxikz/daemon",
+            "ref": "refs/heads/develop",
+            "version": "dev-" + COMMIT[:12],
+            "go_version": "go1.26.7",
+            "workflow_url": "https://github.com/Tomaxikz/daemon/actions/runs/1",
+        }
 
     def make_bundle(self, name="bundle", metadata=None):
         metadata = metadata or self.metadata
@@ -108,10 +138,14 @@ class ReleaseTests(unittest.TestCase):
         source.mkdir()
         directory = self.root / name
         directory.mkdir()
-        for filename in release.PATCHES | {"README.md"}:
+        for filename in release.PATCHES | release.DOCS:
             (source / filename).write_text(filename)
+
         for filename in release.INSTALLERS:
-            (source / filename).write_text('RAW_BASE="${TOMAXIKZ_RAW_BASE:-https://raw.githubusercontent.com/Tomaxikz/daemon/develop}"\n')
+            (source / filename).write_text(
+                'RAW_BASE="${TOMAXIKZ_RAW_BASE:-https://raw.githubusercontent.com/Tomaxikz/daemon/develop}"\n'
+            )
+
         for arch, machine in release.ARCHES.items():
             data = b"\x7fELF\x02\x01" + bytes(12) + machine.to_bytes(2, "little")
             files = {}
@@ -119,9 +153,12 @@ class ReleaseTests(unittest.TestCase):
                 filename = f"wings_linux_{arch}{suffix}"
                 (directory / filename).write_bytes(data)
                 files[filename] = release.digest(directory / filename)
+
             (directory / f"build-{arch}.json").write_text(json.dumps({**metadata, "files": files}))
+
         with patch.object(release, "context", return_value=metadata):
             release.bundle(directory, source)
+
         return directory, release.verify_bundle(directory, metadata)
 
     def test_tag_names_cannot_inject_shell_or_select_arbitrary_versions(self):
@@ -131,6 +168,35 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.version_for(ref, COMMIT)
 
+    def test_branded_release_versions(self):
+        for tag in ("better-wings-v1.2", "better-wings-v1.2.1", "better-wings-v1.2-rc.1"):
+            self.assertEqual(release.version_for("refs/tags/" + tag, COMMIT), tag)
+        for tag in ("better-wings-v01.2", "better-wings-v1", "better-wings-v1.2;whoami", "v1.2"):
+            with self.assertRaises(ValueError):
+                release.version_for("refs/tags/" + tag, COMMIT)
+
+    def test_branded_release_name_matches_default_version(self):
+        tag = "better-wings-v1.2"
+        self.assertIn(f'var Version = "{tag}"', (release.ROOT / "system/const.go").read_text())
+        metadata = {**self.metadata, "ref": "refs/tags/" + tag, "version": tag}
+        directory, metadata = self.make_bundle(metadata=metadata)
+        publisher = FakePublisher()
+        publisher.snapshot(tag, metadata, directory)
+        self.assertEqual(publisher.releases[tag]["name"], tag)
+        self.assertFalse(publisher.releases[tag]["prerelease"])
+        self.assertEqual(publisher.api("GET", "releases/latest")["tag_name"], tag)
+
+    def test_branded_tag_can_publish_through_trusted_workflow(self):
+        tag = "better-wings-v1.2"
+        metadata = {**self.metadata, "ref": "refs/tags/" + tag, "version": tag}
+        directory, metadata = self.make_bundle(metadata=metadata)
+        with patch.object(release, "context", return_value=metadata), patch.dict(
+            release.os.environ, {"GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "push"}
+        ), patch.object(release, "Publisher") as publisher:
+            release.publish(directory)
+            publisher.return_value.snapshot.assert_called_once_with(tag, metadata, directory)
+            publisher.return_value.promote_dev.assert_not_called()
+
     def test_bundle_pins_sources_and_has_portable_verified_checksums(self):
         directory, metadata = self.make_bundle()
         self.assertEqual(set(metadata["files"]), release.PAYLOAD)
@@ -139,6 +205,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertIn("/" + COMMIT, text)
             self.assertNotIn("/develop", text)
             self.assertIn("TOMAXIKZ_RAW_BASE", text)
+
         self.assertNotIn("dist/", (directory / "SHA256SUMS").read_text())
         (directory / "wings_linux_amd64").write_bytes(b"tampered")
         with self.assertRaises(ValueError):
@@ -148,15 +215,21 @@ class ReleaseTests(unittest.TestCase):
         directory, _ = self.make_bundle()
         with self.assertRaises(ValueError):
             release.verify_bundle(directory, {**self.metadata, "commit": OLD_COMMIT})
+
         with self.assertRaises(ValueError):
             release.verify_elf(directory / "wings_linux_amd64", "arm64")
 
     def test_remote_permission_errors_are_not_treated_as_missing_releases(self):
         publisher = release.Publisher("Tomaxikz/daemon")
         for code in (403, 500):
-            response = SimpleNamespace(returncode=1, stdout="", stderr=f"gh: request failed (HTTP {code})\n")
-            with patch.object(release.subprocess, "run", return_value=response), self.assertRaises(RuntimeError):
+            response = SimpleNamespace(
+                returncode=1, stdout="", stderr=f"gh: request failed (HTTP {code})\n"
+            )
+            with patch.object(release.subprocess, "run", return_value=response), self.assertRaises(
+                RuntimeError
+            ):
                 publisher.release("dev-latest")
+
         response = SimpleNamespace(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)\n")
         empty_list = SimpleNamespace(returncode=0, stdout="[]", stderr="")
         with patch.object(release.subprocess, "run", side_effect=[response, empty_list]):
@@ -166,14 +239,18 @@ class ReleaseTests(unittest.TestCase):
         publisher = release.Publisher("Tomaxikz/daemon")
         missing_tag = SimpleNamespace(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)\n")
         for code in (403, 404, 500):
-            denied_list = SimpleNamespace(returncode=1, stdout="", stderr=f"gh: failed (HTTP {code})\n")
+            denied_list = SimpleNamespace(
+                returncode=1, stdout="", stderr=f"gh: failed (HTTP {code})\n"
+            )
             with patch.object(release.subprocess, "run", side_effect=[missing_tag, denied_list]):
                 with self.assertRaises(RuntimeError):
                     publisher.release("dev-latest")
 
     def test_drafts_are_hidden_by_tag_but_readable_by_id(self):
         publisher = FakePublisher()
-        draft = publisher.api("POST", "releases", {"tag_name": "dev-test", "draft": True, "prerelease": True})
+        draft = publisher.api(
+            "POST", "releases", {"tag_name": "dev-test", "draft": True, "prerelease": True}
+        )
         self.assertIsNone(publisher.api("GET", "releases/tags/dev-test", missing=True))
         self.assertEqual(publisher.release_by_id(draft["id"])["tag_name"], "dev-test")
         self.assertEqual(publisher.release("dev-test")["id"], draft["id"])
@@ -183,6 +260,7 @@ class ReleaseTests(unittest.TestCase):
         draft = publisher.api("POST", "releases", {"tag_name": "dev-old-draft", "draft": True})
         for number in range(100):
             publisher.api("POST", "releases", {"tag_name": f"other-{number}", "draft": False})
+
         self.assertEqual(publisher.release("dev-old-draft")["id"], draft["id"])
         self.assertIn(("GET", "releases?per_page=100&page=2", None), publisher.calls)
 
@@ -192,6 +270,7 @@ class ReleaseTests(unittest.TestCase):
             with patch.object(publisher, "api", return_value=response) as api:
                 with self.assertRaisesRegex(RuntimeError, "invalid response for release 1"):
                     publisher.release_by_id(1)
+
                 api.assert_called_once_with("GET", "releases/1")
 
     def test_snapshot_resumes_an_uploaded_draft_without_creating_a_duplicate(self):
@@ -199,38 +278,55 @@ class ReleaseTests(unittest.TestCase):
         publisher = FakePublisher()
         tag = "dev-" + COMMIT
         publisher.tags[tag] = COMMIT
-        draft = publisher.api("POST", "releases", {"tag_name": tag, "draft": True, "prerelease": True})
+        draft = publisher.api(
+            "POST", "releases", {"tag_name": tag, "draft": True, "prerelease": True}
+        )
         publisher.upload(tag, directory)
         self.assertIsNone(publisher.api("GET", f"releases/tags/{tag}", missing=True))
         publisher.snapshot(tag, metadata, directory)
         self.assertEqual(publisher.releases[tag]["id"], draft["id"])
         self.assertFalse(publisher.releases[tag]["draft"])
-        self.assertEqual(sum(method == "POST" and route == "releases" for method, route, _ in publisher.calls), 1)
+        self.assertEqual(
+            sum(method == "POST" and route == "releases" for method, route, _ in publisher.calls), 1
+        )
         self.assertIn(("GET", f"releases/{draft['id']}", None), publisher.calls)
 
     def test_existing_draft_alias_is_promoted_using_its_original_id(self):
         directory, metadata = self.make_bundle()
         publisher = FakePublisher()
         publisher.tags["dev-latest"] = OLD_COMMIT
-        draft = publisher.api("POST", "releases", {"tag_name": "dev-latest", "name": "Interrupted release",
-                                                  "draft": True, "prerelease": True})
+        draft = publisher.api(
+            "POST",
+            "releases",
+            {
+                "tag_name": "dev-latest",
+                "name": "Interrupted release",
+                "draft": True,
+                "prerelease": True,
+            },
+        )
         publisher.releases["dev-latest"]["data"] = {"wings_linux_amd64": b"previous binary"}
         publisher.promote_dev(metadata, directory)
         self.assertEqual(publisher.releases["dev-latest"]["id"], draft["id"])
         self.assertFalse(publisher.releases["dev-latest"]["draft"])
         self.assertEqual(publisher.tags["dev-latest"], COMMIT)
-        self.assertEqual(sum(method == "POST" and route == "releases" for method, route, _ in publisher.calls), 1)
+        self.assertEqual(
+            sum(method == "POST" and route == "releases" for method, route, _ in publisher.calls), 1
+        )
 
     def test_corrupt_remote_upload_cannot_be_published(self):
         directory, metadata = self.make_bundle()
         publisher = FakePublisher()
         original_upload = publisher.upload
+
         def corrupt_upload(tag, source):
             original_upload(tag, source)
             publisher.releases[tag]["data"]["wings_linux_amd64"] = b"corrupt"
+
         publisher.upload = corrupt_upload
         with self.assertRaises(ValueError):
             publisher.snapshot("dev-" + COMMIT, metadata, directory)
+
         self.assertTrue(publisher.releases["dev-" + COMMIT]["draft"])
 
     def test_manifest_rejects_traversal_and_duplicate_names(self):
@@ -240,15 +336,18 @@ class ReleaseTests(unittest.TestCase):
                 directory, _ = self.make_bundle(name)
                 with (directory / "SHA256SUMS").open("a") as output:
                     output.write(line)
+
                 with self.assertRaises(ValueError):
                     release.verify_bundle(directory)
 
     def test_only_trusted_workflow_events_can_publish(self):
         directory, _ = self.make_bundle()
-        with patch.object(release, "context", return_value=self.metadata), patch.dict(release.os.environ,
-                {"GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "pull_request"}), patch.object(release, "Publisher") as publisher:
+        with patch.object(release, "context", return_value=self.metadata), patch.dict(
+            release.os.environ, {"GITHUB_ACTIONS": "true", "GITHUB_EVENT_NAME": "pull_request"}
+        ), patch.object(release, "Publisher") as publisher:
             with self.assertRaises(ValueError):
                 release.publish(directory)
+
             publisher.assert_not_called()
 
     def test_snapshot_published_only_after_complete_verified_upload(self):
@@ -268,6 +367,7 @@ class ReleaseTests(unittest.TestCase):
         tag = "dev-" + COMMIT
         with self.assertRaises(RuntimeError):
             publisher.snapshot(tag, metadata, directory)
+
         self.assertTrue(publisher.releases[tag]["draft"])
         publisher.snapshot(tag, metadata, directory)
         self.assertFalse(publisher.releases[tag]["draft"])
@@ -278,7 +378,10 @@ class ReleaseTests(unittest.TestCase):
         tag = "dev-" + COMMIT
         publisher.snapshot(tag, metadata, directory)
         original = copy.deepcopy(publisher.releases[tag]["data"])
-        other, newer = self.make_bundle("rerun", {**self.metadata, "workflow_url": "https://github.com/Tomaxikz/daemon/actions/runs/2"})
+        other, newer = self.make_bundle(
+            "rerun",
+            {**self.metadata, "workflow_url": "https://github.com/Tomaxikz/daemon/actions/runs/2"},
+        )
         publisher.snapshot(tag, newer, other)
         self.assertEqual(publisher.releases[tag]["data"], original)
         self.assertEqual((other / "RELEASE.json").read_bytes(), original["RELEASE.json"])
@@ -289,6 +392,7 @@ class ReleaseTests(unittest.TestCase):
         publisher.tags["v1.2.3"] = OLD_COMMIT
         with self.assertRaises(ValueError):
             publisher.snapshot("v1.2.3", metadata, directory)
+
         self.assertEqual(publisher.tags["v1.2.3"], OLD_COMMIT)
 
     def test_stale_development_run_cannot_replace_alias(self):
@@ -302,13 +406,26 @@ class ReleaseTests(unittest.TestCase):
         directory, metadata = self.make_bundle()
         publisher = FakePublisher()
         publisher.tags["dev-latest"] = OLD_COMMIT
-        publisher.api("POST", "releases", {"tag_name": "dev-latest", "name": "Previous build", "body": "old notes",
-                                            "draft": False, "prerelease": True})
-        publisher.releases["dev-latest"]["data"] = {"wings_linux_amd64": b"old binary", "SHA256SUMS": b"old sums"}
+        publisher.api(
+            "POST",
+            "releases",
+            {
+                "tag_name": "dev-latest",
+                "name": "Previous build",
+                "body": "old notes",
+                "draft": False,
+                "prerelease": True,
+            },
+        )
+        publisher.releases["dev-latest"]["data"] = {
+            "wings_linux_amd64": b"old binary",
+            "SHA256SUMS": b"old sums",
+        }
         previous = copy.deepcopy(publisher.releases["dev-latest"])
         publisher.fail_upload = True
         with self.assertRaises(RuntimeError):
             publisher.promote_dev(metadata, directory)
+
         self.assertEqual(publisher.tags["dev-latest"], OLD_COMMIT)
         self.assertEqual(publisher.releases["dev-latest"], previous)
         publisher.promote_dev(metadata, directory)
@@ -322,8 +439,19 @@ class ReleaseTests(unittest.TestCase):
             metadata = {**self.metadata, "ref": "refs/tags/" + tag, "version": tag[1:]}
             directory, metadata = self.make_bundle(tag, metadata)
             publisher.snapshot(tag, metadata, directory)
+
         self.assertEqual(publisher.api("GET", "releases/latest")["tag_name"], "v2.0.0")
         self.assertTrue(publisher.releases["v2.1.0-rc.1"]["prerelease"])
+
+    def test_branded_versions_preserve_latest_ordering(self):
+        publisher = FakePublisher()
+        for tag in ("v1.1.0", "better-wings-v1.2", "better-wings-v1.1.9", "better-wings-v1.3-rc.1"):
+            ref = "refs/tags/" + tag
+            metadata = {**self.metadata, "ref": ref, "version": release.version_for(ref, COMMIT)}
+            directory, metadata = self.make_bundle(tag, metadata)
+            publisher.snapshot(tag, metadata, directory)
+        self.assertEqual(publisher.api("GET", "releases/latest")["tag_name"], "better-wings-v1.2")
+        self.assertTrue(publisher.releases["better-wings-v1.3-rc.1"]["prerelease"])
 
 
 if __name__ == "__main__":

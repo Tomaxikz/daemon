@@ -56,7 +56,11 @@ func newImportIdleReader(reader io.Reader, timeout time.Duration, closeFn func()
 	if timeout <= 0 {
 		return reader
 	}
-	return &importIdleReader{reader: reader, timeout: timeout, close: closeFn}
+	return &importIdleReader{
+		reader:  reader,
+		timeout: timeout,
+		close:   closeFn,
+	}
 }
 
 func (r *importIdleReader) Read(p []byte) (int, error) {
@@ -180,7 +184,12 @@ func beginImportProgress(uuid string, mode string) bool {
 	return true
 }
 
-func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod, progressMode string, wipe bool) error {
+func (s *Server) ImportNew(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation, transferType, authMethod, progressMode string,
+	wipe bool,
+) error {
 	if !beginImportProgress(s.ID(), progressMode) {
 		return ErrImportInProgress
 	}
@@ -206,7 +215,13 @@ func (s *Server) ImportNew(user, password, sshKey, sshKeyPassphrase, hostKeyFing
 	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, progressMode, nil)
 }
 
-func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod, progressMode string, wipe bool, selectedItems []string) error {
+func (s *Server) ImportNewSelected(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation, transferType, authMethod, progressMode string,
+	wipe bool,
+	selectedItems []string,
+) error {
 	if !beginImportProgress(s.ID(), progressMode) {
 		return ErrImportInProgress
 	}
@@ -232,7 +247,12 @@ func (s *Server) ImportNewSelected(user, password, sshKey, sshKeyPassphrase, hos
 	return s.executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, srcLocation, dstLocation, transferType, authMethod, progressMode, selectedItems)
 }
 
-func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation, transferType, authMethod, progressMode string, selectedItems []string) error {
+func (s *Server) executeImport(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation, transferType, authMethod, progressMode string,
+	selectedItems []string,
+) error {
 	uuid := s.ID()
 	var err error
 	started := time.Now()
@@ -355,7 +375,12 @@ func (s *Server) executeImport(user, password, sshKey, sshKeyPassphrase, hostKey
 	return err
 }
 
-func (s *Server) importFullSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation string, sessionKeys *SessionHostKeyStore) error {
+func (s *Server) importFullSFTP(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation string,
+	sessionKeys *SessionHostKeyStore,
+) error {
 	client, conn, err := s.connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return err
@@ -402,7 +427,13 @@ func (s *Server) importFullSFTP(user, password, sshKey, sshKeyPassphrase, hostKe
 	return s.walkAndDownloadSFTP(client, remotePath, dstLocation, false, "", true)
 }
 
-func (s *Server) importSelectedSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation string, selectedItems []string, sessionKeys *SessionHostKeyStore) error {
+func (s *Server) importSelectedSFTP(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation string,
+	selectedItems []string,
+	sessionKeys *SessionHostKeyStore,
+) error {
 	client, conn, err := s.connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return err
@@ -478,7 +509,13 @@ func (s *Server) importSelectedSFTP(user, password, sshKey, sshKeyPassphrase, ho
 	return nil
 }
 
-func (s *Server) walkAndDownloadSFTP(client *sftp.Client, remotePath, targetPath string, isRoot bool, selectedItem string, skipPerm bool) error {
+func (s *Server) walkAndDownloadSFTP(
+	client *sftp.Client,
+	remotePath, targetPath string,
+	isRoot bool,
+	selectedItem string,
+	skipPerm bool,
+) error {
 	return walkDirSFTP(client, remotePath, s, skipPerm, func(path string, info os.FileInfo) error {
 		var targetItemPath string
 
@@ -569,7 +606,12 @@ func (s *Server) downloadFileSFTP(client *sftp.Client, remotePath, localPath str
 	return nil
 }
 
-func (s *Server) importFullSCP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation string, sessionKeys *SessionHostKeyStore) error {
+func (s *Server) importFullSCP(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation string,
+	sessionKeys *SessionHostKeyStore,
+) error {
 	conn, err := s.connectSSH(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return err
@@ -600,7 +642,13 @@ func (s *Server) importFullSCP(user, password, sshKey, sshKeyPassphrase, hostKey
 	return s.scpDownloadRecursive(conn, srcLocation, targetPath)
 }
 
-func (s *Server) importSelectedSCP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation, dstLocation string, selectedItems []string, sessionKeys *SessionHostKeyStore) error {
+func (s *Server) importSelectedSCP(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation, dstLocation string,
+	selectedItems []string,
+	sessionKeys *SessionHostKeyStore,
+) error {
 	conn, err := s.connectSSH(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return err
@@ -650,7 +698,11 @@ func (s *Server) importSelectedSCP(user, password, sshKey, sshKeyPassphrase, hos
 	return nil
 }
 
-func (s *Server) importFullFTP(user, password, host string, port int, srcLocation, dstLocation string) error {
+func (s *Server) importFullFTP(
+	user, password, host string,
+	port int,
+	srcLocation, dstLocation string,
+) error {
 	client, err := s.connectFTP(user, password, host, port)
 	if err != nil {
 		return err
@@ -724,7 +776,12 @@ func (s *Server) importFullFTP(user, password, host string, port int, srcLocatio
 	return nil
 }
 
-func (s *Server) importSelectedFTP(user, password, host string, port int, srcLocation, dstLocation string, selectedItems []string) error {
+func (s *Server) importSelectedFTP(
+	user, password, host string,
+	port int,
+	srcLocation, dstLocation string,
+	selectedItems []string,
+) error {
 	client, err := s.connectFTP(user, password, host, port)
 	if err != nil {
 		return err
@@ -828,7 +885,11 @@ func (s *Server) importSelectedFTP(user, password, host string, port int, srcLoc
 	return nil
 }
 
-func (s *Server) walkAndDownloadFTP(client *goftp.Client, remotePath, targetPath string, skipPerm bool) error {
+func (s *Server) walkAndDownloadFTP(
+	client *goftp.Client,
+	remotePath, targetPath string,
+	skipPerm bool,
+) error {
 	files, err := client.ReadDir(remotePath)
 	if err != nil {
 		if skipPerm && isPermissionDenied(err) {
@@ -866,7 +927,11 @@ func (s *Server) walkAndDownloadFTP(client *goftp.Client, remotePath, targetPath
 	return nil
 }
 
-func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath string, fileSize int64) error {
+func (s *Server) downloadFileFTP(
+	client *goftp.Client,
+	remotePath, localPath string,
+	fileSize int64,
+) error {
 	if lastSlash := strings.LastIndex(localPath, "/"); lastSlash != -1 {
 		parentDir := filepath.Clean(localPath[:lastSlash])
 		if err := s.Filesystem().CreateDirectory("", parentDir); err != nil {
@@ -973,7 +1038,11 @@ func (s *Server) downloadFileFTP(client *goftp.Client, remotePath, localPath str
 	return nil
 }
 
-func (s *Server) connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, sessionKeys *SessionHostKeyStore) (*sftp.Client, *ssh.Client, error) {
+func (s *Server) connectSFTP(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	sessionKeys *SessionHostKeyStore,
+) (*sftp.Client, *ssh.Client, error) {
 	conn, err := s.connectSSH(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return nil, nil, err
@@ -989,7 +1058,11 @@ func (s *Server) connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFi
 	return client, conn, nil
 }
 
-func (s *Server) connectSSH(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, sessionKeys *SessionHostKeyStore) (*ssh.Client, error) {
+func (s *Server) connectSSH(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	sessionKeys *SessionHostKeyStore,
+) (*ssh.Client, error) {
 	authMethods := []ssh.AuthMethod{}
 	if strings.TrimSpace(sshKey) != "" {
 		var signer ssh.Signer
@@ -1215,7 +1288,12 @@ func isPublicIP(ip net.IP) bool {
 	if ip == nil {
 		return false
 	}
-	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+	if ip.IsLoopback() ||
+		ip.IsPrivate() ||
+		ip.IsLinkLocalUnicast() ||
+		ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() ||
+		ip.IsUnspecified() {
 		return false
 	}
 	for _, network := range blockedCIDRs {
@@ -1270,7 +1348,12 @@ func isNotFoundError(err error) bool {
 	return strings.Contains(msg, "no such file") || strings.Contains(msg, "file does not exist")
 }
 
-func resolveHostKeyCallback(expectedFingerprint string, sessionKeys *SessionHostKeyStore, host string, port int) (ssh.HostKeyCallback, error) {
+func resolveHostKeyCallback(
+	expectedFingerprint string,
+	sessionKeys *SessionHostKeyStore,
+	host string,
+	port int,
+) (ssh.HostKeyCallback, error) {
 	expected := strings.TrimSpace(expectedFingerprint)
 	hostKey := net.JoinHostPort(host, strconv.Itoa(port))
 
@@ -1581,7 +1664,12 @@ func shellEscape(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
-func countSFTPFiles(client *sftp.Client, remotePath string, s *Server, skipPerm bool) (ImportEstimate, error) {
+func countSFTPFiles(
+	client *sftp.Client,
+	remotePath string,
+	s *Server,
+	skipPerm bool,
+) (ImportEstimate, error) {
 	remotePath = strings.TrimSuffix(remotePath, "/")
 	if remotePath == "" {
 		remotePath = "/"
@@ -1624,7 +1712,12 @@ func countSFTPFiles(client *sftp.Client, remotePath string, s *Server, skipPerm 
 	return estimate, nil
 }
 
-func countFTPFiles(client *goftp.Client, remotePath string, s *Server, skipPerm bool) (ImportEstimate, error) {
+func countFTPFiles(
+	client *goftp.Client,
+	remotePath string,
+	s *Server,
+	skipPerm bool,
+) (ImportEstimate, error) {
 	remotePath = strings.TrimSuffix(remotePath, "/")
 	if remotePath == "" {
 		remotePath = "/"
@@ -1677,7 +1770,13 @@ func countFTPFiles(client *goftp.Client, remotePath string, s *Server, skipPerm 
 	return estimate, nil
 }
 
-func (s *Server) countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation string, skipPerm bool, sessionKeys *SessionHostKeyStore) (ImportEstimate, error) {
+func (s *Server) countSCPFiles(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation string,
+	skipPerm bool,
+	sessionKeys *SessionHostKeyStore,
+) (ImportEstimate, error) {
 	client, conn, err := s.connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return ImportEstimate{}, err
@@ -1693,7 +1792,13 @@ func (s *Server) countSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKey
 	return countSFTPFiles(client, srcLocation, s, skipPerm)
 }
 
-func (s *Server) countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string, port int, srcLocation string, selectedItems []string, sessionKeys *SessionHostKeyStore) (ImportEstimate, error) {
+func (s *Server) countSelectedSCPFiles(
+	user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host string,
+	port int,
+	srcLocation string,
+	selectedItems []string,
+	sessionKeys *SessionHostKeyStore,
+) (ImportEstimate, error) {
 	client, conn, err := s.connectSFTP(user, password, sshKey, sshKeyPassphrase, hostKeyFingerprint, host, port, sessionKeys)
 	if err != nil {
 		return ImportEstimate{}, err
@@ -1719,7 +1824,13 @@ func (s *Server) countSelectedSCPFiles(user, password, sshKey, sshKeyPassphrase,
 	return estimate, nil
 }
 
-func walkDirSFTP(client *sftp.Client, dir string, s *Server, skipPerm bool, callback func(path string, info os.FileInfo) error) error {
+func walkDirSFTP(
+	client *sftp.Client,
+	dir string,
+	s *Server,
+	skipPerm bool,
+	callback func(path string, info os.FileInfo) error,
+) error {
 	s.Log().WithField("dir", dir).Debug("Walking SFTP directory")
 
 	files, err := client.ReadDir(dir)
@@ -1754,7 +1865,12 @@ func walkDirSFTP(client *sftp.Client, dir string, s *Server, skipPerm bool, call
 	return nil
 }
 
-func walkDirFTP(client *goftp.Client, dir string, s *Server, callback func(path string, info os.FileInfo) error) error {
+func walkDirFTP(
+	client *goftp.Client,
+	dir string,
+	s *Server,
+	callback func(path string, info os.FileInfo) error,
+) error {
 	s.Log().WithField("dir", dir).Debug("Walking FTP directory")
 
 	files, err := client.ReadDir(dir)

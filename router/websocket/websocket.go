@@ -84,7 +84,12 @@ func NewTokenPayload(token []byte) (*tokens.WebsocketPayload, error) {
 }
 
 // GetHandler returns a new websocket handler using the context provided.
-func GetHandler(s *server.Server, w http.ResponseWriter, r *http.Request, c *gin.Context) (*Handler, error) {
+func GetHandler(
+	s *server.Server,
+	w http.ResponseWriter,
+	r *http.Request,
+	c *gin.Context,
+) (*Handler, error) {
 	upgrader := websocket.Upgrader{
 		EnableCompression: true,
 		// Ensure that the websocket request is originating from the Panel itself,
@@ -258,7 +263,11 @@ func (h *Handler) SendErrorJson(msg Message, err error, shouldLog ...bool) error
 	wsm.Args = []string{m}
 
 	if !isJWTError && (len(shouldLog) == 0 || (len(shouldLog) == 1 && shouldLog[0] == true)) {
-		h.server.Log().WithFields(log.Fields{"event": msg.Event, "error_identifier": u.String(), "error": err}).
+		h.server.Log().WithFields(log.Fields{
+			"event":            msg.Event,
+			"error_identifier": u.String(),
+			"error":            err,
+		}).
 			Errorf("error processing websocket event \"%s\"", msg.Event)
 	}
 

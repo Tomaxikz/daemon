@@ -129,12 +129,21 @@ func tarGzWithEmptyDir() ([]byte, error) {
 	gw := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gw)
 
-	if err := tw.WriteHeader(&tar.Header{Name: "empty/", Typeflag: tar.TypeDir, Mode: 0o755}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "empty/",
+		Typeflag: tar.TypeDir,
+		Mode:     0o755,
+	}); err != nil {
 		return nil, err
 	}
 
 	content := []byte("hello")
-	if err := tw.WriteHeader(&tar.Header{Name: "outside.txt", Typeflag: tar.TypeReg, Mode: 0o644, Size: int64(len(content))}); err != nil {
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "outside.txt",
+		Typeflag: tar.TypeReg,
+		Mode:     0o644,
+		Size:     int64(len(content)),
+	}); err != nil {
 		return nil, err
 	}
 	if _, err := tw.Write(content); err != nil {

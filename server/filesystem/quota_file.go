@@ -17,7 +17,11 @@ type quotaFile struct {
 }
 
 func newQuotaFile(fs *Filesystem, file ufs.File, size int64) ufs.File {
-	return &quotaFile{File: file, fs: fs, size: size}
+	return &quotaFile{
+		File: file,
+		fs:   fs,
+		size: size,
+	}
 }
 
 func (f *quotaFile) Write(p []byte) (int, error) {

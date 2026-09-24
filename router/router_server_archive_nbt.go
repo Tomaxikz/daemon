@@ -147,7 +147,10 @@ func postServerArchiveExtract(c *gin.Context) {
 
 func betterFilesCleanServerPath(raw string, allowRoot bool) (string, bool) {
 	cleaned := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
-	if cleaned == "" || strings.Contains(cleaned, "\x00") || !utf8.ValidString(cleaned) || len(cleaned) > 4096 {
+	if cleaned == "" ||
+		strings.Contains(cleaned, "\x00") ||
+		!utf8.ValidString(cleaned) ||
+		len(cleaned) > 4096 {
 		return "", false
 	}
 	if !strings.HasPrefix(cleaned, "/") {
@@ -184,7 +187,11 @@ func betterFilesOpenServerRegularFile(fs *serverfs.Filesystem, raw string) (ufs.
 	return file, displayPath, true
 }
 
-func betterFilesResolveServerDirectory(fs *serverfs.Filesystem, raw string, mustExist bool) (string, bool) {
+func betterFilesResolveServerDirectory(
+	fs *serverfs.Filesystem,
+	raw string,
+	mustExist bool,
+) (string, bool) {
 	displayPath, ok := betterFilesCleanServerPath(raw, true)
 	if !ok {
 		return "", false
@@ -212,7 +219,9 @@ func betterFilesIsZipFile(value string) bool {
 
 func betterFilesIsTarFile(value string) bool {
 	lower := strings.ToLower(value)
-	return strings.HasSuffix(lower, ".tar") || strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
+	return strings.HasSuffix(lower, ".tar") ||
+		strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz")
 }
 
 func betterFilesListArchiveEntries(file ufs.File, displayPath string) ([]betterFilesArchiveEntry, int, error) {
@@ -268,7 +277,8 @@ func betterFilesListTarEntries(file ufs.File, displayPath string) ([]betterFiles
 		return nil, 0, err
 	}
 	var archiveReader io.Reader = file
-	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") || strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
+	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") ||
+		strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
 		gzipReader, err := gzip.NewReader(file)
 		if err != nil {
 			return nil, 0, errors.New("could not open gzip archive")
@@ -320,7 +330,10 @@ func betterFilesListTarEntries(file ufs.File, displayPath string) ([]betterFiles
 func betterFilesCleanArchiveEntryPath(value string) (string, bool) {
 	entryPath := path.Clean(strings.ReplaceAll(value, "\\", "/"))
 	entryPath = strings.TrimPrefix(entryPath, "/")
-	if entryPath == "." || entryPath == "" || strings.HasPrefix(entryPath, "../") || strings.Contains(entryPath, "/../") {
+	if entryPath == "." ||
+		entryPath == "" ||
+		strings.HasPrefix(entryPath, "../") ||
+		strings.Contains(entryPath, "/../") {
 		return "", false
 	}
 	return entryPath, true
@@ -378,7 +391,13 @@ type betterFilesArchiveWritableFilesystem interface {
 	CreateDirectory(string, string) error
 }
 
-func betterFilesExtractArchiveEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
+func betterFilesExtractArchiveEntries(
+	fs betterFilesArchiveWritableFilesystem,
+	file ufs.File,
+	displayPath string,
+	destination string,
+	selections []betterFilesArchiveExtractSelection,
+) (int, error) {
 	if betterFilesIsZipFile(displayPath) {
 		return betterFilesExtractZipEntries(fs, file, destination, selections)
 	}
@@ -392,7 +411,12 @@ func betterFilesExtractOutputPath(destination string, entryPath string) string {
 	return path.Clean(path.Join(destination, entryPath))
 }
 
-func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
+func betterFilesExtractZipEntries(
+	fs betterFilesArchiveWritableFilesystem,
+	file ufs.File,
+	destination string,
+	selections []betterFilesArchiveExtractSelection,
+) (int, error) {
 	stat, err := file.Stat()
 	if err != nil {
 		return 0, err
@@ -441,12 +465,19 @@ func betterFilesExtractZipEntries(fs betterFilesArchiveWritableFilesystem, file 
 	return extracted, nil
 }
 
-func betterFilesExtractTarEntries(fs betterFilesArchiveWritableFilesystem, file ufs.File, displayPath string, destination string, selections []betterFilesArchiveExtractSelection) (int, error) {
+func betterFilesExtractTarEntries(
+	fs betterFilesArchiveWritableFilesystem,
+	file ufs.File,
+	displayPath string,
+	destination string,
+	selections []betterFilesArchiveExtractSelection,
+) (int, error) {
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return 0, err
 	}
 	var archiveReader io.Reader = file
-	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") || strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
+	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") ||
+		strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
 		gzipReader, err := gzip.NewReader(file)
 		if err != nil {
 			return 0, errors.New("could not open gzip archive")

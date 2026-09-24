@@ -24,7 +24,9 @@ import (
 	serverfs "github.com/pterodactyl/wings/server/filesystem"
 )
 
-func searchV2Number(value int64) *int64 { return &value }
+func searchV2Number(value int64) *int64 {
+	return &value
+}
 
 func searchV2Names(results []betterFilesEntry) []string {
 	names := make([]string, 0, len(results))
@@ -34,7 +36,12 @@ func searchV2Names(results []betterFilesEntry) []string {
 	return names
 }
 
-func runSearchV2Test(t *testing.T, fs *serverfs.Filesystem, root string, data searchV2Payload) []betterFilesEntry {
+func runSearchV2Test(
+	t *testing.T,
+	fs *serverfs.Filesystem,
+	root string,
+	data searchV2Payload,
+) []betterFilesEntry {
 	t.Helper()
 	if data.PerPage == 0 {
 		data.PerPage = 100
@@ -45,7 +52,12 @@ func runSearchV2Test(t *testing.T, fs *serverfs.Filesystem, root string, data se
 	return results
 }
 
-func requestSearchV2(handler http.Handler, serverID, body string, ctx context.Context, authorized bool) *httptest.ResponseRecorder {
+func requestSearchV2(
+	handler http.Handler,
+	serverID, body string,
+	ctx context.Context,
+	authorized bool,
+) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(http.MethodPost, "/api/servers/"+serverID+"/files/search", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	if authorized {
@@ -115,8 +127,16 @@ func TestSearchV2GlobContentUnicodeAndIgnoredFiles(t *testing.T) {
 	writeBetterFilesFixture(t, fs, "/ignored/secret.yml", []byte("name: HéLLo 😀\n"))
 	writeBetterFilesFixture(t, fs, "/config/binary.yml", []byte{0xff, 'x'})
 	results := runSearchV2Test(t, fs, "/", searchV2Payload{
-		PathFilter:    &searchV2PathFilter{Include: []string{"**/*.yml"}, Exclude: []string{"**/other.yml"}, CaseInsensitive: true},
-		ContentFilter: &searchV2ContentFilter{Query: "héllo 😀", MaxSearchSize: searchV2Number(1024), CaseInsensitive: true},
+		PathFilter: &searchV2PathFilter{
+			Include:         []string{"**/*.yml"},
+			Exclude:         []string{"**/other.yml"},
+			CaseInsensitive: true,
+		},
+		ContentFilter: &searchV2ContentFilter{
+			Query:           "héllo 😀",
+			MaxSearchSize:   searchV2Number(1024),
+			CaseInsensitive: true,
+		},
 	})
 	require.Equal(t, []string{"config/paper.yml"}, searchV2Names(results))
 }
@@ -131,7 +151,15 @@ func TestSearchV2GlobOrderingExclusionsAndByteSemantics(t *testing.T) {
 		filter   searchV2PathFilter
 		expected []string
 	}{
-		{"basename at any depth", searchV2PathFilter{Include: []string{"*.yml"}, Exclude: []string{"cache/"}, CaseInsensitive: true}, []string{"root.yml", "nested/paper.yml", "nested/PAPER.YML", "nested/other.yml", "é.yml", "😀.yml", "#literal.yml"}},
+		{
+			"basename at any depth",
+			searchV2PathFilter{
+				Include:         []string{"*.yml"},
+				Exclude:         []string{"cache/"},
+				CaseInsensitive: true,
+			},
+			[]string{"root.yml", "nested/paper.yml", "nested/PAPER.YML", "nested/other.yml", "é.yml", "😀.yml", "#literal.yml"},
+		},
 		{"server root anchor", searchV2PathFilter{Include: []string{"/*.yml"}}, []string{"root.yml", "é.yml", "😀.yml", "#literal.yml"}},
 		{"ordered include negation", searchV2PathFilter{Include: []string{"*.yml", "!**/other.yml"}, Exclude: []string{"cache/"}}, []string{"root.yml", "nested/paper.yml", "é.yml", "😀.yml", "#literal.yml"}},
 		{"ordered exclude reinclude", searchV2PathFilter{Include: []string{"*.yml"}, Exclude: []string{"*.yml", "!/root.yml"}}, []string{"root.yml"}},
@@ -166,14 +194,18 @@ func TestSearchV2ASCIIOnlyCaseFolding(t *testing.T) {
 	}{
 		{"mixed", false, false}, {"mixed", true, true}, {"ä", true, false}, {"Ä 😀", true, true},
 	} {
-		results := runSearchV2Test(t, fs, "/", searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: query.query, CaseInsensitive: query.insensitive}})
+		results := runSearchV2Test(t, fs, "/", searchV2Payload{
+			ContentFilter: &searchV2ContentFilter{Query: query.query, CaseInsensitive: query.insensitive},
+		})
 		require.Equal(t, query.want, len(results) == 1)
 	}
 	for _, pattern := range []struct {
 		pattern string
 		want    bool
 	}{{"ä.txt", false}, {"Ä.txt", true}} {
-		results := runSearchV2Test(t, fs, "/", searchV2Payload{PathFilter: &searchV2PathFilter{Include: []string{pattern.pattern}, CaseInsensitive: true}})
+		results := runSearchV2Test(t, fs, "/", searchV2Payload{
+			PathFilter: &searchV2PathFilter{Include: []string{pattern.pattern}, CaseInsensitive: true},
+		})
 		require.Equal(t, pattern.want, len(results) == 1)
 	}
 }
@@ -194,7 +226,9 @@ func TestSearchV2CharacterClassesPreserveRangesAndLiteralBrackets(t *testing.T) 
 		{"[]a].txt", true, []string{"].txt", "a.txt", "A.txt"}},
 		{"[!A-Z].txt", true, []string{"_.txt", "].txt"}},
 	} {
-		results := runSearchV2Test(t, fs, "/", searchV2Payload{PathFilter: &searchV2PathFilter{Include: []string{test.pattern}, CaseInsensitive: test.insensitive}})
+		results := runSearchV2Test(t, fs, "/", searchV2Payload{
+			PathFilter: &searchV2PathFilter{Include: []string{test.pattern}, CaseInsensitive: test.insensitive},
+		})
 		require.ElementsMatch(t, test.expected, searchV2Names(results), test.pattern)
 	}
 }
@@ -208,7 +242,9 @@ func TestSearchV2UnreadableFileDoesNotAbortReadableMatches(t *testing.T) {
 	writeBetterFilesFixture(t, s.Filesystem(), "/blocked.txt", []byte("match"))
 	blocked := filepath.Join(s.Filesystem().Path(), "blocked.txt")
 	require.NoError(t, os.Chmod(blocked, 0))
-	t.Cleanup(func() { _ = os.Chmod(blocked, 0o600) })
+	t.Cleanup(func() {
+		_ = os.Chmod(blocked, 0o600)
+	})
 	response := requestSearchV2(handler, s.ID(), `{"content_filter":{"query":"match"}}`, nil, true)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	var payload struct {
@@ -241,18 +277,33 @@ func TestSearchV2IncludeUnmatchedBinaryAndEmptyQueries(t *testing.T) {
 	writeBetterFilesFixture(t, fs, "/binary-large", append([]byte{0xff}, bytes.Repeat([]byte("x"), 30)...))
 	writeBetterFilesFixture(t, fs, "/nul.bin", []byte{'m', 'a', 0, 't', 'c', 'h'})
 	writeBetterFilesFixture(t, fs, "/empty.txt", nil)
-	results := runSearchV2Test(t, fs, "/", searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: "match", MaxSearchSize: searchV2Number(6), IncludeUnmatched: true}})
+	results := runSearchV2Test(t, fs, "/", searchV2Payload{
+		ContentFilter: &searchV2ContentFilter{
+			Query:            "match",
+			MaxSearchSize:    searchV2Number(6),
+			IncludeUnmatched: true,
+		},
+	})
 	require.ElementsMatch(t, []string{"match.txt", "large.txt", "binary-large"}, searchV2Names(results))
 	results = runSearchV2Test(t, fs, "/", searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: "", MaxSearchSize: searchV2Number(6)}})
 	require.ElementsMatch(t, []string{"match.txt", "other.txt", "nul.bin", "empty.txt"}, searchV2Names(results))
 	results = runSearchV2Test(t, fs, "/", searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: "", MaxSearchSize: searchV2Number(0)}})
 	require.Equal(t, []string{"empty.txt"}, searchV2Names(results))
-	results = runSearchV2Test(t, fs, "/", searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: "absent", MaxSearchSize: searchV2Number(0), IncludeUnmatched: true}})
+	results = runSearchV2Test(t, fs, "/", searchV2Payload{
+		ContentFilter: &searchV2ContentFilter{
+			Query:            "absent",
+			MaxSearchSize:    searchV2Number(0),
+			IncludeUnmatched: true,
+		},
+	})
 	require.ElementsMatch(t, []string{"match.txt", "other.txt", "large.txt", "binary-small", "binary-large", "nul.bin"}, searchV2Names(results))
 	// The upstream heuristic examines the head only; later non-UTF8 bytes and
 	// MIME labels do not turn a valid head into a rejected content search.
 	writeBetterFilesFixture(t, fs, "/late-binary", append(bytes.Repeat([]byte("a"), 128), 0xff, 'm', 'a', 't', 'c', 'h'))
-	results = runSearchV2Test(t, fs, "/", searchV2Payload{PathFilter: &searchV2PathFilter{Include: []string{"late-binary"}}, ContentFilter: &searchV2ContentFilter{Query: "match"}})
+	results = runSearchV2Test(t, fs, "/", searchV2Payload{
+		PathFilter:    &searchV2PathFilter{Include: []string{"late-binary"}},
+		ContentFilter: &searchV2ContentFilter{Query: "match"},
+	})
 	require.Len(t, results, 1)
 	for _, input := range []struct {
 		head  []byte
@@ -307,7 +358,14 @@ func TestStreamSearchV2TextAcrossBufferBoundariesAndReadLimits(t *testing.T) {
 func TestSearchV2HeadAndTotalReadBudget(t *testing.T) {
 	fs := newBetterFilesTestFilesystem(t, 0)
 	writeBetterFilesFixture(t, fs, "/large", bytes.Repeat([]byte("x"), 1024*1024))
-	data := searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: "absent", MaxSearchSize: searchV2Number(0), IncludeUnmatched: true}, PerPage: 100}
+	data := searchV2Payload{
+		ContentFilter: &searchV2ContentFilter{
+			Query:            "absent",
+			MaxSearchSize:    searchV2Number(0),
+			IncludeUnmatched: true,
+		},
+		PerPage: 100,
+	}
 	require.NoError(t, validateSearchV2Payload(&data))
 	budget := &searchV2Budget{readRemaining: searchV2HeadBytes}
 	results, err := runSearchV2(context.Background(), fs, "/", data, budget)

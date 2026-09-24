@@ -172,9 +172,21 @@ func TestSetstatMode(t *testing.T) {
 		mode     uint32
 		expected uint32
 	}{
-		{name: "file permissions", mode: 0o600, expected: 0o600},
-		{name: "default permissions", mode: 0o000, expected: 0o644},
-		{name: "directory permissions", mode: 0o040700, expected: 0o755},
+		{
+			name:     "file permissions",
+			mode:     0o600,
+			expected: 0o600,
+		},
+		{
+			name:     "default permissions",
+			mode:     0o000,
+			expected: 0o644,
+		},
+		{
+			name:     "directory permissions",
+			mode:     0o040700,
+			expected: 0o755,
+		},
 	}
 
 	for _, tt := range tests {

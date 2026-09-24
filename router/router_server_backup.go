@@ -321,7 +321,11 @@ func isBlockedBackupRestoreIP(host string, ip net.IP) bool {
 		return true
 	}
 	addr = addr.Unmap()
-	if !addr.IsGlobalUnicast() || addr.IsPrivate() || addr.IsLoopback() || addr.IsLinkLocalUnicast() || isExplicitlyBlockedBackupRestoreIP(addr) {
+	if !addr.IsGlobalUnicast() ||
+		addr.IsPrivate() ||
+		addr.IsLoopback() ||
+		addr.IsLinkLocalUnicast() ||
+		isExplicitlyBlockedBackupRestoreIP(addr) {
 		return !isAllowedBackupRestoreDestination(host, addr)
 	}
 	return false
