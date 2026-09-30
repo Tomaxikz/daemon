@@ -102,7 +102,8 @@ Important limits:
 
 - Upload leaves the container; download enters it. Caps permit brief bursts and are not bandwidth reservations.
 - Host-side SFTP, HTTP transfers and backups are outside these caps.
-- Firewall rules have no implicit established-connection bypass; include needed return-traffic and DNS rules.
+- Explicit firewall rules take precedence over reply allowances. TCP/UDP replies and related ICMP errors are allowed only when the connection's original traffic passes the current policy; new connections still need permission.
+- Allocation-scoped rules distinguish published IPs. Direct traffic on a shared port is dropped when the selected public IP cannot be identified.
 - Foreign firewall/queue rules are not overwritten. Enforcement failures can block startup or quarantine a server.
 - This does not prevent upstream saturation or protect against a host/Docker administrator.
 

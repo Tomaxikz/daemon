@@ -1636,7 +1636,7 @@ index 7e5def70..41ac1e4a 100644
  	return out
  }
 diff --git a/environment/docker/environment.go b/environment/docker/environment.go
-index 47f2d338..3fc095a4 100644
+index 47f2d338..0c6e51f2 100644
 --- a/environment/docker/environment.go
 +++ b/environment/docker/environment.go
 @@ -3,8 +3,8 @@ package docker
@@ -1657,24 +1657,25 @@ index 47f2d338..3fc095a4 100644
  	"github.com/pterodactyl/wings/remote"
  	"github.com/pterodactyl/wings/system"
  )
-@@ -27,7 +28,15 @@ type Metadata struct {
+@@ -27,7 +28,16 @@ type Metadata struct {
  var _ environment.ProcessEnvironment = (*Environment)(nil)
  
  type Environment struct {
 -	mu sync.RWMutex
-+	mu                 sync.RWMutex
-+	networkMu          sync.Mutex
-+	networkStatus      atomic.Pointer[networkpolicy.Status]
-+	networkReconcile   atomic.Bool
-+	networkMonitor     atomic.Bool
-+	networkVerified    atomic.Bool
-+	networkMonitorStop context.CancelFunc
-+	networkContainerID string
-+	networkDeleted     bool
++	mu                   sync.RWMutex
++	networkMu            sync.Mutex
++	networkStatus        atomic.Pointer[networkpolicy.Status]
++	networkReconcile     atomic.Bool
++	networkMonitor       atomic.Bool
++	networkVerified      atomic.Bool
++	networkMonitorStop   context.CancelFunc
++	networkContainerID   string
++	networkAppliedPolicy *networkpolicy.Policy // Guarded by networkMu; records the last verified kernel policy.
++	networkDeleted       bool
  
  	// The public identifier for this environment. In this case it is the Docker container
  	// name that will be used for all instances created under it.
-@@ -45,9 +54,6 @@ type Environment struct {
+@@ -45,9 +55,6 @@ type Environment struct {
  	// the running container instance.
  	stream *types.HijackedResponse
  
@@ -1684,7 +1685,7 @@ index 47f2d338..3fc095a4 100644
  	emitter *events.Bus
  
  	logCallbackMx sync.Mutex
-@@ -101,6 +107,7 @@ func (e *Environment) SetStream(s *types.HijackedResponse) {
+@@ -101,6 +108,7 @@ func (e *Environment) SetStream(s *types.HijackedResponse) {
  func (e *Environment) IsAttached() bool {
  	e.mu.RLock()
  	defer e.mu.RUnlock()
@@ -1692,7 +1693,7 @@ index 47f2d338..3fc095a4 100644
  	return e.stream != nil
  }
  
-@@ -122,8 +129,10 @@ func (e *Environment) Exists() (bool, error) {
+@@ -122,8 +130,10 @@ func (e *Environment) Exists() (bool, error) {
  		if client.IsErrNotFound(err) {
  			return false, nil
  		}
@@ -1703,7 +1704,7 @@ index 47f2d338..3fc095a4 100644
  	return true, nil
  }
  
-@@ -141,6 +150,7 @@ func (e *Environment) IsRunning(ctx context.Context) (bool, error) {
+@@ -141,6 +151,7 @@ func (e *Environment) IsRunning(ctx context.Context) (bool, error) {
  	if err != nil {
  		return false, err
  	}
@@ -1711,7 +1712,7 @@ index 47f2d338..3fc095a4 100644
  	return c.State.Running, nil
  }
  
-@@ -161,9 +171,19 @@ func (e *Environment) ExitState() (uint32, bool, error) {
+@@ -161,9 +172,19 @@ func (e *Environment) ExitState() (uint32, bool, error) {
  		if client.IsErrNotFound(err) {
  			return 1, false, nil
  		}
@@ -1734,10 +1735,10 @@ index 47f2d338..3fc095a4 100644
  // Config returns the environment configuration allowing a process to make
 diff --git a/environment/docker/network_policy.go b/environment/docker/network_policy.go
 new file mode 100644
-index 00000000..c27a8b91
+index 00000000..480f5fe0
 --- /dev/null
 +++ b/environment/docker/network_policy.go
-@@ -0,0 +1,1360 @@
+@@ -0,0 +1,1417 @@
 +package docker
 +
 +import (
@@ -2583,6 +2584,7 @@ index 00000000..c27a8b91
 +
 +	p, err := networkpolicy.Load(config.Get().System.RootDirectory, e.Id)
 +	protect := p.Required(networkCeiling()) || err != nil
++	retainVerified := false
 +	e.networkVerified.Store(false)
 +	e.storeNetworkStatus(e.pendingNetworkStatus(p))
 +	defer func() {
@@ -2591,7 +2593,7 @@ index 00000000..c27a8b91
 +		}
 +
 +		status := e.failNetworkStatus(p, result)
-+		if !protect {
++		if !protect || retainVerified {
 +			return
 +		}
 +
@@ -2670,7 +2672,35 @@ index 00000000..c27a8b91
 +	if err := e.verifyRuntimeContainer(p, c); err != nil {
 +		return err
 +	}
++	allocations := e.Configuration.Allocations()
++	if p.Revision > 0 {
++		if err := networkpolicy.ValidateEnforcement(p, allocations.Mappings, networkCeiling()); err != nil {
++			return err
++		}
++	}
++
++	previous := e.networkAppliedPolicy
++	if previous != nil && c.ID == e.networkContainerID &&
++		previous.Effective(networkCeiling()) == p.Effective(networkCeiling()) &&
++		e.verifyNetworkPolicy(ctx, *previous, p, c) == nil {
++		// Identical verified shaping needs no gate. The nft batch either
++		// replaces this server's table or leaves its previous rules installed.
++		retainVerified, err = e.replaceLiveFirewall(ctx, b, p, func(checkCtx context.Context) bool {
++			current, inspectErr := e.ContainerInspect(checkCtx)
++			return inspectErr == nil && current.ID == c.ID &&
++				e.verifyNetworkPolicy(checkCtx, *previous, p, current) == nil
++		})
++		if err != nil {
++			return err
++		}
++
++		e.storeNetworkStatus(e.appliedNetworkStatus(p, c.ID))
++		return nil
++	}
 +	if err := b.Firewall(ctx, e.Id, p, nil, true); err != nil {
++		return err
++	}
++	if err := b.VerifyFirewall(ctx, e.Id, p, nil, true); err != nil {
 +		return err
 +	}
 +	if c.HostConfig == nil ||
@@ -2683,14 +2713,8 @@ index 00000000..c27a8b91
 +		return errors.New("unsupported container privileges or network attachments")
 +	}
 +
-+	allocations := e.Configuration.Allocations()
 +	if !samePortBindings(c.HostConfig.PortBindings, allocations.DockerBindings()) {
 +		return errors.New("allocations changed; restart the server before applying its policy")
-+	}
-+	if p.Revision > 0 {
-+		if err := networkpolicy.ValidateEnforcement(p, allocations.Mappings, networkCeiling()); err != nil {
-+			return err
-+		}
 +	}
 +	endpoint := c.NetworkSettings.Networks[name]
 +	if endpoint == nil {
@@ -2762,8 +2786,26 @@ index 00000000..c27a8b91
 +	return nil
 +}
 +
++func (e *Environment) replaceLiveFirewall(
++	ctx context.Context,
++	b networkpolicy.Backend,
++	p networkpolicy.Policy,
++	verifyPrevious func(context.Context) bool,
++) (bool, error) {
++	assigned := e.Configuration.Allocations().Mappings
++	if err := b.Firewall(ctx, e.Id, p, assigned, false); err != nil {
++		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
++		defer cancel()
++		return verifyPrevious(checkCtx), err
++	}
++
++	// A successful commit with unreadable or mismatched state must quarantine.
++	return false, b.VerifyFirewall(ctx, e.Id, p, assigned, false)
++}
++
 +func (e *Environment) appliedNetworkStatus(p networkpolicy.Policy, containerID string) networkpolicy.Status {
 +	e.networkContainerID = containerID
++	e.networkAppliedPolicy = &p
 +	e.networkVerified.Store(true)
 +	if p.Revision == 0 || p.PolicyHash == "" {
 +		return e.pendingNetworkStatus(p)
@@ -2805,6 +2847,28 @@ index 00000000..c27a8b91
 +func (e *Environment) verifyNetwork(
 +	ctx context.Context,
 +	p networkpolicy.Policy,
++	c container.InspectResponse,
++) error {
++	if !e.networkManaged(c) {
++		return e.verifyNetworkPolicy(ctx, p, p, c)
++	}
++
++	lease, err := e.runtimeLease(ctx)
++	if err != nil {
++		return err
++	}
++	if lease != nil {
++		defer lease.Close()
++	}
++
++	return e.verifyNetworkPolicy(ctx, p, p, c)
++}
++
++// The caller holds the runtime lease for a managed network. During a live update,
++// its binding names desired state while the kernel can retain the applied policy.
++func (e *Environment) verifyNetworkPolicy(
++	ctx context.Context,
++	p, runtimePolicy networkpolicy.Policy,
 +	c container.InspectResponse,
 +) error {
 +	allocations := e.Configuration.Allocations()
@@ -2852,14 +2916,7 @@ index 00000000..c27a8b91
 +	if endpoint == nil {
 +		return errors.New("NSM network endpoint is missing")
 +	}
-+	lease, err := e.runtimeLease(ctx)
-+	if err != nil {
-+		return err
-+	}
-+	if lease != nil {
-+		defer lease.Close()
-+	}
-+	if err := e.verifyRuntimeContainer(p, c); err != nil {
++	if err := e.verifyRuntimeContainer(runtimePolicy, c); err != nil {
 +		return err
 +	}
 +
@@ -3047,6 +3104,7 @@ index 00000000..c27a8b91
 +	defer func() {
 +		if result == nil {
 +			e.networkDeleted = true
++			e.networkAppliedPolicy = nil
 +		}
 +	}()
 +
@@ -3100,10 +3158,10 @@ index 00000000..c27a8b91
 +}
 diff --git a/environment/docker/network_policy_test.go b/environment/docker/network_policy_test.go
 new file mode 100644
-index 00000000..ec917da3
+index 00000000..9d166b9d
 --- /dev/null
 +++ b/environment/docker/network_policy_test.go
-@@ -0,0 +1,825 @@
+@@ -0,0 +1,931 @@
 +package docker
 +
 +import (
@@ -3929,6 +3987,112 @@ index 00000000..ec917da3
 +	require.ErrorIs(t, err, ErrNetworkConflict)
 +	require.ErrorIs(t, e.ReconcileNetwork(context.Background()), ErrNetworkConflict)
 +}
++
++func TestLiveFirewallReplacementPreservesOnlyVerifiedPreviousState(t *testing.T) {
++	for _, test := range []struct {
++		name        string
++		failAt      int
++		oldVerified bool
++		readback    string
++		retain      bool
++		cancel      bool
++	}{
++		{name: "lookup failure retains verified rules", failAt: 1, oldVerified: true, retain: true},
++		{name: "check failure retains verified rules", failAt: 2, oldVerified: true, retain: true},
++		{name: "commit failure retains verified rules", failAt: 3, oldVerified: true, retain: true},
++		{name: "cancellation rechecks independently", failAt: 3, oldVerified: true, retain: true, cancel: true},
++		{name: "commit failure with prior drift quarantines", failAt: 3},
++		{name: "readback failure quarantines", failAt: 4},
++		{name: "malformed readback quarantines", readback: "{"},
++		{name: "missing rules quarantine", readback: `{"nftables":[]}`},
++		{name: "verified replacement"},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			e := networkTestEnvironment(t, func(http.ResponseWriter, *http.Request) {
++				t.Fatal("replacement must not call Docker without a failed commit")
++			})
++			e.Configuration.SetSettings(assignedSettings())
++			old := testPolicy(t, 1, 1)
++			e.storeNetworkStatus(e.appliedNetworkStatus(old, "container"))
++			desired := testPolicy(t, 2, 1)
++			desired.Body.Firewall.Enabled = true
++			hash, err := desired.CalculatedHash()
++			require.NoError(t, err)
++			desired.PolicyHash = hash
++			e.storeNetworkStatus(e.pendingNetworkStatus(desired))
++
++			_, _, table, err := networkpolicy.Names(e.Id)
++			require.NoError(t, err)
++			owned := `{"nftables":[{"table":{"family":"bridge","name":"` + table + `","comment":"wings-networkstats:` + e.Id + `"}}]}`
++			script, err := networkpolicy.Ruleset(e.Id, desired, assignedSettings().Allocations.Mappings, false)
++			require.NoError(t, err)
++			var document struct {
++				NFTables []map[string]json.RawMessage `json:"nftables"`
++			}
++			require.NoError(t, json.Unmarshal([]byte(script), &document))
++			var objects []json.RawMessage
++			for _, command := range document.NFTables {
++				objects = append(objects, command["add"])
++			}
++			live, err := json.Marshal(map[string]any{"nftables": objects})
++			require.NoError(t, err)
++			if test.readback != "" {
++				live = []byte(test.readback)
++			}
++
++			ctx, cancel := context.WithCancel(context.Background())
++			defer cancel()
++			failure := errors.New("injected nft failure")
++			calls := 0
++			backend := networkpolicy.Backend{Run: func(_ context.Context, _ *os.File, _ string, command string, _ ...string) ([]byte, error) {
++				calls++
++				require.Equal(t, "nft", command, "firewall updates never mutate shaping")
++				if calls == test.failAt {
++					if test.cancel {
++						cancel()
++					}
++					return nil, failure
++				}
++				if calls == 1 {
++					return []byte(owned), nil
++				}
++				return live, nil
++			}}
++			rechecks := 0
++			retain, err := e.replaceLiveFirewall(ctx, backend, desired, func(checkCtx context.Context) bool {
++				rechecks++
++				require.NoError(t, checkCtx.Err(), "old enforcement verification survives request cancellation")
++				deadline, ok := checkCtx.Deadline()
++				require.True(t, ok)
++				require.Positive(t, time.Until(deadline))
++				require.LessOrEqual(t, time.Until(deadline), 10*time.Second)
++				return test.oldVerified
++			})
++			require.Equal(t, test.retain, retain)
++			if test.name == "verified replacement" {
++				require.NoError(t, err)
++				e.storeNetworkStatus(e.appliedNetworkStatus(desired, "container"))
++				require.Equal(t, desired, *e.networkAppliedPolicy)
++				require.Equal(t, uint64(2), e.networkStatusSnapshot().AppliedRevision)
++			} else {
++				require.Error(t, err)
++				e.failNetworkStatus(desired, err)
++				require.Equal(t, old, *e.networkAppliedPolicy)
++				status := e.networkStatusSnapshot()
++				require.Equal(t, "failed", status.State)
++				require.Equal(t, uint64(1), status.AppliedRevision)
++				require.Equal(t, desired, status.Desired)
++			}
++			if test.failAt > 0 && test.failAt < 4 {
++				require.Equal(t, 1, rechecks)
++				require.Equal(t, test.failAt, calls)
++			} else {
++				require.Zero(t, rechecks, "readback failures cannot retain old state after a successful commit")
++				require.Equal(t, 4, calls)
++			}
++		})
++	}
++}
 diff --git a/environment/docker/power.go b/environment/docker/power.go
 index 34570a3e..f5609891 100644
 --- a/environment/docker/power.go
@@ -4328,12 +4492,441 @@ index 9e2465a9..281ed037 100644
  golang.org/x/xerrors v0.0.0-20190717185122-a985d3407aa7/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
  golang.org/x/xerrors v0.0.0-20191011141410-1b5146add898/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
  golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
+diff --git a/internal/networkpolicy/allocation.go b/internal/networkpolicy/allocation.go
+new file mode 100644
+index 00000000..58d9fb91
+--- /dev/null
++++ b/internal/networkpolicy/allocation.go
+@@ -0,0 +1,89 @@
++package networkpolicy
++
++import "slices"
++
++type policyAllocationMatch struct {
++	allocationMatch
++	path string
++	drop bool
++}
++
++func policyAllocationMatches(
++	rule Rule,
++	variants []allocationMatch,
++	assigned map[string][]int,
++	original bool,
++) ([]policyAllocationMatch, error) {
++	var matches []policyAllocationMatch
++	for _, variant := range variants {
++		if rule.Direction != "inbound" || rule.GroupID == nil && (rule.CIDR == nil || original) {
++			matches = append(matches, policyAllocationMatch{allocationMatch: variant})
++			continue
++		}
++
++		matches = append(matches, policyAllocationMatch{allocationMatch: variant, path: "dnat"})
++		if rule.GroupID == nil {
++			matches = append(matches, policyAllocationMatch{allocationMatch: variant, path: "direct"})
++			matches = append(matches, policyAllocationMatch{allocationMatch: variant, path: "reply"})
++			continue
++		}
++
++		ports, ambiguous, err := directAllocationPorts(variant, assigned)
++		if err != nil {
++			return nil, err
++		}
++		paths := []string{"direct"}
++		if !original {
++			paths = append(paths, "reply")
++		}
++		for _, path := range paths {
++			if len(ports) != 0 {
++				direct := variant
++				direct.ports = ports
++				matches = append(matches, policyAllocationMatch{allocationMatch: direct, path: path})
++			}
++			if len(ambiguous) != 0 {
++				// A private destination or reply cannot identify which public IP
++				// owns a shared port. Fail closed at this rule's ordered position.
++				direct := variant
++				direct.ports = ambiguous
++				matches = append(matches, policyAllocationMatch{allocationMatch: direct, path: path, drop: true})
++			}
++		}
++	}
++	return matches, nil
++}
++
++func directAllocationPorts(variant allocationMatch, assigned map[string][]int) (ports, ambiguous []int, err error) {
++	selected := make(map[allocationTuple]bool, len(variant.allocations))
++	for _, allocation := range variant.allocations {
++		selected[allocation] = true
++	}
++	shared := make(map[int]bool)
++	for host, assignedPorts := range assigned {
++		ip, err := parseIP(host)
++		if err != nil {
++			return nil, nil, err
++		}
++		family := "ip"
++		if ip.Is6() {
++			family = "ip6"
++		}
++		if family != variant.family {
++			continue
++		}
++		for _, port := range assignedPorts {
++			if slices.Contains(variant.ports, port) && !selected[allocationTuple{address: ip.String(), port: port}] {
++				shared[port] = true
++			}
++		}
++	}
++	for _, port := range variant.ports {
++		if shared[port] {
++			ambiguous = append(ambiguous, port)
++		} else {
++			ports = append(ports, port)
++		}
++	}
++	return ports, ambiguous, nil
++}
+diff --git a/internal/networkpolicy/firewall_test.go b/internal/networkpolicy/firewall_test.go
+new file mode 100644
+index 00000000..0a15e263
+--- /dev/null
++++ b/internal/networkpolicy/firewall_test.go
+@@ -0,0 +1,291 @@
++package networkpolicy
++
++import (
++	"context"
++	"encoding/json"
++	"errors"
++	"os"
++	"reflect"
++	"slices"
++	"strings"
++	"testing"
++
++	"github.com/stretchr/testify/require"
++)
++
++const firewallTestID = "00000000-0000-4000-8000-000000000001"
++
++func firewallPolicy() Policy {
++	return Policy{Body: Rules{Firewall: Firewall{
++		Enabled: true, DefaultInbound: "drop", DefaultOutbound: "drop",
++	}}}
++}
++
++func firewallRules(t *testing.T, p Policy, assigned map[string][]int, chain string) [][]any {
++	t.Helper()
++	doc, err := compileRuleset(firewallTestID, p, assigned, false)
++	require.NoError(t, err)
++	var rules [][]any
++	for _, command := range doc.NFTables {
++		object := command["add"].(map[string]any)
++		rule, ok := object["rule"].(map[string]any)
++		if ok && rule["chain"] == chain {
++			rules = append(rules, rule["expr"].([]any))
++		}
++	}
++	return rules
++}
++
++func hasExpression(expressions []any, expected any) bool {
++	return slices.ContainsFunc(expressions, func(expression any) bool {
++		return reflect.DeepEqual(expression, expected)
++	})
++}
++
++func firewallCT(key string) map[string]any {
++	return map[string]any{"ct": map[string]any{"key": key}}
++}
++
++func TestFirewallExplicitRulesPrecedeStatefulReplies(t *testing.T) {
++	for _, direction := range []string{"inbound", "outbound"} {
++		t.Run(direction, func(t *testing.T) {
++			p := firewallPolicy()
++			p.Body.Firewall.Chains = []Chain{{ID: "first", Enabled: true}}
++			p.Body.Firewall.Rules = []Rule{
++				{ID: "later", Enabled: true, Direction: direction, Action: "drop", Protocol: "tcp"},
++				{ID: "first", Enabled: true, ChainID: pointer("first"), Direction: direction, Action: "allow", Protocol: "tcp"},
++				{ID: "disabled", Direction: direction, Action: "reject", Protocol: "tcp"},
++			}
++			rules := firewallRules(t, p, nil, direction)
++			first := -1
++			for i, expressions := range rules {
++				if reflect.DeepEqual(expressions, []any{match(meta("l4proto"), "tcp"), verdict("return")}) {
++					first = i
++					break
++				}
++			}
++			require.NotEqual(t, -1, first)
++			require.Equal(t, []any{match(meta("l4proto"), "tcp"), verdict("drop")}, rules[first+1])
++
++			replies := 0
++			for i, expressions := range rules {
++				if hasExpression(expressions, match(firewallCT("state"), "related")) {
++					require.Greater(t, i, first+1, "related errors must follow explicit policy decisions")
++				}
++				if !hasExpression(expressions, match(firewallCT("state"), "established")) {
++					continue
++				}
++				replies++
++				require.Greater(t, i, first+1, "explicit denies must also apply to replies")
++				require.True(t, hasExpression(expressions, match(firewallCT("direction"), "reply")))
++				require.True(t, hasExpression(expressions, match(map[string]any{"&": []any{firewallCT("status"), "confirmed"}}, "confirmed")), "status is a bitset; seen-reply/DNAT must not hide confirmed")
++				require.True(t, hasExpression(expressions, match(meta("l4proto"), set("tcp", "udp"))))
++				require.Equal(t, map[string]any{"goto": map[string]any{"target": opposite(direction) + "_origin"}}, expressions[len(expressions)-1])
++			}
++			require.Positive(t, replies, "default-drop must preserve confirmed TCP/UDP replies")
++			require.Equal(t, []any{verdict("drop")}, rules[len(rules)-1])
++			origin := firewallRules(t, p, nil, direction+"_origin")
++			require.Equal(t, []any{match(ct("protocol", "", "original"), "tcp"), verdict("return")}, origin[0])
++			require.Equal(t, []any{match(ct("protocol", "", "original"), "tcp"), verdict("drop")}, origin[1])
++			require.Equal(t, []any{verdict("drop")}, origin[len(origin)-1], "tracking a denied original must never authorize its reply")
++		})
++	}
++}
++
++func TestFirewallRelatedICMPIsLimitedToErrors(t *testing.T) {
++	p := firewallPolicy()
++	for _, direction := range []string{"inbound", "outbound"} {
++		rules := firewallRules(t, p, nil, direction)
++		for _, family := range []struct {
++			ether, protocol, payload string
++			types                    []any
++		}{
++			{"ip", "icmp", "icmp", []any{"destination-unreachable", "time-exceeded", "parameter-problem"}},
++			{"ip6", "ipv6-icmp", "icmpv6", []any{"destination-unreachable", "packet-too-big", "time-exceeded", "parameter-problem"}},
++		} {
++			for _, ctDirection := range []string{"original", "reply"} {
++				target := direction
++				if ctDirection == "reply" {
++					target = opposite(direction)
++				}
++				expected := []any{
++					match(payload("ether", "type"), family.ether),
++					match(meta("l4proto"), family.protocol),
++					match(payload(family.payload, "type"), set(family.types...)),
++					match(firewallCT("state"), "related"),
++					match(firewallCT("direction"), ctDirection),
++					map[string]any{"goto": map[string]any{"target": target + "_origin"}},
++				}
++				require.Contains(t, rules, expected, "%s %s %s", direction, family.ether, ctDirection)
++			}
++		}
++		for _, expressions := range rules {
++			if hasExpression(expressions, match(firewallCT("state"), "related")) {
++				require.Len(t, expressions, 6, "first-packet PMTU errors can be related before confirmation")
++				require.False(t, hasExpression(expressions, matchCTStatus("confirmed")), "related errors must work before conntrack confirms the original packet")
++			}
++		}
++	}
++
++	doc, err := compileRuleset(firewallTestID, p, nil, true)
++	require.NoError(t, err)
++	script, err := json.Marshal(doc)
++	require.NoError(t, err)
++	require.NotContains(t, string(script), "related", "the startup gate must not admit control traffic")
++}
++
++func TestFirewallAllocationScopeAcrossPublishedAndDirectPaths(t *testing.T) {
++	p := firewallPolicy()
++	p.ResolvedGroups = []ResolvedGroup{{ID: "selected", Protocol: "udp", Allocations: []Allocation{{ID: 1, IP: "192.0.2.10", Port: 25000}}}}
++	p.Body.Firewall.Rules = []Rule{{ID: "scoped", Enabled: true, Direction: "inbound", Action: "allow", Protocol: "udp", GroupID: pointer("selected")}}
++	for _, scenario := range []struct {
++		name, otherIP string
++		directVerdict string
++	}{
++		{"one allocation", "", "return"},
++		{"same port different IPv4", "192.0.2.11", "drop"},
++		{"same port different family", "2001:db8::11", "return"},
++	} {
++		t.Run(scenario.name, func(t *testing.T) {
++			assigned := map[string][]int{"192.0.2.10": {25000}}
++			if scenario.otherIP != "" {
++				assigned[scenario.otherIP] = []int{25000}
++			}
++			for _, chain := range []string{"inbound", "inbound_origin"} {
++				var scoped [][]any
++				for _, expressions := range firewallRules(t, p, assigned, chain) {
++					protocol := any(meta("l4proto"))
++					if chain == "inbound_origin" {
++						protocol = ct("protocol", "", "original")
++					}
++					if hasExpression(expressions, match(protocol, "udp")) {
++						scoped = append(scoped, expressions)
++					}
++				}
++				require.NotEmpty(t, scoped)
++				require.True(t, hasExpression(scoped[0], match(map[string]any{"&": []any{firewallCT("status"), "dnat"}}, "dnat")))
++				require.True(t, hasExpression(scoped[0], match(
++					concat(ct("daddr", "ip", "original"), ct("proto-dst", "", "original")),
++					tupleSet([]allocationTuple{{address: "192.0.2.10", port: 25000}}),
++				)))
++				for _, expressions := range scoped[1:] {
++					require.Equal(t, verdict(scenario.directVerdict), expressions[len(expressions)-1], "direct/reply ambiguity must fail closed at the scoped rule")
++				}
++			}
++			outbound := p
++			outbound.Body.Firewall.Rules = slices.Clone(p.Body.Firewall.Rules)
++			outbound.Body.Firewall.Rules[0].Direction = "outbound"
++			_, err := compileRuleset(firewallTestID, outbound, assigned, false)
++			if scenario.directVerdict == "drop" {
++				require.ErrorContains(t, err, "outbound allocation IP scope")
++			} else {
++				require.NoError(t, err)
++			}
++		})
++	}
++}
++
++func TestFirewallNormalizationPreservesOriginalTupleDirection(t *testing.T) {
++	require.Equal(t, map[string]any{"ct": map[string]any{"key": "protocol"}}, ct("protocol", "", "original"), "nft serializes protocol without a direction")
++	for _, tuple := range []any{
++		ct("saddr", "ip", "original"),
++		concat(ct("daddr", "ip", "original"), ct("proto-dst", "", "original")),
++	} {
++		guarded := map[string]any{"expr": []any{match(payload("ether", "type"), "ip"), match(tuple, "192.0.2.1"), verdict("return")}}
++		kernel := map[string]any{"expr": []any{match(tuple, "192.0.2.1"), verdict("return")}}
++		normalizeNftRule(guarded)
++		normalizeNftRule(kernel)
++		require.Equal(t, kernel, guarded, "typed ct address/tuple implies its family")
++		data, err := json.Marshal(kernel)
++		require.NoError(t, err)
++		var changed map[string]any
++		require.NoError(t, json.Unmarshal([]byte(strings.Replace(string(data), `"original"`, `"reply"`, 1)), &changed))
++		normalizeNftRule(changed)
++		require.NotEqual(t, guarded, changed, "an altered conntrack tuple direction must remain drift")
++	}
++}
++
++func TestFirewallAtomicReplacementAndOwnership(t *testing.T) {
++	p := firewallPolicy()
++	_, _, table, err := Names(firewallTestID)
++	require.NoError(t, err)
++	owned := `{"nftables":[{"table":{"family":"bridge","name":"` + table + `","comment":"` + ownerPrefix + firewallTestID + `"}}]}`
++	failure := errors.New("injected nft failure")
++	for _, scenario := range []struct {
++		name, live string
++		failAt     int
++		calls      int
++	}{
++		{"foreign ownership", strings.Replace(owned, ownerPrefix, "administrator:", 1), 0, 1},
++		{"malformed lookup", `{`, 0, 1},
++		{"lookup failure", owned, 1, 1},
++		{"check failure", owned, 2, 2},
++		{"commit failure", owned, 3, 3},
++		{"successful replacement", owned, 0, 3},
++	} {
++		t.Run(scenario.name, func(t *testing.T) {
++			calls := 0
++			var checked string
++			backend := Backend{Run: func(_ context.Context, _ *os.File, input, command string, args ...string) ([]byte, error) {
++				calls++
++				require.Equal(t, "nft", command)
++				if calls == 1 {
++					require.Empty(t, input)
++					require.Equal(t, []string{"-j", "list", "table", "bridge", table}, args)
++				} else {
++					var transaction nftDocument
++					require.NoError(t, json.Unmarshal([]byte(input), &transaction))
++					require.Equal(t, map[string]any{"delete": map[string]any{"table": map[string]any{"family": "bridge", "name": table}}}, transaction.NFTables[0])
++					require.Contains(t, transaction.NFTables[1], "add")
++					if calls == 2 {
++						require.Equal(t, []string{"-j", "--check", "-f", "-"}, args)
++						checked = input
++					} else {
++						require.Equal(t, []string{"-j", "-f", "-"}, args)
++						require.Equal(t, checked, input, "commit the exact checked atomic replacement")
++					}
++				}
++				if calls == scenario.failAt {
++					return nil, failure
++				}
++				return []byte(scenario.live), nil
++			}}
++			err := backend.Firewall(context.Background(), firewallTestID, p, nil, false)
++			if scenario.name == "successful replacement" {
++				require.NoError(t, err)
++			} else {
++				require.Error(t, err)
++				if scenario.failAt != 0 {
++					require.ErrorIs(t, err, failure)
++				}
++			}
++			require.Equal(t, scenario.calls, calls, "stop before subsequent writes after any failure")
++		})
++	}
++}
++
++func TestFirewallReadbackDetectsReplyAndICMPDrift(t *testing.T) {
++	p := firewallPolicy()
++	doc, err := compileRuleset(firewallTestID, p, nil, false)
++	require.NoError(t, err)
++	live := nftDocument{}
++	for _, command := range doc.NFTables {
++		live.NFTables = append(live.NFTables, command["add"].(map[string]any))
++	}
++	data, err := json.Marshal(live)
++	require.NoError(t, err)
++	for _, drift := range []struct{ from, to string }{
++		{`"reply"`, `"original"`},
++		{`"related"`, `"established"`},
++		{`"confirmed"`, `"dnat"`},
++	} {
++		t.Run(drift.from, func(t *testing.T) {
++			require.Contains(t, string(data), drift.from)
++			readback := strings.Replace(string(data), drift.from, drift.to, 1)
++			backend := Backend{Run: func(context.Context, *os.File, string, string, ...string) ([]byte, error) {
++				return []byte(readback), nil
++			}}
++			require.ErrorContains(t, backend.VerifyFirewall(context.Background(), firewallTestID, p, nil, false), "firewall drift")
++		})
++	}
++}
+diff --git a/internal/networkpolicy/icmp.go b/internal/networkpolicy/icmp.go
+new file mode 100644
+index 00000000..df919093
+--- /dev/null
++++ b/internal/networkpolicy/icmp.go
+@@ -0,0 +1,31 @@
++package networkpolicy
++
++// addRelatedICMPRules preserves network errors such as PMTU notifications only
++// when conntrack validates the quoted packet and its original flow passes the
++// current policy. The outer protocol/type checks exclude echo, redirects, and
++// helper-created TCP/UDP connections in the related state.
++func (d *nftDocument) addRelatedICMPRules(table, chain string) {
++	for _, direction := range []string{"original", "reply"} {
++		origin := chain
++		if direction == "reply" {
++			origin = opposite(chain)
++		}
++		target := map[string]any{"goto": map[string]any{"target": origin + "_origin"}}
++		d.addRule(table, chain, []any{
++			match(payload("ether", "type"), "ip"),
++			match(meta("l4proto"), "icmp"),
++			match(payload("icmp", "type"), set("destination-unreachable", "time-exceeded", "parameter-problem")),
++			match(map[string]any{"ct": map[string]any{"key": "state"}}, "related"),
++			match(map[string]any{"ct": map[string]any{"key": "direction"}}, direction),
++			target,
++		})
++		d.addRule(table, chain, []any{
++			match(payload("ether", "type"), "ip6"),
++			match(meta("l4proto"), "ipv6-icmp"),
++			match(payload("icmpv6", "type"), set("destination-unreachable", "packet-too-big", "time-exceeded", "parameter-problem")),
++			match(map[string]any{"ct": map[string]any{"key": "state"}}, "related"),
++			match(map[string]any{"ct": map[string]any{"key": "direction"}}, direction),
++			target,
++		})
++	}
++}
 diff --git a/internal/networkpolicy/linux.go b/internal/networkpolicy/linux.go
 new file mode 100644
-index 00000000..fc894a74
+index 00000000..d195618c
 --- /dev/null
 +++ b/internal/networkpolicy/linux.go
-@@ -0,0 +1,1348 @@
+@@ -0,0 +1,1440 @@
 +package networkpolicy
 +
 +import (
@@ -4806,6 +5399,40 @@ index 00000000..fc894a74
 +		"name":    table,
 +		"comment": ownerPrefix + id,
 +	})
++	if !gate && p.Body.Firewall.Enabled {
++		// Native bridge conntrack defragments at -200. Keep the outbound
++		// fragment rejection ahead of it, while policy runs after tracking.
++		doc.add("chain", map[string]any{
++			"family": "bridge",
++			"table":  table,
++			"name":   "outbound_fragments",
++			"type":   "filter",
++			"hook":   "prerouting",
++			"prio":   -201,
++			"policy": "accept",
++		})
++		doc.addRule(table, "outbound_fragments", []any{
++			match(meta("ibrname"), bridge),
++			match(payload("ether", "type"), "ip"),
++			match(map[string]any{"&": []any{payload("ip", "frag-off"), 0x3fff}}, 0, "!="),
++			verdict("drop"),
++		})
++		doc.addRule(table, "outbound_fragments", []any{
++			match(meta("ibrname"), bridge),
++			match(payload("ether", "type"), "ip6"),
++			match(map[string]any{"exthdr": map[string]any{"name": "frag"}}, true),
++			verdict("drop"),
++		})
++		// Stateful exceptions goto these chains to evaluate the tracked
++		// original flow under current policy without returning to the default.
++		for _, direction := range []string{"outbound", "inbound"} {
++			doc.add("chain", map[string]any{
++				"family": "bridge",
++				"table":  table,
++				"name":   direction + "_origin",
++			})
++		}
++	}
 +	for _, direction := range []string{"outbound", "inbound"} {
 +		hook, bridgeMeta := "prerouting", "ibrname"
 +		if direction == "inbound" {
@@ -4823,7 +5450,7 @@ index 00000000..fc894a74
 +			"name":   direction + "_hook",
 +			"type":   "filter",
 +			"hook":   hook,
-+			"prio":   -200,
++			"prio":   -199,
 +			"policy": "accept",
 +		})
 +		doc.addRule(table, direction+"_hook", []any{
@@ -4840,8 +5467,7 @@ index 00000000..fc894a74
 +			continue
 +		}
 +
-+		// ARP and the two local-link NDP messages are the only control-plane
-+		// exceptions. Existing connections are deliberately re-evaluated.
++		// ARP and the two local-link NDP messages are control-plane exceptions.
 +		doc.addRule(table, direction, []any{match(payload("ether", "type"), "arp"), verdict("return")})
 +
 +		// Port policy cannot be soundly evaluated on later fragments, so reject
@@ -4868,22 +5494,29 @@ index 00000000..fc894a74
 +			if rule.Direction != direction {
 +				continue
 +			}
-+			if err := doc.addPolicyRule(table, p, rule, assigned, &budget); err != nil {
++			if err := doc.addPolicyRule(table, p, rule, assigned, &budget, false); err != nil {
++				return nftDocument{}, err
++			}
++			if err := doc.addPolicyRule(table, p, rule, assigned, &budget, true); err != nil {
 +				return nftDocument{}, err
 +			}
 +		}
++		doc.addEstablishedReplies(table, direction)
++		doc.addRelatedICMPRules(table, direction)
 +
 +		fallback := p.Body.Firewall.DefaultOutbound
 +		if direction == "inbound" {
 +			fallback = p.Body.Firewall.DefaultInbound
 +		}
-+		if fallback == "allow" {
-+			doc.addRule(table, direction, []any{
-+				match(payload("ether", "type"), set("ip", "ip6")),
-+				verdict("return"),
-+			})
++		for _, chain := range []string{direction, direction + "_origin"} {
++			if fallback == "allow" {
++				doc.addRule(table, chain, []any{
++					match(payload("ether", "type"), set("ip", "ip6")),
++					verdict("return"),
++				})
++			}
++			doc.addRule(table, chain, []any{verdict("drop")})
 +		}
-+		doc.addRule(table, direction, []any{verdict("drop")})
 +	}
 +
 +	return doc, nil
@@ -4912,7 +5545,12 @@ index 00000000..fc894a74
 +	rule Rule,
 +	assigned map[string][]int,
 +	budget *compileBudget,
++	original bool,
 +) error {
++	chain := rule.Direction
++	if original {
++		chain += "_origin"
++	}
 +	for _, proto := range []string{"tcp", "udp"} {
 +		if rule.Protocol != "both" && rule.Protocol != proto {
 +			continue
@@ -4936,22 +5574,57 @@ index 00000000..fc894a74
 +				}
 +			}
 +
-+			ports := p.Ports([]string{*rule.GroupID}, proto, assigned)
-+			if err := ensurePortScope(p, *rule.GroupID, ports, assigned); err != nil {
-+				return fmt.Errorf("rule %q: %w", rule.ID, err)
++			if rule.Direction == "outbound" {
++				for _, variant := range variants {
++					if err := ensurePortScope(variant, assigned); err != nil {
++						return fmt.Errorf("rule %q: %w", rule.ID, err)
++					}
++				}
 +			}
 +		}
 +
-+		for _, variant := range variants {
-+			expressions := []any{match(meta("l4proto"), proto)}
++		matches, err := policyAllocationMatches(rule, variants, assigned, original)
++		if err != nil {
++			return fmt.Errorf("rule %q: %w", rule.ID, err)
++		}
++		for _, variant := range matches {
++			var protocol any = meta("l4proto")
++			if original {
++				protocol = ct("protocol", "", "original")
++			}
++			expressions := []any{match(protocol, proto)}
++			if variant.path != "" {
++				if variant.path == "direct" {
++					expressions = append(expressions, matchCTStatus("dnat", "!="))
++				} else {
++					expressions = append(expressions, matchCTStatus("dnat"))
++					if !original {
++						direction := "original"
++						if variant.path == "reply" {
++							direction = "reply"
++						}
++						expressions = append(expressions, match(
++							map[string]any{"ct": map[string]any{"key": "direction"}}, direction,
++						))
++					}
++				}
++			}
 +			if variant.family != "" {
 +				expressions = append(expressions, match(payload("ether", "type"), variant.family))
 +				field := "sport"
 +				if rule.Direction == "inbound" {
 +					field = "dport"
 +				}
-+				expressions = append(expressions, match(payload(proto, field), intSet(variant.ports)))
-+				if rule.Direction == "inbound" {
++				var port any = payload(proto, field)
++				if original {
++					key := "proto-src"
++					if rule.Direction == "inbound" {
++						key = "proto-dst"
++					}
++					port = ct(key, "", "original")
++				}
++				expressions = append(expressions, match(port, intSet(variant.ports)))
++				if rule.Direction == "inbound" && variant.path == "dnat" {
 +					expressions = append(expressions, match(
 +						concat(ct("daddr", variant.family, "original"), ct("proto-dst", "", "original")),
 +						tupleSet(variant.allocations),
@@ -4977,15 +5650,19 @@ index 00000000..fc894a74
 +				if variant.family == "" {
 +					expressions = append(expressions, match(payload("ether", "type"), family))
 +				}
-+				expressions = append(expressions, match(payload(family, field), prefix(cidr.String(), cidr.Bits(), cidr.Addr().BitLen())))
++				var peer any = payload(family, field)
++				if original || rule.Direction == "inbound" && variant.path == "dnat" {
++					peer = ct(field, family, "original")
++				}
++				expressions = append(expressions, match(peer, prefix(cidr.String(), cidr.Bits(), cidr.Addr().BitLen())))
 +			}
 +
 +			result := "drop"
-+			if rule.Action == "allow" {
++			if rule.Action == "allow" && !variant.drop {
 +				result = "return"
 +			}
 +			expressions = append(expressions, verdict(result))
-+			d.addRule(table, rule.Direction, expressions)
++			d.addRule(table, chain, expressions)
 +		}
 +	}
 +
@@ -5074,46 +5751,14 @@ index 00000000..fc894a74
 +	return result, nil
 +}
 +
-+func ensurePortScope(p Policy, groupID string, ports []int, assigned map[string][]int) error {
-+	selected := make(map[int]bool, len(ports))
-+	for _, port := range ports {
-+		selected[port] = true
++func ensurePortScope(variant allocationMatch, assigned map[string][]int) error {
++	_, ambiguous, err := directAllocationPorts(variant, assigned)
++	if err != nil {
++		return err
 +	}
-+
-+	resolved := make(map[string]bool)
-+	for _, group := range p.ResolvedGroups {
-+		if group.ID != groupID {
-+			continue
-+		}
-+
-+		for _, allocation := range group.Allocations {
-+			key, err := allocationKey(allocation.IP, allocation.Port)
-+			if err != nil {
-+				return err
-+			}
-+
-+			resolved[key] = true
-+		}
-+
-+		break
++	if len(ambiguous) != 0 {
++		return errors.New("cannot preserve outbound allocation IP scope; the selected source port is also assigned on another IP of the same family")
 +	}
-+
-+	for host, assignedPorts := range assigned {
-+		for _, port := range assignedPorts {
-+			if !selected[port] {
-+				continue
-+			}
-+
-+			key, err := allocationKey(host, port)
-+			if err != nil {
-+				return err
-+			}
-+			if !resolved[key] {
-+				return errors.New("cannot preserve allocation IP scope after Docker DNAT; the selected port is also assigned on another IP")
-+			}
-+		}
-+	}
-+
 +	return nil
 +}
 +
@@ -5138,12 +5783,20 @@ index 00000000..fc894a74
 +}
 +
 +func ct(key, family, direction string) map[string]any {
-+	value := map[string]any{"key": key, "dir": direction}
++	value := map[string]any{"key": key}
++	if key != "protocol" {
++		value["dir"] = direction
++	}
 +	if family != "" {
 +		// nft 1.0.x requires "ip daddr"/"ip6 daddr", not a separate family property.
 +		value["key"] = family + " " + key
 +	}
 +	return map[string]any{"ct": value}
++}
++
++func matchCTStatus(flag string, operators ...string) map[string]any {
++	status := map[string]any{"ct": map[string]any{"key": "status"}}
++	return match(map[string]any{"&": []any{status, flag}}, flag, operators...)
 +}
 +
 +func concat(values ...any) map[string]any {
@@ -5419,6 +6072,11 @@ index 00000000..fc894a74
 +	transportPayload := map[string]bool{}
 +	networkPayload := map[string]bool{}
 +	for _, expression := range expressions {
++		if condition, ok := nftMatch(expression); ok {
++			for _, family := range ctFamilies(condition["left"]) {
++				networkPayload[family] = true
++			}
++		}
 +		if condition, ok := nftMatch(expression); ok && condition["op"] == "==" && condition["right"] == true {
 +			if left, ok := condition["left"].(map[string]any); ok {
 +				if header, ok := left["exthdr"].(map[string]any); ok && len(header) == 1 && header["name"] == "frag" {
@@ -5433,8 +6091,13 @@ index 00000000..fc894a74
 +		if protocol == "tcp" || protocol == "udp" {
 +			transportPayload[protocol] = true
 +		}
++		if protocol == "icmp" {
++			transportPayload["icmp"] = true
++			networkPayload["ip"] = true
++		}
 +		if protocol == "icmpv6" {
 +			transportPayload["ipv6-icmp"] = true
++			networkPayload["ip6"] = true
 +		}
 +		if protocol == "ip" || protocol == "ip6" {
 +			networkPayload[protocol] = true
@@ -5457,6 +6120,28 @@ index 00000000..fc894a74
 +	}
 +
 +	rule["expr"] = normalized
++}
++
++func ctFamilies(value any) []string {
++	object, ok := value.(map[string]any)
++	if !ok {
++		return nil
++	}
++	if connection, ok := object["ct"].(map[string]any); ok {
++		key, _ := connection["key"].(string)
++		for _, family := range []string{"ip", "ip6"} {
++			if strings.HasPrefix(key, family+" ") {
++				return []string{family}
++			}
++		}
++	}
++	var families []string
++	if parts, ok := object["concat"].([]any); ok {
++		for _, part := range parts {
++			families = append(families, ctFamilies(part)...)
++		}
++	}
++	return families
 +}
 +
 +func nftMetaProtocolMatch(expression any) (string, bool) {
@@ -6646,6 +7331,34 @@ index 00000000..07d17a93
 +	}
 +
 +	return items, nil
++}
+diff --git a/internal/networkpolicy/replies.go b/internal/networkpolicy/replies.go
+new file mode 100644
+index 00000000..dfffb41a
+--- /dev/null
++++ b/internal/networkpolicy/replies.go
+@@ -0,0 +1,22 @@
++package networkpolicy
++
++func (d *nftDocument) addEstablishedReplies(table, direction string) {
++	// Conntrack may confirm routed traffic before bridge policy evaluates it.
++	// Recheck the original flow against its current policy instead of treating
++	// tracking alone as proof that NSM admitted the initial packet.
++	d.addRule(table, direction, []any{
++		match(payload("ether", "type"), set("ip", "ip6")),
++		match(meta("l4proto"), set("tcp", "udp")),
++		match(map[string]any{"ct": map[string]any{"key": "state"}}, "established"),
++		match(map[string]any{"ct": map[string]any{"key": "direction"}}, "reply"),
++		matchCTStatus("confirmed"),
++		map[string]any{"goto": map[string]any{"target": opposite(direction) + "_origin"}},
++	})
++}
++
++func opposite(direction string) string {
++	if direction == "inbound" {
++		return "outbound"
++	}
++	return "inbound"
 +}
 diff --git a/internal/networkpolicy/route.go b/internal/networkpolicy/route.go
 new file mode 100644

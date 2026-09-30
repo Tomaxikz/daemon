@@ -843,6 +843,7 @@ func (e *Environment) reconcileNetwork(ctx context.Context) (result error) {
 
 	p, err := networkpolicy.Load(config.Get().System.RootDirectory, e.Id)
 	protect := p.Required(networkCeiling()) || err != nil
+	retainVerified := false
 	e.networkVerified.Store(false)
 	e.storeNetworkStatus(e.pendingNetworkStatus(p))
 	defer func() {
@@ -851,7 +852,7 @@ func (e *Environment) reconcileNetwork(ctx context.Context) (result error) {
 		}
 
 		status := e.failNetworkStatus(p, result)
-		if !protect {
+		if !protect || retainVerified {
 			return
 		}
 
@@ -930,7 +931,35 @@ func (e *Environment) reconcileNetwork(ctx context.Context) (result error) {
 	if err := e.verifyRuntimeContainer(p, c); err != nil {
 		return err
 	}
+	allocations := e.Configuration.Allocations()
+	if p.Revision > 0 {
+		if err := networkpolicy.ValidateEnforcement(p, allocations.Mappings, networkCeiling()); err != nil {
+			return err
+		}
+	}
+
+	previous := e.networkAppliedPolicy
+	if previous != nil && c.ID == e.networkContainerID &&
+		previous.Effective(networkCeiling()) == p.Effective(networkCeiling()) &&
+		e.verifyNetworkPolicy(ctx, *previous, p, c) == nil {
+		// Identical verified shaping needs no gate. The nft batch either
+		// replaces this server's table or leaves its previous rules installed.
+		retainVerified, err = e.replaceLiveFirewall(ctx, b, p, func(checkCtx context.Context) bool {
+			current, inspectErr := e.ContainerInspect(checkCtx)
+			return inspectErr == nil && current.ID == c.ID &&
+				e.verifyNetworkPolicy(checkCtx, *previous, p, current) == nil
+		})
+		if err != nil {
+			return err
+		}
+
+		e.storeNetworkStatus(e.appliedNetworkStatus(p, c.ID))
+		return nil
+	}
 	if err := b.Firewall(ctx, e.Id, p, nil, true); err != nil {
+		return err
+	}
+	if err := b.VerifyFirewall(ctx, e.Id, p, nil, true); err != nil {
 		return err
 	}
 	if c.HostConfig == nil ||
@@ -943,14 +972,8 @@ func (e *Environment) reconcileNetwork(ctx context.Context) (result error) {
 		return errors.New("unsupported container privileges or network attachments")
 	}
 
-	allocations := e.Configuration.Allocations()
 	if !samePortBindings(c.HostConfig.PortBindings, allocations.DockerBindings()) {
 		return errors.New("allocations changed; restart the server before applying its policy")
-	}
-	if p.Revision > 0 {
-		if err := networkpolicy.ValidateEnforcement(p, allocations.Mappings, networkCeiling()); err != nil {
-			return err
-		}
 	}
 	endpoint := c.NetworkSettings.Networks[name]
 	if endpoint == nil {
@@ -1022,8 +1045,26 @@ func (e *Environment) reconcileNetwork(ctx context.Context) (result error) {
 	return nil
 }
 
+func (e *Environment) replaceLiveFirewall(
+	ctx context.Context,
+	b networkpolicy.Backend,
+	p networkpolicy.Policy,
+	verifyPrevious func(context.Context) bool,
+) (bool, error) {
+	assigned := e.Configuration.Allocations().Mappings
+	if err := b.Firewall(ctx, e.Id, p, assigned, false); err != nil {
+		checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		return verifyPrevious(checkCtx), err
+	}
+
+	// A successful commit with unreadable or mismatched state must quarantine.
+	return false, b.VerifyFirewall(ctx, e.Id, p, assigned, false)
+}
+
 func (e *Environment) appliedNetworkStatus(p networkpolicy.Policy, containerID string) networkpolicy.Status {
 	e.networkContainerID = containerID
+	e.networkAppliedPolicy = &p
 	e.networkVerified.Store(true)
 	if p.Revision == 0 || p.PolicyHash == "" {
 		return e.pendingNetworkStatus(p)
@@ -1065,6 +1106,28 @@ func (e *Environment) verifyRecordedNetwork(ctx context.Context) error {
 func (e *Environment) verifyNetwork(
 	ctx context.Context,
 	p networkpolicy.Policy,
+	c container.InspectResponse,
+) error {
+	if !e.networkManaged(c) {
+		return e.verifyNetworkPolicy(ctx, p, p, c)
+	}
+
+	lease, err := e.runtimeLease(ctx)
+	if err != nil {
+		return err
+	}
+	if lease != nil {
+		defer lease.Close()
+	}
+
+	return e.verifyNetworkPolicy(ctx, p, p, c)
+}
+
+// The caller holds the runtime lease for a managed network. During a live update,
+// its binding names desired state while the kernel can retain the applied policy.
+func (e *Environment) verifyNetworkPolicy(
+	ctx context.Context,
+	p, runtimePolicy networkpolicy.Policy,
 	c container.InspectResponse,
 ) error {
 	allocations := e.Configuration.Allocations()
@@ -1112,14 +1175,7 @@ func (e *Environment) verifyNetwork(
 	if endpoint == nil {
 		return errors.New("NSM network endpoint is missing")
 	}
-	lease, err := e.runtimeLease(ctx)
-	if err != nil {
-		return err
-	}
-	if lease != nil {
-		defer lease.Close()
-	}
-	if err := e.verifyRuntimeContainer(p, c); err != nil {
+	if err := e.verifyRuntimeContainer(runtimePolicy, c); err != nil {
 		return err
 	}
 
@@ -1307,6 +1363,7 @@ func (e *Environment) removeNetworkPolicy(ctx context.Context) (result error) {
 	defer func() {
 		if result == nil {
 			e.networkDeleted = true
+			e.networkAppliedPolicy = nil
 		}
 	}()
 

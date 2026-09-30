@@ -470,6 +470,40 @@ func compileRuleset(id string, p Policy, assigned map[string][]int, gate bool) (
 		"name":    table,
 		"comment": ownerPrefix + id,
 	})
+	if !gate && p.Body.Firewall.Enabled {
+		// Native bridge conntrack defragments at -200. Keep the outbound
+		// fragment rejection ahead of it, while policy runs after tracking.
+		doc.add("chain", map[string]any{
+			"family": "bridge",
+			"table":  table,
+			"name":   "outbound_fragments",
+			"type":   "filter",
+			"hook":   "prerouting",
+			"prio":   -201,
+			"policy": "accept",
+		})
+		doc.addRule(table, "outbound_fragments", []any{
+			match(meta("ibrname"), bridge),
+			match(payload("ether", "type"), "ip"),
+			match(map[string]any{"&": []any{payload("ip", "frag-off"), 0x3fff}}, 0, "!="),
+			verdict("drop"),
+		})
+		doc.addRule(table, "outbound_fragments", []any{
+			match(meta("ibrname"), bridge),
+			match(payload("ether", "type"), "ip6"),
+			match(map[string]any{"exthdr": map[string]any{"name": "frag"}}, true),
+			verdict("drop"),
+		})
+		// Stateful exceptions goto these chains to evaluate the tracked
+		// original flow under current policy without returning to the default.
+		for _, direction := range []string{"outbound", "inbound"} {
+			doc.add("chain", map[string]any{
+				"family": "bridge",
+				"table":  table,
+				"name":   direction + "_origin",
+			})
+		}
+	}
 	for _, direction := range []string{"outbound", "inbound"} {
 		hook, bridgeMeta := "prerouting", "ibrname"
 		if direction == "inbound" {
@@ -487,7 +521,7 @@ func compileRuleset(id string, p Policy, assigned map[string][]int, gate bool) (
 			"name":   direction + "_hook",
 			"type":   "filter",
 			"hook":   hook,
-			"prio":   -200,
+			"prio":   -199,
 			"policy": "accept",
 		})
 		doc.addRule(table, direction+"_hook", []any{
@@ -504,8 +538,7 @@ func compileRuleset(id string, p Policy, assigned map[string][]int, gate bool) (
 			continue
 		}
 
-		// ARP and the two local-link NDP messages are the only control-plane
-		// exceptions. Existing connections are deliberately re-evaluated.
+		// ARP and the two local-link NDP messages are control-plane exceptions.
 		doc.addRule(table, direction, []any{match(payload("ether", "type"), "arp"), verdict("return")})
 
 		// Port policy cannot be soundly evaluated on later fragments, so reject
@@ -532,22 +565,29 @@ func compileRuleset(id string, p Policy, assigned map[string][]int, gate bool) (
 			if rule.Direction != direction {
 				continue
 			}
-			if err := doc.addPolicyRule(table, p, rule, assigned, &budget); err != nil {
+			if err := doc.addPolicyRule(table, p, rule, assigned, &budget, false); err != nil {
+				return nftDocument{}, err
+			}
+			if err := doc.addPolicyRule(table, p, rule, assigned, &budget, true); err != nil {
 				return nftDocument{}, err
 			}
 		}
+		doc.addEstablishedReplies(table, direction)
+		doc.addRelatedICMPRules(table, direction)
 
 		fallback := p.Body.Firewall.DefaultOutbound
 		if direction == "inbound" {
 			fallback = p.Body.Firewall.DefaultInbound
 		}
-		if fallback == "allow" {
-			doc.addRule(table, direction, []any{
-				match(payload("ether", "type"), set("ip", "ip6")),
-				verdict("return"),
-			})
+		for _, chain := range []string{direction, direction + "_origin"} {
+			if fallback == "allow" {
+				doc.addRule(table, chain, []any{
+					match(payload("ether", "type"), set("ip", "ip6")),
+					verdict("return"),
+				})
+			}
+			doc.addRule(table, chain, []any{verdict("drop")})
 		}
-		doc.addRule(table, direction, []any{verdict("drop")})
 	}
 
 	return doc, nil
@@ -576,7 +616,12 @@ func (d *nftDocument) addPolicyRule(
 	rule Rule,
 	assigned map[string][]int,
 	budget *compileBudget,
+	original bool,
 ) error {
+	chain := rule.Direction
+	if original {
+		chain += "_origin"
+	}
 	for _, proto := range []string{"tcp", "udp"} {
 		if rule.Protocol != "both" && rule.Protocol != proto {
 			continue
@@ -600,22 +645,57 @@ func (d *nftDocument) addPolicyRule(
 				}
 			}
 
-			ports := p.Ports([]string{*rule.GroupID}, proto, assigned)
-			if err := ensurePortScope(p, *rule.GroupID, ports, assigned); err != nil {
-				return fmt.Errorf("rule %q: %w", rule.ID, err)
+			if rule.Direction == "outbound" {
+				for _, variant := range variants {
+					if err := ensurePortScope(variant, assigned); err != nil {
+						return fmt.Errorf("rule %q: %w", rule.ID, err)
+					}
+				}
 			}
 		}
 
-		for _, variant := range variants {
-			expressions := []any{match(meta("l4proto"), proto)}
+		matches, err := policyAllocationMatches(rule, variants, assigned, original)
+		if err != nil {
+			return fmt.Errorf("rule %q: %w", rule.ID, err)
+		}
+		for _, variant := range matches {
+			var protocol any = meta("l4proto")
+			if original {
+				protocol = ct("protocol", "", "original")
+			}
+			expressions := []any{match(protocol, proto)}
+			if variant.path != "" {
+				if variant.path == "direct" {
+					expressions = append(expressions, matchCTStatus("dnat", "!="))
+				} else {
+					expressions = append(expressions, matchCTStatus("dnat"))
+					if !original {
+						direction := "original"
+						if variant.path == "reply" {
+							direction = "reply"
+						}
+						expressions = append(expressions, match(
+							map[string]any{"ct": map[string]any{"key": "direction"}}, direction,
+						))
+					}
+				}
+			}
 			if variant.family != "" {
 				expressions = append(expressions, match(payload("ether", "type"), variant.family))
 				field := "sport"
 				if rule.Direction == "inbound" {
 					field = "dport"
 				}
-				expressions = append(expressions, match(payload(proto, field), intSet(variant.ports)))
-				if rule.Direction == "inbound" {
+				var port any = payload(proto, field)
+				if original {
+					key := "proto-src"
+					if rule.Direction == "inbound" {
+						key = "proto-dst"
+					}
+					port = ct(key, "", "original")
+				}
+				expressions = append(expressions, match(port, intSet(variant.ports)))
+				if rule.Direction == "inbound" && variant.path == "dnat" {
 					expressions = append(expressions, match(
 						concat(ct("daddr", variant.family, "original"), ct("proto-dst", "", "original")),
 						tupleSet(variant.allocations),
@@ -641,15 +721,19 @@ func (d *nftDocument) addPolicyRule(
 				if variant.family == "" {
 					expressions = append(expressions, match(payload("ether", "type"), family))
 				}
-				expressions = append(expressions, match(payload(family, field), prefix(cidr.String(), cidr.Bits(), cidr.Addr().BitLen())))
+				var peer any = payload(family, field)
+				if original || rule.Direction == "inbound" && variant.path == "dnat" {
+					peer = ct(field, family, "original")
+				}
+				expressions = append(expressions, match(peer, prefix(cidr.String(), cidr.Bits(), cidr.Addr().BitLen())))
 			}
 
 			result := "drop"
-			if rule.Action == "allow" {
+			if rule.Action == "allow" && !variant.drop {
 				result = "return"
 			}
 			expressions = append(expressions, verdict(result))
-			d.addRule(table, rule.Direction, expressions)
+			d.addRule(table, chain, expressions)
 		}
 	}
 
@@ -738,46 +822,14 @@ func resolvedMatches(
 	return result, nil
 }
 
-func ensurePortScope(p Policy, groupID string, ports []int, assigned map[string][]int) error {
-	selected := make(map[int]bool, len(ports))
-	for _, port := range ports {
-		selected[port] = true
+func ensurePortScope(variant allocationMatch, assigned map[string][]int) error {
+	_, ambiguous, err := directAllocationPorts(variant, assigned)
+	if err != nil {
+		return err
 	}
-
-	resolved := make(map[string]bool)
-	for _, group := range p.ResolvedGroups {
-		if group.ID != groupID {
-			continue
-		}
-
-		for _, allocation := range group.Allocations {
-			key, err := allocationKey(allocation.IP, allocation.Port)
-			if err != nil {
-				return err
-			}
-
-			resolved[key] = true
-		}
-
-		break
+	if len(ambiguous) != 0 {
+		return errors.New("cannot preserve outbound allocation IP scope; the selected source port is also assigned on another IP of the same family")
 	}
-
-	for host, assignedPorts := range assigned {
-		for _, port := range assignedPorts {
-			if !selected[port] {
-				continue
-			}
-
-			key, err := allocationKey(host, port)
-			if err != nil {
-				return err
-			}
-			if !resolved[key] {
-				return errors.New("cannot preserve allocation IP scope after Docker DNAT; the selected port is also assigned on another IP")
-			}
-		}
-	}
-
 	return nil
 }
 
@@ -802,12 +854,20 @@ func meta(key string) map[string]any {
 }
 
 func ct(key, family, direction string) map[string]any {
-	value := map[string]any{"key": key, "dir": direction}
+	value := map[string]any{"key": key}
+	if key != "protocol" {
+		value["dir"] = direction
+	}
 	if family != "" {
 		// nft 1.0.x requires "ip daddr"/"ip6 daddr", not a separate family property.
 		value["key"] = family + " " + key
 	}
 	return map[string]any{"ct": value}
+}
+
+func matchCTStatus(flag string, operators ...string) map[string]any {
+	status := map[string]any{"ct": map[string]any{"key": "status"}}
+	return match(map[string]any{"&": []any{status, flag}}, flag, operators...)
 }
 
 func concat(values ...any) map[string]any {
@@ -1083,6 +1143,11 @@ func normalizeNftRule(rule map[string]any) {
 	transportPayload := map[string]bool{}
 	networkPayload := map[string]bool{}
 	for _, expression := range expressions {
+		if condition, ok := nftMatch(expression); ok {
+			for _, family := range ctFamilies(condition["left"]) {
+				networkPayload[family] = true
+			}
+		}
 		if condition, ok := nftMatch(expression); ok && condition["op"] == "==" && condition["right"] == true {
 			if left, ok := condition["left"].(map[string]any); ok {
 				if header, ok := left["exthdr"].(map[string]any); ok && len(header) == 1 && header["name"] == "frag" {
@@ -1097,8 +1162,13 @@ func normalizeNftRule(rule map[string]any) {
 		if protocol == "tcp" || protocol == "udp" {
 			transportPayload[protocol] = true
 		}
+		if protocol == "icmp" {
+			transportPayload["icmp"] = true
+			networkPayload["ip"] = true
+		}
 		if protocol == "icmpv6" {
 			transportPayload["ipv6-icmp"] = true
+			networkPayload["ip6"] = true
 		}
 		if protocol == "ip" || protocol == "ip6" {
 			networkPayload[protocol] = true
@@ -1121,6 +1191,28 @@ func normalizeNftRule(rule map[string]any) {
 	}
 
 	rule["expr"] = normalized
+}
+
+func ctFamilies(value any) []string {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if connection, ok := object["ct"].(map[string]any); ok {
+		key, _ := connection["key"].(string)
+		for _, family := range []string{"ip", "ip6"} {
+			if strings.HasPrefix(key, family+" ") {
+				return []string{family}
+			}
+		}
+	}
+	var families []string
+	if parts, ok := object["concat"].([]any); ok {
+		for _, part := range parts {
+			families = append(families, ctFamilies(part)...)
+		}
+	}
+	return families
 }
 
 func nftMetaProtocolMatch(expression any) (string, bool) {

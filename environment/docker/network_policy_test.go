@@ -823,3 +823,109 @@ func TestDeletedEnvironmentRejectsPolicyWork(t *testing.T) {
 	require.ErrorIs(t, err, ErrNetworkConflict)
 	require.ErrorIs(t, e.ReconcileNetwork(context.Background()), ErrNetworkConflict)
 }
+
+func TestLiveFirewallReplacementPreservesOnlyVerifiedPreviousState(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		failAt      int
+		oldVerified bool
+		readback    string
+		retain      bool
+		cancel      bool
+	}{
+		{name: "lookup failure retains verified rules", failAt: 1, oldVerified: true, retain: true},
+		{name: "check failure retains verified rules", failAt: 2, oldVerified: true, retain: true},
+		{name: "commit failure retains verified rules", failAt: 3, oldVerified: true, retain: true},
+		{name: "cancellation rechecks independently", failAt: 3, oldVerified: true, retain: true, cancel: true},
+		{name: "commit failure with prior drift quarantines", failAt: 3},
+		{name: "readback failure quarantines", failAt: 4},
+		{name: "malformed readback quarantines", readback: "{"},
+		{name: "missing rules quarantine", readback: `{"nftables":[]}`},
+		{name: "verified replacement"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			e := networkTestEnvironment(t, func(http.ResponseWriter, *http.Request) {
+				t.Fatal("replacement must not call Docker without a failed commit")
+			})
+			e.Configuration.SetSettings(assignedSettings())
+			old := testPolicy(t, 1, 1)
+			e.storeNetworkStatus(e.appliedNetworkStatus(old, "container"))
+			desired := testPolicy(t, 2, 1)
+			desired.Body.Firewall.Enabled = true
+			hash, err := desired.CalculatedHash()
+			require.NoError(t, err)
+			desired.PolicyHash = hash
+			e.storeNetworkStatus(e.pendingNetworkStatus(desired))
+
+			_, _, table, err := networkpolicy.Names(e.Id)
+			require.NoError(t, err)
+			owned := `{"nftables":[{"table":{"family":"bridge","name":"` + table + `","comment":"wings-networkstats:` + e.Id + `"}}]}`
+			script, err := networkpolicy.Ruleset(e.Id, desired, assignedSettings().Allocations.Mappings, false)
+			require.NoError(t, err)
+			var document struct {
+				NFTables []map[string]json.RawMessage `json:"nftables"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(script), &document))
+			var objects []json.RawMessage
+			for _, command := range document.NFTables {
+				objects = append(objects, command["add"])
+			}
+			live, err := json.Marshal(map[string]any{"nftables": objects})
+			require.NoError(t, err)
+			if test.readback != "" {
+				live = []byte(test.readback)
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			failure := errors.New("injected nft failure")
+			calls := 0
+			backend := networkpolicy.Backend{Run: func(_ context.Context, _ *os.File, _ string, command string, _ ...string) ([]byte, error) {
+				calls++
+				require.Equal(t, "nft", command, "firewall updates never mutate shaping")
+				if calls == test.failAt {
+					if test.cancel {
+						cancel()
+					}
+					return nil, failure
+				}
+				if calls == 1 {
+					return []byte(owned), nil
+				}
+				return live, nil
+			}}
+			rechecks := 0
+			retain, err := e.replaceLiveFirewall(ctx, backend, desired, func(checkCtx context.Context) bool {
+				rechecks++
+				require.NoError(t, checkCtx.Err(), "old enforcement verification survives request cancellation")
+				deadline, ok := checkCtx.Deadline()
+				require.True(t, ok)
+				require.Positive(t, time.Until(deadline))
+				require.LessOrEqual(t, time.Until(deadline), 10*time.Second)
+				return test.oldVerified
+			})
+			require.Equal(t, test.retain, retain)
+			if test.name == "verified replacement" {
+				require.NoError(t, err)
+				e.storeNetworkStatus(e.appliedNetworkStatus(desired, "container"))
+				require.Equal(t, desired, *e.networkAppliedPolicy)
+				require.Equal(t, uint64(2), e.networkStatusSnapshot().AppliedRevision)
+			} else {
+				require.Error(t, err)
+				e.failNetworkStatus(desired, err)
+				require.Equal(t, old, *e.networkAppliedPolicy)
+				status := e.networkStatusSnapshot()
+				require.Equal(t, "failed", status.State)
+				require.Equal(t, uint64(1), status.AppliedRevision)
+				require.Equal(t, desired, status.Desired)
+			}
+			if test.failAt > 0 && test.failAt < 4 {
+				require.Equal(t, 1, rechecks)
+				require.Equal(t, test.failAt, calls)
+			} else {
+				require.Zero(t, rechecks, "readback failures cannot retain old state after a successful commit")
+				require.Equal(t, 4, calls)
+			}
+		})
+	}
+}

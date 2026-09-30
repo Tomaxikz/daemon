@@ -28,15 +28,16 @@ type Metadata struct {
 var _ environment.ProcessEnvironment = (*Environment)(nil)
 
 type Environment struct {
-	mu                 sync.RWMutex
-	networkMu          sync.Mutex
-	networkStatus      atomic.Pointer[networkpolicy.Status]
-	networkReconcile   atomic.Bool
-	networkMonitor     atomic.Bool
-	networkVerified    atomic.Bool
-	networkMonitorStop context.CancelFunc
-	networkContainerID string
-	networkDeleted     bool
+	mu                   sync.RWMutex
+	networkMu            sync.Mutex
+	networkStatus        atomic.Pointer[networkpolicy.Status]
+	networkReconcile     atomic.Bool
+	networkMonitor       atomic.Bool
+	networkVerified      atomic.Bool
+	networkMonitorStop   context.CancelFunc
+	networkContainerID   string
+	networkAppliedPolicy *networkpolicy.Policy // Guarded by networkMu; records the last verified kernel policy.
+	networkDeleted       bool
 
 	// The public identifier for this environment. In this case it is the Docker container
 	// name that will be used for all instances created under it.
