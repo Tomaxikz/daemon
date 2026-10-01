@@ -75,11 +75,17 @@ def install(script, path):
         raise RuntimeError(f"{script} changed the customer's Git index")
 
 
-def check_nsm_conflict(parent):
-    with fixture(parent, "conflict") as path:
-        version = path / "system/const.go"
-        version.write_text('package system\n\nvar Version = "customer-custom-version"\n')
-        checked(["git", "add", "system/const.go"], cwd=path)
+def check_nsm_conflict(parent, old_patch=None):
+    name = "statistics-conflict" if old_patch else "conflict"
+    with fixture(parent, name) as path:
+        if old_patch:
+            checked(["git", "apply", "--whitespace=nowarn", str(old_patch)], cwd=path)
+            source = path / "server/protocol_stats.go"
+            source.write_text(source.read_text() + "\n// Customer statistics customization.\n")
+        else:
+            source = path / "system/const.go"
+            source.write_text('package system\n\nvar Version = "customer-custom-version"\n')
+        checked(["git", "add", str(source)], cwd=path)
         before = source_snapshot(path)
         index = checked(["git", "write-tree"], cwd=path)
         env = dict(os.environ, TOMAXIKZ_RAW_BASE=ROOT.as_uri(), NO_COLOR="1")
@@ -91,7 +97,7 @@ def check_nsm_conflict(parent):
             raise RuntimeError("Installer did not reject a conflicting customer version")
         if source_snapshot(path) != before or checked(["git", "write-tree"], cwd=path) != index:
             raise RuntimeError("Conflicting install changed source or the Git index")
-        print("PASS: conflicting install preserved customer source and index", flush=True)
+        print(f"PASS: {name} install preserved customer source and index", flush=True)
 
 
 def validate(case):
@@ -143,6 +149,7 @@ def validate(case):
 
             if case == "networkstats":
                 check_nsm_conflict(parent)
+                check_nsm_conflict(parent, old_patch)
                 fork = json.loads((ROOT / "nsm-networking.manifest.json").read_text())["implementation_base"]
                 with fixture(parent, "fork-install", fork) as path:
                     install(script, path)

@@ -70,6 +70,8 @@
     "server/network_policy_test.go",
     "server/resources.go",
     "server/resources_test.go",
+    "server/protocol_stats.go",
+    "server/protocol_stats_test.go",
     "server/server.go",
     "server/configuration_test.go",
     "server/filesystem/filesystem_test.go",

@@ -165,10 +165,10 @@ index 230062f5..93b9badf 100644
  
 diff --git a/environment/docker/betterconsole_pull_progress.go b/environment/docker/betterconsole_pull_progress.go
 new file mode 100644
-index 00000000..ae27dd1b
+index 00000000..8ed965d1
 --- /dev/null
 +++ b/environment/docker/betterconsole_pull_progress.go
-@@ -0,0 +1,172 @@
+@@ -0,0 +1,171 @@
 +package docker
 +
 +import (
@@ -337,7 +337,6 @@ index 00000000..ae27dd1b
 +		if r == '\t' || r >= 32 {
 +			return r
 +		}
-+
 +		return -1
 +	}, strings.TrimSpace(value))
 +}
@@ -953,10 +952,10 @@ index 00000000..aebd9759
 +)
 diff --git a/server/betterconsole_pull_progress.go b/server/betterconsole_pull_progress.go
 new file mode 100644
-index 00000000..54a981ca
+index 00000000..7766b99c
 --- /dev/null
 +++ b/server/betterconsole_pull_progress.go
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,195 @@
 +package server
 +
 +import (
@@ -1149,7 +1148,6 @@ index 00000000..54a981ca
 +		if r == '\t' || r >= 32 {
 +			return r
 +		}
-+
 +		return -1
 +	}, strings.TrimSpace(value))
 +}
@@ -1711,10 +1709,10 @@ index a1777b04..a17024b0 100644
  		go func(server *Server) {
 diff --git a/sftp/betterconsole_shell.go b/sftp/betterconsole_shell.go
 new file mode 100644
-index 00000000..5edc3910
+index 00000000..fc61cb5e
 --- /dev/null
 +++ b/sftp/betterconsole_shell.go
-@@ -0,0 +1,507 @@
+@@ -0,0 +1,489 @@
 +package sftp
 +
 +import (
@@ -1758,7 +1756,6 @@ index 00000000..5edc3910
 +	}
 +	srv.Events().On(eventOutput)
 +	defer srv.Sink(system.LogSink).Off(logOutput)
-+
 +	if canReceiveInstall {
 +		defer srv.Sink(system.InstallSink).Off(installOutput)
 +	}
@@ -1967,14 +1964,12 @@ index 00000000..5edc3910
 +func (t *betterConsoleSshTerminal) prompt() {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	_, _ = io.WriteString(t.channel, "> ")
 +}
 +
 +func (t *betterConsoleSshTerminal) writeLine(line string) {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	line = betterConsoleSanitizeTerminalLine(line)
 +	_, _ = fmt.Fprintf(t.channel, "\r\n%s\r\n", line)
 +}
@@ -2009,18 +2004,15 @@ index 00000000..5edc3910
 +
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	_, _ = fmt.Fprintf(t.channel, "%s\r\n", line)
 +}
 +
 +func (t *betterConsoleSshTerminal) appendByte(b byte) bool {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	if t.buffer.Len() >= betterConsoleShellMaxLineBytes {
 +		return false
 +	}
-+
 +	t.buffer.WriteByte(b)
 +	_, _ = t.channel.Write([]byte{b})
 +	return true
@@ -2029,11 +2021,9 @@ index 00000000..5edc3910
 +func (t *betterConsoleSshTerminal) backspace() {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	if t.buffer.Len() == 0 {
 +		return
 +	}
-+
 +	line := t.buffer.String()
 +	t.buffer.Reset()
 +	t.buffer.WriteString(line[:len(line)-1])
@@ -2043,7 +2033,6 @@ index 00000000..5edc3910
 +func (t *betterConsoleSshTerminal) commitLine() string {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	line := t.buffer.String()
 +	t.buffer.Reset()
 +	_, _ = io.WriteString(t.channel, "\r\n")
@@ -2053,7 +2042,6 @@ index 00000000..5edc3910
 +func (t *betterConsoleSshTerminal) cancelLine() {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	t.buffer.Reset()
 +	_, _ = io.WriteString(t.channel, "^C\r\n")
 +}
@@ -2061,7 +2049,6 @@ index 00000000..5edc3910
 +func (t *betterConsoleSshTerminal) clearLine() {
 +	t.mu.Lock()
 +	defer t.mu.Unlock()
-+
 +	t.buffer.Reset()
 +}
 +
@@ -2086,7 +2073,6 @@ index 00000000..5edc3910
 +		if value == 1 {
 +			return "1 byte"
 +		}
-+
 +		return fmt.Sprintf("%d bytes", value)
 +	}
 +
@@ -2105,7 +2091,6 @@ index 00000000..5edc3910
 +	if value < 0 {
 +		return fmt.Sprintf("%d bytes", value)
 +	}
-+
 +	return betterConsoleFormatBytes(uint64(value))
 +}
 +
@@ -2182,7 +2167,6 @@ index 00000000..5edc3910
 +		if b != 'm' || len(params) > 64 || !betterConsoleValidSgrParams(params) {
 +			return i + 1, ""
 +		}
-+
 +		return i + 1, "\x1b[" + params + "m"
 +	}
 +
@@ -2195,7 +2179,6 @@ index 00000000..5edc3910
 +			return false
 +		}
 +	}
-+
 +	return true
 +}
 +
@@ -2211,15 +2194,12 @@ index 00000000..5edc3910
 +		if input[i] == '\x1b' && i+1 < len(input) && input[i+1] == '\\' {
 +			return i + 2
 +		}
-+
 +		r, size := utf8.DecodeRuneInString(input[i:])
 +		if r == '\u009c' {
 +			return i + size
 +		}
-+
 +		i += size
 +	}
-+
 +	return len(input)
 +}
 diff --git a/sftp/server.go b/sftp/server.go
@@ -2660,10 +2640,10 @@ index e2263a4a..83725972 100644
  	return path.Join(c.BasePath, ".sftp/id_ed25519")
 diff --git a/sftp/server_security_test.go b/sftp/server_security_test.go
 new file mode 100644
-index 00000000..f999636b
+index 00000000..09a76c73
 --- /dev/null
 +++ b/sftp/server_security_test.go
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,139 @@
 +package sftp
 +
 +import (
@@ -2695,7 +2675,6 @@ index 00000000..f999636b
 +	for range maxSSHSessionChannels {
 +		require.True(t, limiter.acquire())
 +	}
-+
 +	require.False(t, limiter.acquire())
 +	limiter.release()
 +	require.True(t, limiter.acquire())

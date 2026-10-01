@@ -354,10 +354,10 @@ index 9e2465a9..f38a2fb2 100644
  golang.org/x/xerrors v0.0.0-20191204190536-9bdfabe68543/go.mod h1:I/5z698sn9Ka8TeJc9MKroUUfqBBauWjQqLJ2OPfmY0=
 diff --git a/router/betterfiles_entry.go b/router/betterfiles_entry.go
 new file mode 100644
-index 00000000..86735533
+index 00000000..74ccb8f6
 --- /dev/null
 +++ b/router/betterfiles_entry.go
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,70 @@
 +package router
 +
 +import (
@@ -407,7 +407,6 @@ index 00000000..86735533
 +	if stat, ok := info.Sys().(*unix.Stat_t); ok {
 +		return time.Unix(stat.Ctim.Sec, stat.Ctim.Nsec)
 +	}
-+
 +	return info.ModTime()
 +}
 +
@@ -418,19 +417,15 @@ index 00000000..86735533
 +	if !info.Mode().IsRegular() {
 +		return "application/octet-stream"
 +	}
-+
 +	file, err := fs.UnixFS().OpenFile(value, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
 +	if err != nil {
 +		return "application/octet-stream"
 +	}
-+
 +	defer file.Close()
-+
 +	detected, err := mimetype.DetectReader(file)
 +	if err != nil || detected == nil {
 +		return "application/octet-stream"
 +	}
-+
 +	return detected.String()
 +}
 diff --git a/router/betterfiles_http_test.go b/router/betterfiles_http_test.go
@@ -583,10 +578,10 @@ index 00000000..3b1c183d
 +}
 diff --git a/router/betterfiles_paths.go b/router/betterfiles_paths.go
 new file mode 100644
-index 00000000..05b9515e
+index 00000000..8ec33a09
 --- /dev/null
 +++ b/router/betterfiles_paths.go
-@@ -0,0 +1,182 @@
+@@ -0,0 +1,173 @@
 +package router
 +
 +import (
@@ -634,7 +629,6 @@ index 00000000..05b9515e
 +	if !validBetterFilesComponents(cleaned) {
 +		return "", errBetterFilesInvalidPath
 +	}
-+
 +	return cleaned, nil
 +}
 +
@@ -663,7 +657,6 @@ index 00000000..05b9515e
 +	if root != "/" && !strings.HasPrefix(joined, root+"/") {
 +		return "", errBetterFilesInvalidPath
 +	}
-+
 +	return joined, nil
 +}
 +
@@ -678,12 +671,10 @@ index 00000000..05b9515e
 +	if strings.ContainsAny(filename, `/\\`) || len(filename) > betterFilesMaxNameLength {
 +		return "", "", errBetterFilesInvalidPath
 +	}
-+
 +	target, err := joinBetterFilesPath(root, filename)
 +	if err != nil {
 +		return "", "", err
 +	}
-+
 +	return root, target, nil
 +}
 +
@@ -703,7 +694,6 @@ index 00000000..05b9515e
 +			return false
 +		}
 +	}
-+
 +	return true
 +}
 +
@@ -713,7 +703,6 @@ index 00000000..05b9515e
 +			return true
 +		}
 +	}
-+
 +	return false
 +}
 +
@@ -738,7 +727,6 @@ index 00000000..05b9515e
 +			}
 +		}
 +	}
-+
 +	return nil
 +}
 +
@@ -750,7 +738,6 @@ index 00000000..05b9515e
 +	if info.Mode()&ufs.ModeSymlink != 0 {
 +		return nil, errBetterFilesInvalidPath
 +	}
-+
 +	return info, nil
 +}
 +
@@ -758,7 +745,6 @@ index 00000000..05b9515e
 +	if stat, ok := info.Sys().(*unix.Stat_t); ok {
 +		return stat.Blocks * 512
 +	}
-+
 +	return info.Size()
 +}
 +
@@ -1376,10 +1362,10 @@ index bdac7606..68cab2a8 100644
  			files.POST("/pull", middleware.RemoteDownloadEnabled(), postServerPullRemoteFile)
 diff --git a/router/router_cdn_stream.go b/router/router_cdn_stream.go
 new file mode 100644
-index 00000000..b474e993
+index 00000000..b9f5258b
 --- /dev/null
 +++ b/router/router_cdn_stream.go
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,48 @@
 +package router
 +
 +import (
@@ -1397,7 +1383,6 @@ index 00000000..b474e993
 +	if !ok {
 +		return
 +	}
-+
 +	defer df.Close()
 +
 +	serveDownloadFile(c, df, "inline", true, false)
@@ -1431,10 +1416,10 @@ index 00000000..b474e993
 +}
 diff --git a/router/router_download_directory.go b/router/router_download_directory.go
 new file mode 100644
-index 00000000..059d1b20
+index 00000000..2a70538b
 --- /dev/null
 +++ b/router/router_download_directory.go
-@@ -0,0 +1,388 @@
+@@ -0,0 +1,364 @@
 +package router
 +
 +import (
@@ -1512,7 +1497,6 @@ index 00000000..059d1b20
 +		abortDirectoryDownload(c)
 +		return
 +	}
-+
 +	s, ok := manager.Get(token.ServerUuid)
 +	if !ok || token.Denylisted() || !token.IsUniqueRequest() || !token.HasScope(tokens.FileDownload) {
 +		abortDirectoryDownload(c)
@@ -1528,13 +1512,11 @@ index 00000000..059d1b20
 +		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Unsupported directory archive format."})
 +		return
 +	}
-+
 +	root, err := normalizeBetterFilesRoot(token.FilePath)
 +	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), root) != nil {
 +		abortDirectoryDownload(c)
 +		return
 +	}
-+
 +	info, err := betterFilesLstat(s.Filesystem(), root)
 +	if err != nil || !info.IsDir() {
 +		abortDirectoryDownload(c)
@@ -1573,11 +1555,9 @@ index 00000000..059d1b20
 +			builder.WriteRune(character)
 +		}
 +	}
-+
 +	if builder.Len() == 0 {
 +		return "directory"
 +	}
-+
 +	return builder.String()
 +}
 +
@@ -1595,7 +1575,6 @@ index 00000000..059d1b20
 +		if err != nil {
 +			return err
 +		}
-+
 +		return closeErr
 +	}
 +
@@ -1603,7 +1582,6 @@ index 00000000..059d1b20
 +	if err != nil {
 +		return err
 +	}
-+
 +	writer := tar.NewWriter(compressed)
 +	err = writeTarDirectory(ctx, writer, fs, root)
 +	closeTarErr := writer.Close()
@@ -1614,7 +1592,6 @@ index 00000000..059d1b20
 +	if closeTarErr != nil {
 +		return closeTarErr
 +	}
-+
 +	return closeCompressionErr
 +}
 +
@@ -1671,7 +1648,6 @@ index 00000000..059d1b20
 +		if err != nil {
 +			return err
 +		}
-+
 +		header.Name = item.rel
 +		if info.IsDir() {
 +			header.Name += "/"
@@ -1682,7 +1658,6 @@ index 00000000..059d1b20
 +		if file == nil {
 +			return nil
 +		}
-+
 +		written, err := io.CopyBuffer(writerOnly{Writer: writer}, file, buffer)
 +		if err != nil {
 +			return err
@@ -1690,7 +1665,6 @@ index 00000000..059d1b20
 +		if written != info.Size() {
 +			return io.ErrUnexpectedEOF
 +		}
-+
 +		return nil
 +	})
 +}
@@ -1707,7 +1681,6 @@ index 00000000..059d1b20
 +		if err != nil {
 +			return err
 +		}
-+
 +		header.Name = item.rel
 +		if info.IsDir() {
 +			header.Name += "/"
@@ -1719,7 +1692,6 @@ index 00000000..059d1b20
 +		if err != nil || file == nil {
 +			return err
 +		}
-+
 +		written, err := io.CopyBuffer(writerOnly{Writer: destination}, file, buffer)
 +		if err != nil {
 +			return err
@@ -1727,7 +1699,6 @@ index 00000000..059d1b20
 +		if written != info.Size() {
 +			return io.ErrUnexpectedEOF
 +		}
-+
 +		return nil
 +	})
 +}
@@ -1741,12 +1712,10 @@ index 00000000..059d1b20
 +	if err := ctx.Err(); err != nil {
 +		return err
 +	}
-+
 +	entries, err := fs.ReadDirStat(root)
 +	if err != nil {
 +		return err
 +	}
-+
 +	stack := make([]directoryArchiveItem, 0, len(entries))
 +	for i := len(entries) - 1; i >= 0; i-- {
 +		stack = append(stack, directoryArchiveItem{
@@ -1761,7 +1730,6 @@ index 00000000..059d1b20
 +		if err := ctx.Err(); err != nil {
 +			return err
 +		}
-+
 +		item := stack[len(stack)-1]
 +		stack = stack[:len(stack)-1]
 +		visited++
@@ -1773,7 +1741,6 @@ index 00000000..059d1b20
 +			ensureBetterFilesAllowed(fs, item.path) != nil {
 +			continue
 +		}
-+
 +		info, err := fs.UnixFS().Lstat(item.path)
 +		if err != nil {
 +			return err
@@ -1785,12 +1752,10 @@ index 00000000..059d1b20
 +			if err := visit(item, info, nil); err != nil {
 +				return err
 +			}
-+
 +			children, err := fs.ReadDirStat(item.path)
 +			if err != nil {
 +				return err
 +			}
-+
 +			for i := len(children) - 1; i >= 0; i-- {
 +				stack = append(stack, directoryArchiveItem{
 +					path:  pathpkg.Join(item.path, children[i].Name()),
@@ -1798,18 +1763,15 @@ index 00000000..059d1b20
 +					depth: item.depth + 1,
 +				})
 +			}
-+
 +			continue
 +		}
 +		if !info.Mode().IsRegular() {
 +			continue
 +		}
-+
 +		file, err := fs.UnixFS().OpenFile(item.path, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
 +		if err != nil {
 +			return err
 +		}
-+
 +		reader := &fingerprintContextReader{ctx: ctx, reader: io.LimitReader(file, info.Size())}
 +		err = visit(item, info, reader)
 +		closeErr := file.Close()
@@ -1820,15 +1782,14 @@ index 00000000..059d1b20
 +			return closeErr
 +		}
 +	}
-+
 +	return nil
 +}
 diff --git a/router/router_download_directory_http_test.go b/router/router_download_directory_http_test.go
 new file mode 100644
-index 00000000..68df6d92
+index 00000000..b6e0cb84
 --- /dev/null
 +++ b/router/router_download_directory_http_test.go
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,59 @@
 +package router
 +
 +import (
@@ -1865,14 +1826,12 @@ index 00000000..68df6d92
 +		if entry.FileInfo().IsDir() {
 +			continue
 +		}
-+
 +		opened, err := entry.Open()
 +		require.NoError(t, err)
 +		files[entry.Name], err = io.ReadAll(opened)
 +		require.NoError(t, err)
 +		require.NoError(t, opened.Close())
 +	}
-+
 +	require.Equal(t, []byte("visible"), files["visible.txt"])
 +	require.NotContains(t, files, "secret.txt")
 +
@@ -1892,10 +1851,10 @@ index 00000000..68df6d92
 +}
 diff --git a/router/router_download_directory_test.go b/router/router_download_directory_test.go
 new file mode 100644
-index 00000000..aa0a2952
+index 00000000..913fac3e
 --- /dev/null
 +++ b/router/router_download_directory_test.go
-@@ -0,0 +1,103 @@
+@@ -0,0 +1,99 @@
 +package router
 +
 +import (
@@ -1950,14 +1909,12 @@ index 00000000..aa0a2952
 +			if entry.FileInfo().IsDir() {
 +				continue
 +			}
-+
 +			opened, err := entry.Open()
 +			require.NoError(t, err)
 +			files[entry.Name], err = io.ReadAll(opened)
 +			require.NoError(t, err)
 +			require.NoError(t, opened.Close())
 +		}
-+
 +		return files
 +	}
 +
@@ -1992,19 +1949,17 @@ index 00000000..aa0a2952
 +		if header.FileInfo().IsDir() {
 +			continue
 +		}
-+
 +		files[header.Name], err = io.ReadAll(archive)
 +		require.NoError(t, err)
 +	}
-+
 +	return files
 +}
 diff --git a/router/router_download_helpers.go b/router/router_download_helpers.go
 new file mode 100644
-index 00000000..2bf277f5
+index 00000000..a9fd3382
 --- /dev/null
 +++ b/router/router_download_helpers.go
-@@ -0,0 +1,221 @@
+@@ -0,0 +1,216 @@
 +package router
 +
 +import (
@@ -2096,7 +2051,6 @@ index 00000000..2bf277f5
 +		})
 +		return
 +	}
-+
 +	middleware.CaptureAndAbort(c, err)
 +}
 +
@@ -2136,7 +2090,6 @@ index 00000000..2bf277f5
 +	if err == nil && m != nil {
 +		return m.String()
 +	}
-+
 +	return "application/octet-stream"
 +}
 +
@@ -2172,7 +2125,6 @@ index 00000000..2bf277f5
 +		for i := range p {
 +			p[i] = 0
 +		}
-+
 +		r.offset += int64(len(p))
 +		return len(p), nil
 +	}
@@ -2193,14 +2145,12 @@ index 00000000..2bf277f5
 +	default:
 +		return 0, errors.New("invalid whence")
 +	}
-+
 +	if target < 0 {
 +		return 0, errors.New("negative position")
 +	}
 +	if _, err := r.reader.Seek(target, io.SeekStart); err != nil {
 +		return 0, err
 +	}
-+
 +	r.offset = target
 +	return target, nil
 +}
@@ -2463,10 +2413,10 @@ index 00000000..04f68a22
 +}
 diff --git a/router/router_file_operations.go b/router/router_file_operations.go
 new file mode 100644
-index 00000000..ea983808
+index 00000000..57408574
 --- /dev/null
 +++ b/router/router_file_operations.go
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,25 @@
 +package router
 +
 +import (
@@ -2490,7 +2440,6 @@ index 00000000..ea983808
 +		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "The requested operation was not found on this server."})
 +		return
 +	}
-+
 +	c.Status(http.StatusNoContent)
 +}
 diff --git a/router/router_file_operations_test.go b/router/router_file_operations_test.go
@@ -2540,10 +2489,10 @@ index 00000000..5b89b4f8
 +}
 diff --git a/router/router_openapi.go b/router/router_openapi.go
 new file mode 100644
-index 00000000..ac9bddd0
+index 00000000..8c23f5e5
 --- /dev/null
 +++ b/router/router_openapi.go
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,299 @@
 +package router
 +
 +import (
@@ -2561,9 +2510,9 @@ index 00000000..ac9bddd0
 +		for _, status := range statuses {
 +			responses[status] = gin.H{"description": http.StatusText(statusCode(status))}
 +		}
-+
 +		return gin.H{"summary": summary, "responses": responses}
 +	}
++
 +	multipartUpload := operation("Upload flat files or a folder batch using multipart form data", "200", "400", "403", "404", "409", "413", "500")
 +	multipartUpload["x-betterfiles-folder-upload"] = gin.H{
 +		"version":     1,
@@ -2594,6 +2543,7 @@ index 00000000..ac9bddd0
 +			},
 +		},
 +	}
++
 +	search := operation("Search regular files with Wings-rs V2 filters", "200", "400", "401", "403", "404", "408", "413", "422", "500")
 +	search["description"] = "Returns only regular files. Result names are relative to root, but gitignore-style globs are anchored at the server filesystem root. Basename globs match at any depth; ordered ! negation is supported and excluded directories are pruned. Case-insensitive matching folds ASCII only. Size min is inclusive and max is exclusive. Content searches use the first 128 bytes as a UTF-8 heuristic, allow NUL bytes, and stop at the first literal match. include_unmatched includes oversized/unsearched files, not searched nonmatches or detected-binary files. No archives, virtual backup mounts, V1 POST payload, or match_context support. Unknown fields are rejected. Traversal/read limit errors return no partial results."
 +	search["security"] = []gin.H{{"daemonToken": []string{}}}
@@ -2844,10 +2794,10 @@ index 00000000..ac9bddd0
 +}
 diff --git a/router/router_openapi_test.go b/router/router_openapi_test.go
 new file mode 100644
-index 00000000..19f615e2
+index 00000000..1ef31da9
 --- /dev/null
 +++ b/router/router_openapi_test.go
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,135 @@
 +package router
 +
 +import (
@@ -2894,7 +2844,6 @@ index 00000000..19f615e2
 +	for _, status := range []string{"200", "408", "409", "413", "429"} {
 +		require.Contains(t, responses, status)
 +	}
-+
 +	post := document.Paths["/upload/file"]["post"].(map[string]interface{})
 +	capability := post["x-betterfiles-folder-upload"].(map[string]interface{})
 +	require.Equal(t, float64(1), capability["version"])
@@ -2927,7 +2876,6 @@ index 00000000..19f615e2
 +			return nil
 +		}
 +	}
-+
 +	return schema
 +}
 +
@@ -2950,17 +2898,14 @@ index 00000000..19f615e2
 +		require.Nil(t, filter["default"])
 +		require.Equal(t, false, filter["additionalProperties"])
 +	}
-+
 +	path := properties["path_filter"].(map[string]interface{})["properties"].(map[string]interface{})
 +	for _, field := range []string{"include", "exclude", "case_insensitive"} {
 +		require.Contains(t, path, field)
 +	}
-+
 +	content := properties["content_filter"].(map[string]interface{})["properties"].(map[string]interface{})
 +	for _, field := range []string{"query", "max_search_size", "include_unmatched", "case_insensitive"} {
 +		require.Contains(t, content, field)
 +	}
-+
 +	readLimit := content["max_search_size"].(map[string]interface{})
 +	require.Equal(t, float64(0), readLimit["minimum"])
 +	require.Equal(t, float64(defaultSearchV2ReadLimit), readLimit["default"])
@@ -2970,7 +2915,6 @@ index 00000000..19f615e2
 +	for _, code := range []string{"200", "400", "401", "403", "404", "408", "413", "422", "500"} {
 +		require.Contains(t, responses, code)
 +	}
-+
 +	resultSchema := responses["200"].(map[string]interface{})["content"].(map[string]interface{})["application/json"].(map[string]interface{})["schema"].(map[string]interface{})
 +	results := resultSchema["properties"].(map[string]interface{})["results"].(map[string]interface{})
 +	require.Equal(t, "array", results["type"])
@@ -2991,10 +2935,10 @@ index 00000000..19f615e2
 +}
 diff --git a/router/router_resumable_upload.go b/router/router_resumable_upload.go
 new file mode 100755
-index 00000000..fc3f9669
+index 00000000..95b36b52
 --- /dev/null
 +++ b/router/router_resumable_upload.go
-@@ -0,0 +1,608 @@
+@@ -0,0 +1,577 @@
 +package router
 +
 +import (
@@ -3092,11 +3036,9 @@ index 00000000..fc3f9669
 +func (r *resumableUploadLockRegistry) acquire(key string) (func(), bool) {
 +	r.mu.Lock()
 +	defer r.mu.Unlock()
-+
 +	if _, ok := r.active[key]; ok || len(r.active) >= maxResumableUploadLocks {
 +		return nil, false
 +	}
-+
 +	r.active[key] = struct{}{}
 +
 +	return func() {
@@ -3125,7 +3067,6 @@ index 00000000..fc3f9669
 +		r.mu.Unlock()
 +		return nil, false
 +	}
-+
 +	r.global++
 +	r.byServer[serverID]++
 +	r.byToken[tokenKey]++
@@ -3162,7 +3103,6 @@ index 00000000..fc3f9669
 +	now := time.Now()
 +	r.mu.Lock()
 +	defer r.mu.Unlock()
-+
 +	r.pruneExpired(now)
 +
 +	if session, ok := r.sessions[token.UniqueId]; ok {
@@ -3202,7 +3142,6 @@ index 00000000..fc3f9669
 +	if r.nextExpiry.IsZero() || now.Before(r.nextExpiry) {
 +		return
 +	}
-+
 +	r.nextExpiry = time.Time{}
 +	for id, session := range r.sessions {
 +		if !now.Before(session.expires) {
@@ -3224,7 +3163,6 @@ index 00000000..fc3f9669
 +	if !ok {
 +		return
 +	}
-+
 +	directory, target, ok := resumableUploadTarget(c, s)
 +	_ = directory
 +	if !ok {
@@ -3240,7 +3178,6 @@ index 00000000..fc3f9669
 +		c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "Too many uploads are currently active."})
 +		return
 +	}
-+
 +	defer release()
 +
 +	offset, err := resumableUploadOffset(s.Filesystem(), target)
@@ -3248,7 +3185,6 @@ index 00000000..fc3f9669
 +		abortResumableUploadFile(c)
 +		return
 +	}
-+
 +	c.Header("Upload-Offset", strconv.FormatInt(offset, 10))
 +	c.Status(http.StatusOK)
 +}
@@ -3258,7 +3194,6 @@ index 00000000..fc3f9669
 +	if !ok {
 +		return
 +	}
-+
 +	directory, target, ok := resumableUploadTarget(c, s)
 +	if !ok {
 +		return
@@ -3268,17 +3203,14 @@ index 00000000..fc3f9669
 +		c.AbortWithStatusJSON(http.StatusUnsupportedMediaType, gin.H{"error": "Content-Type must be application/offset+octet-stream."})
 +		return
 +	}
-+
 +	requestedOffset, ok := parseUploadInteger(c, "Upload-Offset", true)
 +	if !ok {
 +		return
 +	}
-+
 +	uploadLength, hasUploadLength, ok := parseOptionalUploadInteger(c, "Upload-Length")
 +	if !ok {
 +		return
 +	}
-+
 +	complete, ok := parseUploadComplete(c)
 +	if !ok {
 +		return
@@ -3303,7 +3235,6 @@ index 00000000..fc3f9669
 +		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{"error": "Too many resumable uploads are currently active."})
 +		return
 +	}
-+
 +	defer releaseAdmission()
 +
 +	release, ok := uploadLocks.acquire(s.ID() + "\x00" + target)
@@ -3311,7 +3242,6 @@ index 00000000..fc3f9669
 +		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "An upload is already active for this file."})
 +		return
 +	}
-+
 +	defer release()
 +
 +	current, err := resumableUploadOffset(s.Filesystem(), target)
@@ -3319,7 +3249,6 @@ index 00000000..fc3f9669
 +		abortResumableUploadFile(c)
 +		return
 +	}
-+
 +	c.Header("Upload-Offset", strconv.FormatInt(current, 10))
 +	if requestedOffset != current {
 +		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Upload offset does not match the current file size."})
@@ -3354,14 +3283,12 @@ index 00000000..fc3f9669
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	rollback := func() {
 +		_ = file.Truncate(current)
 +	}
 +
 +	buffer := uploadBufferPool.Get().(*[]byte)
 +	defer uploadBufferPool.Put(buffer)
-+
 +	deadlineReader := newResumableUploadDeadlineReader(
 +		c.Writer,
 +		c.Request.Body,
@@ -3419,13 +3346,11 @@ index 00000000..fc3f9669
 +		abortResumableUploadFile(c)
 +		return nil, nil, false
 +	}
-+
 +	s, ok := middleware.ExtractManager(c).Get(token.ServerUuid)
 +	if !ok || token.UniqueId == "" || token.Denylisted() || !token.HasScope(tokens.FileUpload) {
 +		abortResumableUploadFile(c)
 +		return nil, nil, false
 +	}
-+
 +	return s, token, true
 +}
 +
@@ -3435,7 +3360,6 @@ index 00000000..fc3f9669
 +		abortResumableUploadFile(c)
 +		return "", "", false
 +	}
-+
 +	return directory, target, true
 +}
 +
@@ -3450,7 +3374,6 @@ index 00000000..fc3f9669
 +	if !info.Mode().IsRegular() || info.Mode()&ufs.ModeSymlink != 0 {
 +		return 0, errBetterFilesInvalidPath
 +	}
-+
 +	return info.Size(), nil
 +}
 +
@@ -3461,7 +3384,6 @@ index 00000000..fc3f9669
 +		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Upload limit is not configured correctly."})
 +		return 0, false
 +	}
-+
 +	return megabytes * 1024 * 1024, true
 +}
 +
@@ -3471,13 +3393,11 @@ index 00000000..fc3f9669
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": name + " header is required."})
 +		return 0, false
 +	}
-+
 +	parsed, err := strconv.ParseInt(value, 10, 64)
 +	if err != nil || parsed < 0 {
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": name + " must be a non-negative integer."})
 +		return 0, false
 +	}
-+
 +	return parsed, true
 +}
 +
@@ -3485,7 +3405,6 @@ index 00000000..fc3f9669
 +	if c.GetHeader(name) == "" {
 +		return 0, false, true
 +	}
-+
 +	value, ok := parseUploadInteger(c, name, false)
 +	return value, true, ok
 +}
@@ -3534,7 +3453,6 @@ index 00000000..fc3f9669
 +	if err := r.setDeadline(time.Now().Add(r.timeout)); err != nil {
 +		return 0, err
 +	}
-+
 +	n, err := r.reader.Read(buffer)
 +	if err != nil {
 +		var networkError net.Error
@@ -3550,7 +3468,6 @@ index 00000000..fc3f9669
 +	if err != nil {
 +		return err
 +	}
-+
 +	r.supported = true
 +	return nil
 +}
@@ -3559,7 +3476,6 @@ index 00000000..fc3f9669
 +	if !r.supported {
 +		return nil
 +	}
-+
 +	return r.controller.SetReadDeadline(time.Time{})
 +}
 +
@@ -3567,7 +3483,6 @@ index 00000000..fc3f9669
 +	if timeout, ok := request.Context().Value(resumableUploadIdleTimeoutContextKey{}).(time.Duration); ok && timeout > 0 {
 +		return timeout
 +	}
-+
 +	return resumableUploadIdleTimeout
 +}
 +
@@ -3586,7 +3501,6 @@ index 00000000..fc3f9669
 +	if a > b {
 +		return a
 +	}
-+
 +	return b
 +}
 +
@@ -3600,15 +3514,14 @@ index 00000000..fc3f9669
 +	if index <= 0 {
 +		return "/"
 +	}
-+
 +	return value[:index]
 +}
 diff --git a/router/router_resumable_upload_test.go b/router/router_resumable_upload_test.go
 new file mode 100755
-index 00000000..7ea05c29
+index 00000000..1f1985f7
 --- /dev/null
 +++ b/router/router_resumable_upload_test.go
-@@ -0,0 +1,366 @@
+@@ -0,0 +1,363 @@
 +package router
 +
 +import (
@@ -3704,18 +3617,15 @@ index 00000000..7ea05c29
 +		workers.Add(1)
 +		go func() {
 +			defer workers.Done()
-+
 +			responses <- performResumableRequest(handler, http.MethodPatch, token, "/", "concurrent.txt", 0, &total, false, bytes.NewBufferString(content)).Code
 +		}()
 +	}
-+
 +	workers.Wait()
 +	close(responses)
 +	counts := map[int]int{}
 +	for status := range responses {
 +		counts[status]++
 +	}
-+
 +	require.Equal(t, 1, counts[http.StatusOK])
 +	require.Equal(t, 1, counts[http.StatusConflict])
 +	data := readServerHTTPFixture(t, s, "/concurrent.txt")
@@ -3977,10 +3887,10 @@ index 00000000..7ea05c29
 +}
 diff --git a/router/router_server_archive_nbt.go b/router/router_server_archive_nbt.go
 new file mode 100644
-index 00000000..d780ded4
+index 00000000..06fe7d13
 --- /dev/null
 +++ b/router/router_server_archive_nbt.go
-@@ -0,0 +1,560 @@
+@@ -0,0 +1,527 @@
 +package router
 +
 +import (
@@ -4037,7 +3947,6 @@ index 00000000..d780ded4
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive path."})
 +		return
 +	}
-+
 +	defer file.Close()
 +
 +	stat, err := file.Stat()
@@ -4064,7 +3973,6 @@ index 00000000..d780ded4
 +		if entries[i].IsDirectory != entries[j].IsDirectory {
 +			return entries[i].IsDirectory
 +		}
-+
 +		return strings.ToLower(entries[i].Path) < strings.ToLower(entries[j].Path)
 +	})
 +
@@ -4094,9 +4002,7 @@ index 00000000..d780ded4
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid archive path."})
 +		return
 +	}
-+
 +	defer file.Close()
-+
 +	destinationDisplay, ok := betterFilesResolveServerDirectory(s.Filesystem(), request.Destination, true)
 +	if !ok {
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid extraction destination."})
@@ -4171,7 +4077,6 @@ index 00000000..d780ded4
 +		file.Close()
 +		return nil, "", false
 +	}
-+
 +	return file, displayPath, true
 +}
 +
@@ -4219,7 +4124,6 @@ index 00000000..d780ded4
 +	if betterFilesIsTarFile(displayPath) {
 +		return betterFilesListTarEntries(file, displayPath)
 +	}
-+
 +	return nil, 0, errors.New("unsupported archive type")
 +}
 +
@@ -4228,7 +4132,6 @@ index 00000000..d780ded4
 +	if err != nil {
 +		return nil, 0, err
 +	}
-+
 +	reader, err := zip.NewReader(file, stat.Size())
 +	if err != nil {
 +		return nil, 0, errors.New("could not open zip archive")
@@ -4266,7 +4169,6 @@ index 00000000..d780ded4
 +	if _, err := file.Seek(0, io.SeekStart); err != nil {
 +		return nil, 0, err
 +	}
-+
 +	var archiveReader io.Reader = file
 +	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") ||
 +		strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
@@ -4274,9 +4176,7 @@ index 00000000..d780ded4
 +		if err != nil {
 +			return nil, 0, errors.New("could not open gzip archive")
 +		}
-+
 +		defer gzipReader.Close()
-+
 +		archiveReader = gzipReader
 +	}
 +
@@ -4291,7 +4191,6 @@ index 00000000..d780ded4
 +		if err != nil {
 +			return nil, totalEntries, errors.New("could not read tar archive")
 +		}
-+
 +		totalEntries++
 +		if totalEntries > betterFilesArchiveMaxEntries {
 +			continue
@@ -4301,7 +4200,6 @@ index 00000000..d780ded4
 +		if !ok {
 +			continue
 +		}
-+
 +		isDirectory := header.FileInfo().IsDir() || header.Typeflag == tar.TypeDir
 +		uncompressedSize := uint64(0)
 +		if header.Size > 0 {
@@ -4331,7 +4229,6 @@ index 00000000..d780ded4
 +		strings.Contains(entryPath, "/../") {
 +		return "", false
 +	}
-+
 +	return entryPath, true
 +}
 +
@@ -4340,7 +4237,6 @@ index 00000000..d780ded4
 +	if directory == "." {
 +		return "/"
 +	}
-+
 +	return "/" + directory
 +}
 +
@@ -4352,7 +4248,6 @@ index 00000000..d780ded4
 +		if !ok {
 +			return nil, errors.New("Archive selection contains an invalid path.")
 +		}
-+
 +		key := cleaned
 +		if entry.IsDirectory {
 +			key += "/"
@@ -4360,14 +4255,12 @@ index 00000000..d780ded4
 +		if _, exists := seen[key]; exists {
 +			continue
 +		}
-+
 +		seen[key] = struct{}{}
 +		selections = append(selections, betterFilesArchiveExtractSelection{
 +			Path:        cleaned,
 +			IsDirectory: entry.IsDirectory,
 +		})
 +	}
-+
 +	return selections, nil
 +}
 +
@@ -4377,14 +4270,12 @@ index 00000000..d780ded4
 +			if entryPath == selection.Path || strings.HasPrefix(entryPath, selection.Path+"/") {
 +				return true
 +			}
-+
 +			continue
 +		}
 +		if entryPath == selection.Path {
 +			return true
 +		}
 +	}
-+
 +	return false
 +}
 +
@@ -4406,7 +4297,6 @@ index 00000000..d780ded4
 +	if betterFilesIsTarFile(displayPath) {
 +		return betterFilesExtractTarEntries(fs, file, displayPath, destination, selections)
 +	}
-+
 +	return 0, errors.New("unsupported archive type")
 +}
 +
@@ -4424,7 +4314,6 @@ index 00000000..d780ded4
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	reader, err := zip.NewReader(file, stat.Size())
 +	if err != nil {
 +		return 0, errors.New("could not open zip archive")
@@ -4436,13 +4325,11 @@ index 00000000..d780ded4
 +		if !ok || !betterFilesArchiveSelectionMatches(normalized, selections) {
 +			continue
 +		}
-+
 +		outputPath := betterFilesExtractOutputPath(destination, normalized)
 +		if entry.FileInfo().IsDir() {
 +			if err := fs.CreateDirectory(path.Base(outputPath), path.Dir(outputPath)); err != nil {
 +				return extracted, err
 +			}
-+
 +			continue
 +		}
 +
@@ -4454,13 +4341,11 @@ index 00000000..d780ded4
 +			file.Close()
 +			return extracted, errors.New("Archive entry is too large to extract.")
 +		}
-+
 +		err = fs.Write(outputPath, file, int64(entry.UncompressedSize64), entry.FileInfo().Mode().Perm())
 +		file.Close()
 +		if err != nil {
 +			return extracted, err
 +		}
-+
 +		extracted++
 +		if extracted > betterFilesArchiveMaxExtract {
 +			return extracted, errors.New("Too many files matched this extraction request.")
@@ -4470,7 +4355,6 @@ index 00000000..d780ded4
 +	if extracted == 0 {
 +		return 0, errors.New("No matching archive entries were found.")
 +	}
-+
 +	return extracted, nil
 +}
 +
@@ -4484,7 +4368,6 @@ index 00000000..d780ded4
 +	if _, err := file.Seek(0, io.SeekStart); err != nil {
 +		return 0, err
 +	}
-+
 +	var archiveReader io.Reader = file
 +	if strings.HasSuffix(strings.ToLower(displayPath), ".tar.gz") ||
 +		strings.HasSuffix(strings.ToLower(displayPath), ".tgz") {
@@ -4492,9 +4375,7 @@ index 00000000..d780ded4
 +		if err != nil {
 +			return 0, errors.New("could not open gzip archive")
 +		}
-+
 +		defer gzipReader.Close()
-+
 +		archiveReader = gzipReader
 +	}
 +
@@ -4513,13 +4394,11 @@ index 00000000..d780ded4
 +		if !ok || !betterFilesArchiveSelectionMatches(normalized, selections) {
 +			continue
 +		}
-+
 +		outputPath := betterFilesExtractOutputPath(destination, normalized)
 +		if header.FileInfo().IsDir() || header.Typeflag == tar.TypeDir {
 +			if err := fs.CreateDirectory(path.Base(outputPath), path.Dir(outputPath)); err != nil {
 +				return extracted, err
 +			}
-+
 +			continue
 +		}
 +		if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeRegA {
@@ -4528,7 +4407,6 @@ index 00000000..d780ded4
 +		if err := fs.Write(outputPath, tarReader, header.Size, header.FileInfo().Mode().Perm()); err != nil {
 +			return extracted, err
 +		}
-+
 +		extracted++
 +		if extracted > betterFilesArchiveMaxExtract {
 +			return extracted, errors.New("Too many files matched this extraction request.")
@@ -4538,7 +4416,6 @@ index 00000000..d780ded4
 +	if extracted == 0 {
 +		return 0, errors.New("No matching archive entries were found.")
 +	}
-+
 +	return extracted, nil
 +}
 diff --git a/router/router_server_betterfiles_collaboration.go b/router/router_server_betterfiles_collaboration.go
@@ -5016,10 +4893,10 @@ index 75618442..b7776071 100644
  }
 diff --git a/router/router_server_files_copy_many.go b/router/router_server_files_copy_many.go
 new file mode 100644
-index 00000000..bcd8e3be
+index 00000000..d516e754
 --- /dev/null
 +++ b/router/router_server_files_copy_many.go
-@@ -0,0 +1,406 @@
+@@ -0,0 +1,382 @@
 +package router
 +
 +import (
@@ -5081,7 +4958,6 @@ index 00000000..bcd8e3be
 +		abortBetterFilesPath(c, err)
 +		return
 +	}
-+
 +	files, skipped, err := prepareCopyMany(s.Filesystem(), root, data.Files, data.Overwrite)
 +	if err != nil {
 +		abortBetterFilesPath(c, err)
@@ -5103,16 +4979,13 @@ index 00000000..bcd8e3be
 +		if err != nil {
 +			return err
 +		}
-+
 +		operation.SetBytesTotal(total)
 +		for _, file := range files {
 +			if err := copyManyPath(ctx, s.Filesystem(), file.from, file.to, data.Overwrite, operation); err != nil {
 +				return err
 +			}
-+
 +			copied++
 +		}
-+
 +		return nil
 +	})
 +	if err != nil {
@@ -5128,7 +5001,6 @@ index 00000000..bcd8e3be
 +		c.AbortWithStatusJSON(http.StatusExpectationFailed, gin.H{"error": "File copy operation failed or was cancelled."})
 +		return
 +	}
-+
 +	c.JSON(http.StatusOK, gin.H{"copied": copied, "skipped": skipped})
 +}
 +
@@ -5147,7 +5019,6 @@ index 00000000..bcd8e3be
 +		if err != nil {
 +			return nil, nil, err
 +		}
-+
 +		to, err := joinBetterFilesPath(root, requested.To)
 +		if err != nil || from == to {
 +			return nil, nil, errBetterFilesInvalidPath
@@ -5155,7 +5026,6 @@ index 00000000..bcd8e3be
 +		if _, exists := destinations[to]; exists {
 +			return nil, nil, errBetterFilesInvalidPath
 +		}
-+
 +		destinations[to] = struct{}{}
 +		if err := ensureBetterFilesAllowed(fs, from, to); err != nil {
 +			return nil, nil, err
@@ -5191,7 +5061,6 @@ index 00000000..bcd8e3be
 +			requestedTo: requested.To,
 +		})
 +	}
-+
 +	return files, skipped, nil
 +}
 +
@@ -5219,7 +5088,6 @@ index 00000000..bcd8e3be
 +			if err := ctx.Err(); err != nil {
 +				return 0, err
 +			}
-+
 +			item := stack[len(stack)-1]
 +			stack = stack[:len(stack)-1]
 +			visited++
@@ -5235,26 +5103,22 @@ index 00000000..bcd8e3be
 +				if uint64(info.Size()) > math.MaxUint64-total {
 +					return 0, errors.New("copy size overflow")
 +				}
-+
 +				total += uint64(info.Size())
 +				continue
 +			}
 +			if !info.IsDir() {
 +				continue
 +			}
-+
 +			entries, err := fs.ReadDirStat(item.from)
 +			if err != nil {
 +				return 0, err
 +			}
-+
 +			for _, entry := range entries {
 +				childFrom := pathpkg.Join(item.from, entry.Name())
 +				childTo := pathpkg.Join(item.to, entry.Name())
 +				if ensureBetterFilesAllowed(fs, childFrom, childTo) != nil || entry.Mode()&ufs.ModeSymlink != 0 {
 +					continue
 +				}
-+
 +				stack = append(stack, copyWalkItem{
 +					from:  childFrom,
 +					to:    childTo,
@@ -5263,7 +5127,6 @@ index 00000000..bcd8e3be
 +			}
 +		}
 +	}
-+
 +	return total, nil
 +}
 +
@@ -5280,7 +5143,6 @@ index 00000000..bcd8e3be
 +		if err := ctx.Err(); err != nil {
 +			return err
 +		}
-+
 +		item := stack[len(stack)-1]
 +		stack = stack[:len(stack)-1]
 +		visited++
@@ -5292,7 +5154,6 @@ index 00000000..bcd8e3be
 +		if err != nil {
 +			return err
 +		}
-+
 +		switch {
 +		case info.IsDir():
 +			if err := ensureCopyDestinationDirectory(fs, item.to); err != nil {
@@ -5309,7 +5170,6 @@ index 00000000..bcd8e3be
 +				if ensureBetterFilesAllowed(fs, childFrom, childTo) != nil || entry.Mode()&ufs.ModeSymlink != 0 {
 +					continue
 +				}
-+
 +				stack = append(stack, copyWalkItem{
 +					from:  childFrom,
 +					to:    childTo,
@@ -5331,7 +5191,6 @@ index 00000000..bcd8e3be
 +			continue
 +		}
 +	}
-+
 +	return nil
 +}
 +
@@ -5341,13 +5200,11 @@ index 00000000..bcd8e3be
 +		if !info.IsDir() || info.Mode()&ufs.ModeSymlink != 0 {
 +			return errBetterFilesInvalidPath
 +		}
-+
 +		return nil
 +	}
 +	if !errors.Is(err, ufs.ErrNotExist) {
 +		return err
 +	}
-+
 +	return fs.CreateDirectory(pathpkg.Base(destination), pathpkg.Dir(destination))
 +}
 +
@@ -5362,7 +5219,6 @@ index 00000000..bcd8e3be
 +	if err != nil {
 +		return err
 +	}
-+
 +	openedInfo, err := file.Stat()
 +	if err != nil {
 +		_ = file.Close()
@@ -5390,7 +5246,6 @@ index 00000000..bcd8e3be
 +	if err := fs.Write(temporary, reader, openedInfo.Size(), sourceInfo.Mode()&ufs.ModePerm); err != nil {
 +		return err
 +	}
-+
 +	temporaryInfo, err := fs.UnixFS().Lstat(temporary)
 +	if err != nil || temporaryInfo.Size() != openedInfo.Size() {
 +		return errors.New("source changed while it was copied")
@@ -5401,7 +5256,6 @@ index 00000000..bcd8e3be
 +	if err := fs.Replace(temporary, destination); err != nil {
 +		return err
 +	}
-+
 +	installed = true
 +	operation.AddFilesProcessed(1)
 +	return nil
@@ -5419,7 +5273,6 @@ index 00000000..bcd8e3be
 +		return 0, r.ctx.Err()
 +	default:
 +	}
-+
 +	n, err := r.reader.Read(buffer)
 +	if n > 0 {
 +		r.operation.AddBytesProcessed(uint64(n))
@@ -5428,10 +5281,10 @@ index 00000000..bcd8e3be
 +}
 diff --git a/router/router_server_files_copy_many_test.go b/router/router_server_files_copy_many_test.go
 new file mode 100644
-index 00000000..7239ebb3
+index 00000000..ad75d205
 --- /dev/null
 +++ b/router/router_server_files_copy_many_test.go
-@@ -0,0 +1,142 @@
+@@ -0,0 +1,140 @@
 +package router
 +
 +import (
@@ -5519,7 +5372,6 @@ index 00000000..7239ebb3
 +		cancel()
 +		t.Fatal("copy did not begin")
 +	}
-+
 +	require.Error(t, <-result)
 +	require.Equal(t, []byte("original"), readBetterFilesFixture(t, fs, "/destination.bin"))
 +	entries, err := os.ReadDir(fs.Path())
@@ -5561,7 +5413,6 @@ index 00000000..7239ebb3
 +	for _, file := range files {
 +		require.NoError(t, fs.RenameNoReplace(file.from, file.to))
 +	}
-+
 +	require.Equal(t, []byte("one"), readBetterFilesFixture(t, fs, "/renamed/one.txt"))
 +	require.Equal(t, []byte("two"), readBetterFilesFixture(t, fs, "/renamed/two.txt"))
 +}
@@ -5576,10 +5427,10 @@ index 00000000..7239ebb3
 +}
 diff --git a/router/router_server_files_fingerprints.go b/router/router_server_files_fingerprints.go
 new file mode 100644
-index 00000000..dd35a306
+index 00000000..613bc9d1
 --- /dev/null
 +++ b/router/router_server_files_fingerprints.go
-@@ -0,0 +1,303 @@
+@@ -0,0 +1,283 @@
 +package router
 +
 +import (
@@ -5625,7 +5476,6 @@ index 00000000..dd35a306
 +		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Unsupported fingerprint algorithm."})
 +		return
 +	}
-+
 +	requested := c.QueryArray("files")
 +	if len(requested) == 0 {
 +		requested = c.QueryArray("files[]")
@@ -5634,7 +5484,6 @@ index 00000000..dd35a306
 +		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Between 1 and 100 files are required."})
 +		return
 +	}
-+
 +	root, err := normalizeBetterFilesRoot(c.Query("root"))
 +	if err != nil || ensureBetterFilesAllowed(s.Filesystem(), root) != nil {
 +		abortBetterFilesPath(c, errBetterFilesInvalidPath)
@@ -5651,10 +5500,8 @@ index 00000000..dd35a306
 +		if ensureBetterFilesAllowed(s.Filesystem(), filePath) != nil {
 +			continue
 +		}
-+
 +		jobs = append(jobs, fingerprintJob{key: key, path: filePath})
 +	}
-+
 +	fingerprints := fingerprintFiles(c.Request.Context(), s.Filesystem(), algorithm, jobs)
 +	c.JSON(http.StatusOK, gin.H{"fingerprints": fingerprints})
 +}
@@ -5695,7 +5542,6 @@ index 00000000..dd35a306
 +		workers.Add(1)
 +		go func() {
 +			defer workers.Done()
-+
 +			buffer := make([]byte, 64*1024)
 +			for job := range jobChannel {
 +				value, err := fingerprintOneFile(ctx, fs, algorithm, job.path, buffer)
@@ -5711,10 +5557,8 @@ index 00000000..dd35a306
 +			}
 +		}()
 +	}
-+
 +	go func() {
 +		defer close(jobChannel)
-+
 +		for _, job := range jobs {
 +			select {
 +			case jobChannel <- job:
@@ -5734,7 +5578,6 @@ index 00000000..dd35a306
 +			result[fingerprint.key] = fingerprint.value
 +		}
 +	}
-+
 +	return result
 +}
 +
@@ -5748,14 +5591,11 @@ index 00000000..dd35a306
 +	if err != nil || !info.Mode().IsRegular() {
 +		return "", errBetterFilesInvalidPath
 +	}
-+
 +	file, err := fs.UnixFS().OpenFile(filePath, ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
 +	if err != nil {
 +		return "", err
 +	}
-+
 +	defer file.Close()
-+
 +	if algorithm == "curseforge" {
 +		return curseForgeFingerprint(ctx, file, buffer)
 +	}
@@ -5764,7 +5604,6 @@ index 00000000..dd35a306
 +	if err != nil {
 +		return "", err
 +	}
-+
 +	reader := &fingerprintContextReader{ctx: ctx, reader: file}
 +	if _, err := io.CopyBuffer(hasher, reader, buffer); err != nil {
 +		return "", err
@@ -5772,7 +5611,6 @@ index 00000000..dd35a306
 +	if crc != nil {
 +		return fmt.Sprintf("%08x", crc.Sum32()), nil
 +	}
-+
 +	return hex.EncodeToString(hasher.Sum(nil)), nil
 +}
 +
@@ -5804,14 +5642,12 @@ index 00000000..dd35a306
 +		if err := ctx.Err(); err != nil {
 +			return "", err
 +		}
-+
 +		n, err := file.Read(buffer)
 +		for _, value := range buffer[:n] {
 +			if !curseForgeIgnoredByte(value) {
 +				normalizedLength++
 +			}
 +		}
-+
 +		if err == io.EOF {
 +			break
 +		}
@@ -5819,7 +5655,6 @@ index 00000000..dd35a306
 +			return "", err
 +		}
 +	}
-+
 +	if _, err := file.Seek(0, io.SeekStart); err != nil {
 +		return "", err
 +	}
@@ -5832,13 +5667,11 @@ index 00000000..dd35a306
 +		if err := ctx.Err(); err != nil {
 +			return "", err
 +		}
-+
 +		n, err := file.Read(buffer)
 +		for _, value := range buffer[:n] {
 +			if curseForgeIgnoredByte(value) {
 +				continue
 +			}
-+
 +			tail |= uint32(value) << shift
 +			shift += 8
 +			if shift == 32 {
@@ -5849,7 +5682,6 @@ index 00000000..dd35a306
 +				shift = 0
 +			}
 +		}
-+
 +		if err == io.EOF {
 +			break
 +		}
@@ -5857,7 +5689,6 @@ index 00000000..dd35a306
 +			return "", err
 +		}
 +	}
-+
 +	if shift > 0 {
 +		hashValue = (hashValue ^ tail) * multiplier
 +	}
@@ -5944,10 +5775,10 @@ index 00000000..e8343cba
 +}
 diff --git a/router/router_server_files_largest.go b/router/router_server_files_largest.go
 new file mode 100644
-index 00000000..c1994bc6
+index 00000000..99237602
 --- /dev/null
 +++ b/router/router_server_files_largest.go
-@@ -0,0 +1,217 @@
+@@ -0,0 +1,201 @@
 +package router
 +
 +import (
@@ -5992,7 +5823,6 @@ index 00000000..c1994bc6
 +		abortBetterFilesPath(c, errBetterFilesInvalidPath)
 +		return
 +	}
-+
 +	rootInfo, err := betterFilesLstat(s.Filesystem(), root)
 +	if err != nil || !rootInfo.IsDir() {
 +		abortBetterFilesPath(c, err)
@@ -6005,11 +5835,9 @@ index 00000000..c1994bc6
 +			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Directory analysis traversal limit exceeded."})
 +			return
 +		}
-+
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	c.JSON(http.StatusOK, entries)
 +}
 +
@@ -6032,7 +5860,6 @@ index 00000000..c1994bc6
 +		if err := ctx.Err(); err != nil {
 +			return nil, err
 +		}
-+
 +		directory := stack[len(stack)-1]
 +		stack = stack[:len(stack)-1]
 +		if directory.depth > maxLargestDirectoryDepth || len(aggregates) > maxLargestDirectories {
@@ -6043,13 +5870,11 @@ index 00000000..c1994bc6
 +		if err != nil {
 +			return nil, err
 +		}
-+
 +		for _, info := range entries {
 +			visitedEntries++
 +			if visitedEntries > maxLargestDirectoryEntries {
 +				return nil, errLargestDirectoryTraversalLimit
 +			}
-+
 +			fullPath := pathpkg.Join(directory.path, info.Name())
 +			if ensureBetterFilesAllowed(fs, fullPath) != nil || info.Mode()&ufs.ModeSymlink != 0 {
 +				continue
@@ -6067,7 +5892,6 @@ index 00000000..c1994bc6
 +				if _, exists := seenInodes[key]; exists {
 +					continue
 +				}
-+
 +				seenInodes[key] = struct{}{}
 +			}
 +			aggregate := aggregates[directory.path]
@@ -6082,12 +5906,10 @@ index 00000000..c1994bc6
 +		aggregate.totalLogical = aggregate.logical
 +		aggregate.totalPhysical = aggregate.physical
 +	}
-+
 +	for path, aggregate := range aggregates {
 +		if path == root {
 +			continue
 +		}
-+
 +		for parent := pathpkg.Dir(path); ; parent = pathpkg.Dir(parent) {
 +			if ancestor := aggregates[parent]; ancestor != nil {
 +				ancestor.totalLogical = saturatingAddInt64(ancestor.totalLogical, aggregate.logical)
@@ -6098,21 +5920,17 @@ index 00000000..c1994bc6
 +			}
 +		}
 +	}
-+
 +	for path, aggregate := range aggregates {
 +		if path == root || aggregate.logical <= 0 {
 +			continue
 +		}
-+
 +		candidates = append(candidates, aggregate)
 +		total = saturatingAddInt64(total, aggregate.logical)
 +	}
-+
 +	sort.Slice(candidates, func(i, j int) bool {
 +		if candidates[i].logical == candidates[j].logical {
 +			return candidates[i].path < candidates[j].path
 +		}
-+
 +		return candidates[i].logical > candidates[j].logical
 +	})
 +	if total == 0 {
@@ -6129,7 +5947,6 @@ index 00000000..c1994bc6
 +			break
 +		}
 +	}
-+
 +	if cutoff < 10 {
 +		cutoff = 10
 +		if cutoff > len(candidates) {
@@ -6150,7 +5967,6 @@ index 00000000..c1994bc6
 +		entry.SizePhysical = candidate.totalPhysical
 +		result = append(result, entry)
 +	}
-+
 +	sort.SliceStable(result, func(i, j int) bool {
 +		return result[i].Size > result[j].Size
 +	})
@@ -6162,15 +5978,14 @@ index 00000000..c1994bc6
 +	if value > 0 && current > maxInt64-value {
 +		return maxInt64
 +	}
-+
 +	return current + value
 +}
 diff --git a/router/router_server_files_largest_test.go b/router/router_server_files_largest_test.go
 new file mode 100644
-index 00000000..ec3a7c8c
+index 00000000..193875d5
 --- /dev/null
 +++ b/router/router_server_files_largest_test.go
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,46 @@
 +package router
 +
 +import (
@@ -6211,7 +6026,6 @@ index 00000000..ec3a7c8c
 +	for i, size := range []int{500, 400, 300, 200, 100} {
 +		writeBetterFilesFixture(t, fs, fmt.Sprintf("/directory-%d/data.bin", i), make([]byte, size))
 +	}
-+
 +	rootInfo, err := betterFilesLstat(fs, "/")
 +	require.NoError(t, err)
 +	results, err := analyzeLargestDirectories(context.Background(), fs, "/", rootInfo)
@@ -6220,10 +6034,10 @@ index 00000000..ec3a7c8c
 +}
 diff --git a/router/router_server_files_rename.go b/router/router_server_files_rename.go
 new file mode 100644
-index 00000000..d05b7758
+index 00000000..8f1c6837
 --- /dev/null
 +++ b/router/router_server_files_rename.go
-@@ -0,0 +1,148 @@
+@@ -0,0 +1,138 @@
 +package router
 +
 +import (
@@ -6269,13 +6083,11 @@ index 00000000..d05b7758
 +		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": "Between 1 and 1000 rename entries are required."})
 +		return
 +	}
-+
 +	root, err := normalizeBetterFilesRoot(data.Root)
 +	if err != nil {
 +		abortBetterFilesPath(c, err)
 +		return
 +	}
-+
 +	normalized, err := prepareRenameFiles(s.Filesystem(), root, data.Files)
 +	if err != nil {
 +		switch {
@@ -6288,7 +6100,6 @@ index 00000000..d05b7758
 +		default:
 +			middleware.CaptureAndAbort(c, err)
 +		}
-+
 +		return
 +	}
 +
@@ -6309,14 +6120,11 @@ index 00000000..d05b7758
 +				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Cannot move or rename file, destination already exists."})
 +				return
 +			}
-+
 +			middleware.CaptureAndAbort(c, err)
 +			return
 +		}
-+
 +		s.RenameFileHistory(file.from, file.to)
 +	}
-+
 +	c.Status(http.StatusNoContent)
 +}
 +
@@ -6332,7 +6140,6 @@ index 00000000..d05b7758
 +		if err != nil {
 +			return nil, err
 +		}
-+
 +		to, err := joinBetterFilesPath(root, requested.To)
 +		if err != nil {
 +			return nil, err
@@ -6340,12 +6147,10 @@ index 00000000..d05b7758
 +		if _, duplicate := destinations[to]; duplicate {
 +			return nil, errDuplicateRenameDestination
 +		}
-+
 +		destinations[to] = struct{}{}
 +		if err := ensureBetterFilesAllowed(fs, from, to); err != nil {
 +			return nil, err
 +		}
-+
 +		sourceInfo, sourceErr := fs.UnixFS().Lstat(from)
 +		if sourceErr != nil && !errors.Is(sourceErr, os.ErrNotExist) {
 +			return nil, sourceErr
@@ -6369,15 +6174,14 @@ index 00000000..d05b7758
 +		}
 +		normalized = append(normalized, normalizedRenameFile{from: from, to: to})
 +	}
-+
 +	return normalized, nil
 +}
 diff --git a/router/router_server_files_revisions.go b/router/router_server_files_revisions.go
 new file mode 100644
-index 00000000..ea132300
+index 00000000..f3c28d13
 --- /dev/null
 +++ b/router/router_server_files_revisions.go
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,149 @@
 +package router
 +
 +import (
@@ -6413,7 +6217,6 @@ index 00000000..ea132300
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	c.JSON(http.StatusOK, gin.H{"revisions": revisions})
 +}
 +
@@ -6423,7 +6226,6 @@ index 00000000..ea132300
 +	if !ok {
 +		return
 +	}
-+
 +	content, filePath, err := s.FileRevisionContent(revisionID)
 +	if err != nil {
 +		abortFileRevisionError(c, err)
@@ -6445,7 +6247,6 @@ index 00000000..ea132300
 +	if !ok {
 +		return
 +	}
-+
 +	content, filePath, err := s.FileRevisionContent(revisionID)
 +	if err != nil {
 +		abortFileRevisionError(c, err)
@@ -6464,11 +6265,9 @@ index 00000000..ea132300
 +			})
 +			return
 +		}
-+
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	restored, ok := captureFileRevisionContent(s, filePath)
 +	if ok {
 +		user := strings.TrimSpace(c.Query("user"))
@@ -6490,7 +6289,6 @@ index 00000000..ea132300
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Invalid file revision."})
 +		return 0, false
 +	}
-+
 +	return id, true
 +}
 +
@@ -6499,7 +6297,6 @@ index 00000000..ea132300
 +		c.AbortWithStatusJSON(http.StatusNotFound, gin.H{"error": "File revision was not found."})
 +		return
 +	}
-+
 +	middleware.CaptureAndAbort(c, err)
 +}
 +
@@ -6508,7 +6305,6 @@ index 00000000..ea132300
 +	if value == "/." {
 +		return "/"
 +	}
-+
 +	return value
 +}
 +
@@ -6522,29 +6318,25 @@ index 00000000..ea132300
 +	if err != nil {
 +		return nil, false
 +	}
-+
 +	defer f.Close()
-+
 +	if stat.IsDir() ||
 +		stat.Size() < 0 ||
 +		stat.Size() > limit ||
 +		!server.ShouldRecordFileHistory(filePath, uint64(stat.Size())) {
 +		return nil, false
 +	}
-+
 +	content, err := io.ReadAll(io.LimitReader(f, limit+1))
 +	if err != nil || int64(len(content)) > limit {
 +		return nil, false
 +	}
-+
 +	return content, true
 +}
 diff --git a/router/router_server_files_search.go b/router/router_server_files_search.go
 new file mode 100644
-index 00000000..42a3a51c
+index 00000000..d772f64d
 --- /dev/null
 +++ b/router/router_server_files_search.go
-@@ -0,0 +1,627 @@
+@@ -0,0 +1,619 @@
 +package router
 +
 +import (
@@ -6695,7 +6487,6 @@ index 00000000..42a3a51c
 +	if n < 2 {
 +		return 2
 +	}
-+
 +	return n
 +}
 +
@@ -6766,9 +6557,7 @@ index 00000000..42a3a51c
 +	if err != nil {
 +		return false
 +	}
-+
 +	defer file.Close()
-+
 +	if stat.IsDir() || !stat.Mode().IsRegular() || stat.Size() <= 0 || stat.Size() > maxContentBytes {
 +		return false
 +	}
@@ -6810,7 +6599,6 @@ index 00000000..42a3a51c
 +	if sc.maxResults <= 0 {
 +		return false
 +	}
-+
 +	return int(sc.resultCount.Load()) >= sc.maxResults
 +}
 +
@@ -6826,7 +6614,6 @@ index 00000000..42a3a51c
 +	if cap(batch) > batchSize*4 {
 +		return
 +	}
-+
 +	batch = batch[:0]
 +	resultPool.Put(&batch)
 +}
@@ -6854,7 +6641,6 @@ index 00000000..42a3a51c
 +	if len(batch) == 0 {
 +		return false
 +	}
-+
 +	sc.resultCount.Add(int64(len(batch)))
 +
 +	select {
@@ -6924,7 +6710,6 @@ index 00000000..42a3a51c
 +	if lastSlash <= 0 {
 +		return "/"
 +	}
-+
 +	return path[:lastSlash]
 +}
 +
@@ -7136,7 +6921,6 @@ index 00000000..42a3a51c
 +	collector.Add(1)
 +	go func() {
 +		defer collector.Done()
-+
 +		sc.collectResults()
 +	}()
 +
@@ -7174,10 +6958,10 @@ index 00000000..42a3a51c
 +}
 diff --git a/router/router_server_files_search_v2.go b/router/router_server_files_search_v2.go
 new file mode 100644
-index 00000000..ff910cfb
+index 00000000..6794bbed
 --- /dev/null
 +++ b/router/router_server_files_search_v2.go
-@@ -0,0 +1,842 @@
+@@ -0,0 +1,779 @@
 +package router
 +
 +import (
@@ -7251,7 +7035,6 @@ index 00000000..ff910cfb
 +	if f.MaxSearchSize == nil {
 +		return defaultSearchV2ReadLimit
 +	}
-+
 +	return *f.MaxSearchSize
 +}
 +
@@ -7306,7 +7089,6 @@ index 00000000..ff910cfb
 +		}
 +		return
 +	}
-+
 +	data := &searchV2Payload{PerPage: 100}
 +	decoder := json.NewDecoder(bytes.NewReader(body))
 +	decoder.DisallowUnknownFields()
@@ -7316,7 +7098,6 @@ index 00000000..ff910cfb
 +		})
 +		return
 +	}
-+
 +	var extra interface{}
 +	if decoder.Decode(&extra) != io.EOF {
 +		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "Search requires exactly one JSON object."})
@@ -7326,7 +7107,6 @@ index 00000000..ff910cfb
 +		c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 +		return
 +	}
-+
 +	root, err := normalizeBetterFilesRoot(data.Root)
 +	if err != nil {
 +		abortBetterFilesPath(c, err)
@@ -7336,10 +7116,8 @@ index 00000000..ff910cfb
 +		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "The search root is forbidden."})
 +		return
 +	}
-+
 +	ctx, cancel := context.WithTimeout(c.Request.Context(), searchV2Timeout)
 +	defer cancel()
-+
 +	results, err := runSearchV2(ctx, s.Filesystem(), root, *data, nil)
 +	if err != nil {
 +		switch {
@@ -7356,10 +7134,8 @@ index 00000000..ff910cfb
 +		default:
 +			middleware.CaptureAndAbort(c, err)
 +		}
-+
 +		return
 +	}
-+
 +	c.JSON(http.StatusOK, gin.H{"results": results})
 +}
 +
@@ -7375,18 +7151,15 @@ index 00000000..ff910cfb
 +		if len(filter.Include)+len(filter.Exclude) > maxSearchV2Patterns {
 +			return errors.New("too many path patterns (maximum 128)")
 +		}
-+
 +		total := 0
 +		for _, group := range [][]string{filter.Include, filter.Exclude} {
 +			for _, pattern := range group {
 +				total += len(pattern)
 +			}
 +		}
-+
 +		if total > maxSearchV2PatternBytes {
 +			return errors.New("path patterns exceed 64 KiB in total")
 +		}
-+
 +		var err error
 +		if filter.includes, err = compileSearchV2Patterns(filter.Include, filter.CaseInsensitive); err != nil {
 +			return err
@@ -7435,7 +7208,6 @@ index 00000000..ff910cfb
 +		if pattern == "" {
 +			return nil, errors.New("path patterns must not be empty")
 +		}
-+
 +		rule := searchV2Pattern{}
 +		if strings.HasPrefix(pattern, "\\!") || strings.HasPrefix(pattern, "\\#") {
 +			pattern = pattern[1:]
@@ -7471,7 +7243,6 @@ index 00000000..ff910cfb
 +			if inClass {
 +				continue
 +			}
-+
 +			switch pattern[i] {
 +			case '{':
 +				if alternatives != 0 {
@@ -7497,13 +7268,11 @@ index 00000000..ff910cfb
 +					if product > maxSearchV2Alternatives/alternatives {
 +						return nil, errors.New("glob has too many alternatives (maximum 64)")
 +					}
-+
 +					product *= alternatives
 +					alternatives = 0
 +				}
 +			}
 +		}
-+
 +		if !anchored && !strings.Contains(pattern, "/") {
 +			pattern = "**/" + pattern
 +		}
@@ -7515,10 +7284,8 @@ index 00000000..ff910cfb
 +		if err != nil {
 +			return nil, err
 +		}
-+
 +		result = append(result, rule)
 +	}
-+
 +	return result, nil
 +}
 +
@@ -7548,11 +7315,9 @@ index 00000000..ff910cfb
 +				}
 +				end++
 +			}
-+
 +			if end >= len(pattern) {
 +				return "", errors.New("unclosed glob character class")
 +			}
-+
 +			inner := pattern[start:end]
 +			if strings.HasPrefix(inner, "]") {
 +				inner = "\\" + inner
@@ -7561,7 +7326,6 @@ index 00000000..ff910cfb
 +			if !doublestar.ValidatePattern(positive) {
 +				return "", errors.New("invalid glob character class")
 +			}
-+
 +			out.WriteByte('[')
 +			if negative {
 +				out.WriteByte('!')
@@ -7575,20 +7339,17 @@ index 00000000..ff910cfb
 +						members[searchV2LowerASCII(byte(value))] = true
 +					}
 +				}
-+
 +				any := false
 +				for value, present := range members {
 +					if !present {
 +						continue
 +					}
-+
 +					any = true
 +					if strings.ContainsRune("\\[]-!^", rune(value)) {
 +						out.WriteByte('\\')
 +					}
 +					out.WriteRune(rune(value))
 +				}
-+
 +				if !any {
 +					return "", errors.New("empty glob character class")
 +				}
@@ -7605,12 +7366,10 @@ index 00000000..ff910cfb
 +		}
 +		out.WriteByte(value)
 +	}
-+
 +	compiled := out.String()
 +	if !doublestar.ValidatePattern(compiled) {
 +		return "", errors.New("invalid path pattern")
 +	}
-+
 +	return compiled, nil
 +}
 +
@@ -7626,7 +7385,6 @@ index 00000000..ff910cfb
 +		}
 +		out.WriteRune(rune(b))
 +	}
-+
 +	return out.String()
 +}
 +
@@ -7638,7 +7396,6 @@ index 00000000..ff910cfb
 +	if filter == nil {
 +		return true, false
 +	}
-+
 +	candidate := searchV2GlobBytes(strings.TrimPrefix(serverPath, "/"), filter.CaseInsensitive)
 +	matchRules := func(rules []searchV2Pattern) bool {
 +		selected := false
@@ -7647,7 +7404,6 @@ index 00000000..ff910cfb
 +				selected = !rule.negative
 +			}
 +		}
-+
 +		return selected
 +	}
 +	excluded := matchRules(filter.excludes)
@@ -7659,7 +7415,6 @@ index 00000000..ff910cfb
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	for _, name := range strings.Split(strings.TrimPrefix(root, "/"), "/") {
 +		if name == "" {
 +			continue
@@ -7668,16 +7423,13 @@ index 00000000..ff910cfb
 +			_ = current.Close()
 +			return nil, err
 +		}
-+
 +		child, err := fs.UnixFS().OpenFileat(int(current.Fd()), name, ufs.O_RDONLY|ufs.O_DIRECTORY|ufs.O_NOFOLLOW, 0)
 +		_ = current.Close()
 +		if err != nil {
 +			return nil, err
 +		}
-+
 +		current = child
 +	}
-+
 +	return current, nil
 +}
 +
@@ -7691,19 +7443,16 @@ index 00000000..ff910cfb
 +	if err := ctx.Err(); err != nil {
 +		return nil, err
 +	}
-+
 +	rootFile, err := openSearchV2Root(ctx, fs, root)
 +	if err != nil {
 +		return nil, fmt.Errorf("%w: %w", errSearchV2Root, err)
 +	}
-+
 +	stack := []searchV2Directory{{file: rootFile, path: root}}
 +	defer func() {
 +		for _, frame := range stack {
 +			_ = frame.file.Close()
 +		}
 +	}()
-+
 +	results := make([]betterFilesEntry, 0, data.PerPage)
 +	if budget == nil {
 +		budget = &searchV2Budget{readRemaining: maxSearchV2TotalRead}
@@ -7720,7 +7469,6 @@ index 00000000..ff910cfb
 +		if budget.directoriesVisited > maxSearchV2Directories {
 +			return nil, errSearchV2TraversalLimit
 +		}
-+
 +		frame := &stack[len(stack)-1]
 +		if frame.index == len(frame.names) {
 +			if frame.eof {
@@ -7728,7 +7476,6 @@ index 00000000..ff910cfb
 +				stack = stack[:len(stack)-1]
 +				continue
 +			}
-+
 +			frame.names, err = frame.file.Readdirnames(searchV2DirectoryBatch)
 +			frame.index = 0
 +			frame.eof = errors.Is(err, io.EOF)
@@ -7745,12 +7492,10 @@ index 00000000..ff910cfb
 +		if budget.entriesVisited > maxSearchV2Entries {
 +			return nil, errSearchV2TraversalLimit
 +		}
-+
 +		fullPath, err := joinBetterFilesPath(frame.path, name)
 +		if err != nil || ensureBetterFilesAllowed(fs, fullPath) != nil {
 +			continue
 +		}
-+
 +		info, err := fs.UnixFS().Lstatat(int(frame.file.Fd()), name)
 +		if errors.Is(err, ufs.ErrNotExist) {
 +			continue
@@ -7761,7 +7506,6 @@ index 00000000..ff910cfb
 +		if info.Mode()&ufs.ModeSymlink != 0 {
 +			continue
 +		}
-+
 +		included, excluded := searchV2PathDecision(fullPath, info.IsDir(), data.PathFilter)
 +		if info.IsDir() {
 +			if excluded {
@@ -7770,7 +7514,6 @@ index 00000000..ff910cfb
 +			if frame.depth >= maxSearchV2Depth {
 +				return nil, errSearchV2TraversalLimit
 +			}
-+
 +			child, err := fs.UnixFS().OpenFileat(int(frame.file.Fd()), name, ufs.O_RDONLY|ufs.O_DIRECTORY|ufs.O_NOFOLLOW, 0)
 +			if errors.Is(err, ufs.ErrNotExist) || errors.Is(err, unix.ELOOP) || errors.Is(err, unix.ENOTDIR) {
 +				continue
@@ -7778,7 +7521,6 @@ index 00000000..ff910cfb
 +			if err != nil {
 +				return nil, err
 +			}
-+
 +			budget.directoriesVisited++
 +			stack = append(stack, searchV2Directory{
 +				file:  child,
@@ -7790,7 +7532,6 @@ index 00000000..ff910cfb
 +		if !included || !info.Mode().IsRegular() {
 +			continue
 +		}
-+
 +		entry, matched, err := searchV2File(ctx, fs, int(frame.file.Fd()), name, betterFilesRelativePath(root, fullPath), data, matcher, budget)
 +		if err != nil {
 +			return nil, err
@@ -7799,7 +7540,6 @@ index 00000000..ff910cfb
 +			results = append(results, entry)
 +		}
 +	}
-+
 +	return results, nil
 +}
 +
@@ -7807,7 +7547,6 @@ index 00000000..ff910cfb
 +	if root == "/" {
 +		return strings.TrimPrefix(fullPath, "/")
 +	}
-+
 +	return strings.TrimPrefix(strings.TrimPrefix(fullPath, root), "/")
 +}
 +
@@ -7818,7 +7557,6 @@ index 00000000..ff910cfb
 +	if filter.Min != nil && size < *filter.Min {
 +		return false
 +	}
-+
 +	return filter.Max == nil || size < *filter.Max
 +}
 +
@@ -7862,9 +7600,7 @@ index 00000000..ff910cfb
 +		// Like Wings-rs, skip files that disappeared or cannot be opened.
 +		return empty, false, ctx.Err()
 +	}
-+
 +	defer file.Close()
-+
 +	info, err := file.Stat()
 +	if err != nil {
 +		return empty, false, ctx.Err()
@@ -7872,13 +7608,11 @@ index 00000000..ff910cfb
 +	if !info.Mode().IsRegular() || !searchV2SizeMatches(info.Size(), data.SizeFilter) {
 +		return empty, false, nil
 +	}
-+
 +	filter := data.ContentFilter
 +	scanned := filter != nil && info.Size() <= filter.readLimit()
 +	if filter != nil && !scanned && !filter.IncludeUnmatched {
 +		return empty, false, nil
 +	}
-+
 +	limit := int64(searchV2HeadBytes)
 +	if scanned {
 +		limit = filter.readLimit()
@@ -7897,7 +7631,6 @@ index 00000000..ff910cfb
 +		if !validSearchV2TextHead(head[:n]) {
 +			return empty, false, nil
 +		}
-+
 +		matched, err := streamSearchV2Text(ctx, io.MultiReader(bytes.NewReader(head[:n]), reader), limit, matcher)
 +		if err != nil {
 +			return empty, false, err
@@ -7917,15 +7650,12 @@ index 00000000..ff910cfb
 +		if !utf8.FullRune(head) {
 +			return true
 +		}
-+
 +		value, size := utf8.DecodeRune(head)
 +		if value == utf8.RuneError && size == 1 {
 +			return false
 +		}
-+
 +		head = head[size:]
 +	}
-+
 +	return true
 +}
 +
@@ -7933,7 +7663,6 @@ index 00000000..ff910cfb
 +	if value >= 'A' && value <= 'Z' {
 +		return value + 'a' - 'A'
 +	}
-+
 +	return value
 +}
 +
@@ -7949,13 +7678,11 @@ index 00000000..ff910cfb
 +		for matched > 0 && pattern[i] != pattern[matched] {
 +			matched = failure[matched-1]
 +		}
-+
 +		if pattern[i] == pattern[matched] {
 +			matched++
 +		}
 +		failure[i] = matched
 +	}
-+
 +	return &searchV2Matcher{
 +		pattern:         pattern,
 +		failure:         failure,
@@ -7977,22 +7704,18 @@ index 00000000..ff910cfb
 +	if len(matcher.pattern) == 0 {
 +		return true, nil
 +	}
-+
 +	buffer := searchV2BufferPool.Get().(*[]byte)
 +	defer searchV2BufferPool.Put(buffer)
-+
 +	reader = io.LimitReader(reader, limit)
 +	state := 0
 +	for {
 +		if err := ctx.Err(); err != nil {
 +			return false, err
 +		}
-+
 +		n, readErr := reader.Read(*buffer)
 +		if err := ctx.Err(); err != nil {
 +			return false, err
 +		}
-+
 +		for _, value := range (*buffer)[:n] {
 +			if matcher.caseInsensitive {
 +				value = searchV2LowerASCII(value)
@@ -8000,7 +7723,6 @@ index 00000000..ff910cfb
 +			for state > 0 && value != matcher.pattern[state] {
 +				state = matcher.failure[state-1]
 +			}
-+
 +			if value == matcher.pattern[state] {
 +				state++
 +			}
@@ -8008,7 +7730,6 @@ index 00000000..ff910cfb
 +				return true, nil
 +			}
 +		}
-+
 +		if readErr == io.EOF {
 +			return false, nil
 +		}
@@ -8022,10 +7743,10 @@ index 00000000..ff910cfb
 +}
 diff --git a/router/router_server_files_search_v2_test.go b/router/router_server_files_search_v2_test.go
 new file mode 100644
-index 00000000..bab57a38
+index 00000000..b89ee55b
 --- /dev/null
 +++ b/router/router_server_files_search_v2_test.go
-@@ -0,0 +1,561 @@
+@@ -0,0 +1,551 @@
 +package router
 +
 +import (
@@ -8061,7 +7782,6 @@ index 00000000..bab57a38
 +	for _, result := range results {
 +		names = append(names, result.Name)
 +	}
-+
 +	return names
 +}
 +
@@ -8139,7 +7859,6 @@ index 00000000..bab57a38
 +		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 +		require.JSONEq(t, `{"results":[]}`, response.Body.String())
 +	}
-+
 +	writeBetterFilesFixture(t, s.Filesystem(), "/nested/file.txt", []byte("test"))
 +	response := requestSearchV2(handler, s.ID(), `{}`, nil, true)
 +	require.Equal(t, http.StatusOK, response.Code)
@@ -8176,7 +7895,6 @@ index 00000000..bab57a38
 +	for _, name := range []string{"/root.yml", "/nested/paper.yml", "/nested/PAPER.YML", "/nested/cache/keep.yml", "/nested/other.yml", "/é.yml", "/😀.yml", "/#literal.yml"} {
 +		writeBetterFilesFixture(t, fs, name, []byte("x"))
 +	}
-+
 +	tests := []struct {
 +		name     string
 +		filter   searchV2PathFilter
@@ -8230,7 +7948,6 @@ index 00000000..bab57a38
 +		})
 +		require.Equal(t, query.want, len(results) == 1)
 +	}
-+
 +	for _, pattern := range []struct {
 +		pattern string
 +		want    bool
@@ -8247,7 +7964,6 @@ index 00000000..bab57a38
 +	for _, name := range []string{"_.txt", "].txt", "A.txt", "a.txt", "Z.txt", "z.txt", "b.txt"} {
 +		writeBetterFilesFixture(t, fs, "/"+name, nil)
 +	}
-+
 +	for _, test := range []struct {
 +		pattern     string
 +		insensitive bool
@@ -8292,7 +8008,6 @@ index 00000000..bab57a38
 +	for _, size := range []int{0, 4, 5, 6} {
 +		writeBetterFilesFixture(t, fs, fmt.Sprintf("/size%d", size), bytes.Repeat([]byte("x"), size))
 +	}
-+
 +	results := runSearchV2Test(t, fs, "/", searchV2Payload{SizeFilter: &searchV2SizeFilter{Min: searchV2Number(4), Max: searchV2Number(6)}})
 +	require.ElementsMatch(t, []string{"size4", "size5"}, searchV2Names(results))
 +	results = runSearchV2Test(t, fs, "/", searchV2Payload{SizeFilter: &searchV2SizeFilter{Min: searchV2Number(5), Max: searchV2Number(5)}})
@@ -8437,7 +8152,6 @@ index 00000000..bab57a38
 +			require.Contains(t, response.Body.String(), `"error"`)
 +		})
 +	}
-+
 +	response := requestSearchV2(handler, s.ID(), `{}`, nil, false)
 +	require.Equal(t, 401, response.Code)
 +	response = requestSearchV2(handler, s.ID(), strings.Repeat(" ", maxSearchV2RequestBytes)+`{}`, nil, true)
@@ -8477,7 +8191,6 @@ index 00000000..bab57a38
 +			}
 +		})
 +	}
-+
 +	data := searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: strings.Repeat("é", 2048)}}
 +	require.NoError(t, validateSearchV2Payload(&data))
 +	data.ContentFilter.Query += "a"
@@ -8514,7 +8227,6 @@ index 00000000..bab57a38
 +	parent, err := openSearchV2Root(context.Background(), fs, "/safe")
 +	require.NoError(t, err)
 +	defer parent.Close()
-+
 +	require.NoError(t, os.Rename(filepath.Join(fs.Path(), "safe"), filepath.Join(fs.Path(), "original")))
 +	require.NoError(t, os.Symlink("protected", filepath.Join(fs.Path(), "safe")))
 +	entry, matched, err := searchV2File(context.Background(), fs, int(parent.Fd()), "file.txt", "file.txt", searchV2Payload{ContentFilter: &searchV2ContentFilter{Query: "safe"}}, newSearchV2Matcher("safe", false), &searchV2Budget{readRemaining: 1024})
@@ -8548,7 +8260,6 @@ index 00000000..bab57a38
 +	for i := 0; i < maxSearchV2Results+5; i++ {
 +		writeBetterFilesFixture(t, fs, fmt.Sprintf("/file-%03d", i), nil)
 +	}
-+
 +	data := searchV2Payload{PerPage: 5000}
 +	require.NoError(t, validateSearchV2Payload(&data))
 +	require.Equal(t, 500, data.PerPage)
@@ -8589,10 +8300,10 @@ index 00000000..bab57a38
 +}
 diff --git a/router/router_server_git.go b/router/router_server_git.go
 new file mode 100644
-index 00000000..e9d663c4
+index 00000000..0f2e0f53
 --- /dev/null
 +++ b/router/router_server_git.go
-@@ -0,0 +1,1739 @@
+@@ -0,0 +1,1690 @@
 +package router
 +
 +import (
@@ -8768,7 +8479,6 @@ index 00000000..e9d663c4
 +		if gitBinaryWorks(ctx, env, p) {
 +			return p
 +		}
-+
 +		gitPathCache.Delete(env.Id)
 +	}
 +
@@ -8792,13 +8502,11 @@ index 00000000..e9d663c4
 +	if len(matches) != 3 {
 +		return false
 +	}
-+
 +	major, majorErr := strconv.Atoi(matches[1])
 +	minor, minorErr := strconv.Atoi(matches[2])
 +	if majorErr != nil || minorErr != nil {
 +		return false
 +	}
-+
 +	return major > gitMinimumMajorVersion || major == gitMinimumMajorVersion && minor >= gitMinimumMinorVersion
 +}
 +
@@ -8865,12 +8573,10 @@ index 00000000..e9d663c4
 +	if result == nil {
 +		return
 +	}
-+
 +	for _, remote := range remotes {
 +		if remote.RemoteName == "" {
 +			continue
 +		}
-+
 +		alias := gitRemoteAlias(remote.RemoteName)
 +		result.Stdout = strings.ReplaceAll(result.Stdout, alias, "[remote]")
 +		result.Stderr = strings.ReplaceAll(result.Stderr, alias, "[remote]")
@@ -8904,7 +8610,6 @@ index 00000000..e9d663c4
 +			}
 +		}
 +	}
-+
 +	return append(cmd, args...)
 +}
 +
@@ -8913,7 +8618,6 @@ index 00000000..e9d663c4
 +	if _, err := rand.Read(random); err != nil {
 +		return "", fmt.Errorf("could not generate a secure Git remote identity: %w", err)
 +	}
-+
 +	return hex.EncodeToString(random), nil
 +}
 +
@@ -8925,7 +8629,6 @@ index 00000000..e9d663c4
 +	if strings.HasSuffix(repositoryURL, "/") {
 +		return []string{repositoryURL}
 +	}
-+
 +	return []string{repositoryURL, repositoryURL + "/"}
 +}
 +
@@ -8968,7 +8671,6 @@ index 00000000..e9d663c4
 +	if second == nil {
 +		return first
 +	}
-+
 +	return &gitResponse{
 +		Stdout:   first.Stdout + second.Stdout,
 +		Stderr:   first.Stderr + second.Stderr,
@@ -8987,7 +8689,6 @@ index 00000000..e9d663c4
 +	if err != nil || result.ExitCode != 0 {
 +		return ""
 +	}
-+
 +	return strings.TrimSpace(result.Stdout)
 +}
 +
@@ -8995,7 +8696,6 @@ index 00000000..e9d663c4
 +	if runner.helper {
 +		return "helper"
 +	}
-+
 +	return "container"
 +}
 +
@@ -9015,7 +8715,6 @@ index 00000000..e9d663c4
 +		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
 +		return
 +	}
-+
 +	defer lock.Unlock()
 +
 +	ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Minute)
@@ -9042,7 +8741,6 @@ index 00000000..e9d663c4
 +			})
 +			return
 +		}
-+
 +		c.JSON(http.StatusOK, gitInstallResponse{
 +			Installed:        true,
 +			AlreadyInstalled: false,
@@ -9061,7 +8759,6 @@ index 00000000..e9d663c4
 +			middleware.CaptureAndAbort(c, err)
 +			return
 +		}
-+
 +		combinedStdout.WriteString(result.Stdout)
 +		combinedStderr.WriteString(result.Stderr)
 +		if result.ExitCode != 0 {
@@ -9192,7 +8889,6 @@ index 00000000..e9d663c4
 +			c.AbortWithStatusJSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 +			return
 +		}
-+
 +		targetPath = path.Join(workDir, targetDirectory)
 +	}
 +
@@ -9218,7 +8914,6 @@ index 00000000..e9d663c4
 +		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
 +		return
 +	}
-+
 +	defer lock.Unlock()
 +
 +	started := time.Now()
@@ -9247,7 +8942,6 @@ index 00000000..e9d663c4
 +			c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err.Error()})
 +			return
 +		}
-+
 +		defer func() {
 +			_ = s.Filesystem().Delete(tempServerPath)
 +		}()
@@ -9267,7 +8961,6 @@ index 00000000..e9d663c4
 +			middleware.CaptureAndAbort(c, err)
 +			return
 +		}
-+
 +		result = combineGitResponses(result, persistResult)
 +	}
 +	if result.ExitCode == 0 {
@@ -9276,7 +8969,6 @@ index 00000000..e9d663c4
 +			middleware.CaptureAndAbort(c, err)
 +			return
 +		}
-+
 +		result = combineGitResponses(result, checkoutResult)
 +	}
 +
@@ -9349,7 +9041,6 @@ index 00000000..e9d663c4
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	branch := strings.TrimSpace(branchResult.Stdout)
 +	if branch == "" || branch == "HEAD" || !isSafeGitRef(branch) {
 +		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "Cannot pull while the repository is detached or has an invalid branch."})
@@ -9361,7 +9052,6 @@ index 00000000..e9d663c4
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	remoteName := strings.TrimSpace(remoteNameResult.Stdout)
 +	if remoteName == "" {
 +		remoteName = "origin"
@@ -9387,7 +9077,6 @@ index 00000000..e9d663c4
 +		middleware.CaptureAndAbort(c, err)
 +		return
 +	}
-+
 +	remoteURL, err := validateGitRepositoryURL(ctx, remoteURLResult.Stdout)
 +	if err != nil {
 +		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Repository remote is not allowed: " + err.Error()})
@@ -9407,7 +9096,6 @@ index 00000000..e9d663c4
 +		c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": "A Git operation is already running for this server."})
 +		return
 +	}
-+
 +	defer lock.Unlock()
 +
 +	started := time.Now()
@@ -9435,7 +9123,6 @@ index 00000000..e9d663c4
 +			middleware.CaptureAndAbort(c, err)
 +			return
 +		}
-+
 +		result = combineGitResponses(result, mergeResult)
 +	}
 +
@@ -9532,7 +9219,6 @@ index 00000000..e9d663c4
 +	if err != nil || result.ExitCode != 0 {
 +		return ""
 +	}
-+
 +	return strings.TrimSpace(result.Stdout)
 +}
 +
@@ -9681,7 +9367,6 @@ index 00000000..e9d663c4
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer func() {
 +		_ = cli.ContainerRemove(context.Background(), created.ID, container.RemoveOptions{Force: true, RemoveVolumes: true})
 +	}()
@@ -9707,7 +9392,6 @@ index 00000000..e9d663c4
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer logs.Close()
 +
 +	var stdout, stderr bytes.Buffer
@@ -9735,7 +9419,6 @@ index 00000000..e9d663c4
 +	if disabled {
 +		return container.NetworkMode("none")
 +	}
-+
 +	return configured
 +}
 +
@@ -9768,21 +9451,18 @@ index 00000000..e9d663c4
 +			failures = append(failures, fmt.Sprintf("%s: %s", helperImage, err.Error()))
 +			continue
 +		}
-+
 +		_, copyErr := io.Copy(io.Discard, reader)
 +		_ = reader.Close()
 +		if copyErr != nil {
 +			failures = append(failures, fmt.Sprintf("%s: %s", helperImage, copyErr.Error()))
 +			continue
 +		}
-+
 +		return helperImage, nil
 +	}
 +
 +	if len(failures) == 0 {
 +		return "", fmt.Errorf("no Git helper images are configured")
 +	}
-+
 +	return "", fmt.Errorf("failed to pull any Git helper image: %s", strings.Join(failures, "; "))
 +}
 +
@@ -9793,7 +9473,6 @@ index 00000000..e9d663c4
 +	if strings.HasPrefix(value, gitContainerRoot+"/") {
 +		return gitHelperRoot + strings.TrimPrefix(value, gitContainerRoot)
 +	}
-+
 +	return value
 +}
 +
@@ -9931,25 +9610,21 @@ index 00000000..e9d663c4
 +	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
 +		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host is not allowed.")
 +	}
-+
 +	repositoryURL := gitCanonicalRepositoryURL(parsed)
 +
 +	if ip := net.ParseIP(host); ip != nil {
 +		if isBlockedGitIP(ip) {
 +			return validatedGitRepositoryURL{}, fmt.Errorf("Repository host resolves to an internal network.")
 +		}
-+
 +		return newValidatedGitRepositoryURL(repositoryURL, gitCurlOptResolve(host, parsed.Port(), ip))
 +	}
 +
 +	lookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 +	defer cancel()
-+
 +	addrs, err := net.DefaultResolver.LookupIPAddr(lookupCtx, host)
 +	if err != nil || len(addrs) == 0 {
 +		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
 +	}
-+
 +	var resolved net.IP
 +	for _, addr := range addrs {
 +		if isBlockedGitIP(addr.IP) {
@@ -9959,7 +9634,6 @@ index 00000000..e9d663c4
 +			resolved = addr.IP
 +		}
 +	}
-+
 +	if resolved == nil {
 +		return validatedGitRepositoryURL{}, fmt.Errorf("Repository host could not be resolved.")
 +	}
@@ -9972,7 +9646,6 @@ index 00000000..e9d663c4
 +	if err != nil {
 +		return validatedGitRepositoryURL{}, err
 +	}
-+
 +	return validatedGitRepositoryURL{
 +		URL:            repositoryURL,
 +		CurlOptResolve: curlOptResolve,
@@ -9985,7 +9658,6 @@ index 00000000..e9d663c4
 +	if !strings.ContainsRune(escapedPath, '=') {
 +		return parsed.String()
 +	}
-+
 +	canonical := *parsed
 +	canonical.RawPath = strings.ReplaceAll(escapedPath, "=", "%3D")
 +	return canonical.String()
@@ -10016,7 +9688,6 @@ index 00000000..e9d663c4
 +	if !gitTargetDirectoryPattern.MatchString(name) {
 +		return fmt.Errorf("Target directory can only contain letters, numbers, dots, underscores, and dashes.")
 +	}
-+
 +	return nil
 +}
 +
@@ -10116,7 +9787,6 @@ index 00000000..e9d663c4
 +		if readErr != nil {
 +			return readErr
 +		}
-+
 +		content = string(raw)
 +	}
 +
@@ -10126,7 +9796,6 @@ index 00000000..e9d663c4
 +			additions = append(additions, line)
 +		}
 +	}
-+
 +	if len(additions) == 0 {
 +		return nil
 +	}
@@ -10177,7 +9846,6 @@ index 00000000..e9d663c4
 +	if strings.Contains(ref, "..") || strings.Contains(ref, "@{") || strings.Contains(ref, "\\") {
 +		return false
 +	}
-+
 +	return !strings.ContainsAny(ref, "\x00\n\r ~^:?*[")
 +}
 +
@@ -10187,7 +9855,6 @@ index 00000000..e9d663c4
 +	if relative == "" {
 +		return "/"
 +	}
-+
 +	return "/" + relative
 +}
 +
@@ -10213,7 +9880,6 @@ index 00000000..e9d663c4
 +	if err != nil {
 +		return ""
 +	}
-+
 +	return parsed.Hostname()
 +}
 +
@@ -10228,13 +9894,11 @@ index 00000000..e9d663c4
 +		ip.IsUnspecified() {
 +		return true
 +	}
-+
 +	for _, block := range gitBlockedNetworks {
 +		if block.Contains(ip) {
 +			return true
 +		}
 +	}
-+
 +	return false
 +}
 +
@@ -10251,7 +9915,6 @@ index 00000000..e9d663c4
 +	if cfg.System.User.Rootless.Enabled {
 +		return fmt.Sprintf("%d:%d", cfg.System.User.Rootless.ContainerUID, cfg.System.User.Rootless.ContainerGID)
 +	}
-+
 +	return strconv.Itoa(cfg.System.User.Uid) + ":" + strconv.Itoa(cfg.System.User.Gid)
 +}
 +
@@ -10292,7 +9955,6 @@ index 00000000..e9d663c4
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer resp.Close()
 +
 +	var stdout, stderr bytes.Buffer
@@ -10334,10 +9996,10 @@ index 00000000..e9d663c4
 +}
 diff --git a/router/router_server_git_test.go b/router/router_server_git_test.go
 new file mode 100644
-index 00000000..ccd6f8ac
+index 00000000..00061578
 --- /dev/null
 +++ b/router/router_server_git_test.go
-@@ -0,0 +1,454 @@
+@@ -0,0 +1,452 @@
 +package router
 +
 +import (
@@ -10440,7 +10102,6 @@ index 00000000..ccd6f8ac
 +		requireGitCommandConfig(t, command, prefix+"curloptResolve=")
 +		requireGitCommandConfig(t, command, prefix+"curloptResolve="+remote.CurlOptResolve)
 +	}
-+
 +	require.Equal(t, []string{"ls-remote", remote.RemoteName}, command[len(command)-2:])
 +}
 +
@@ -10752,7 +10413,6 @@ index 00000000..ccd6f8ac
 +			return
 +		}
 +	}
-+
 +	t.Fatalf("Git command does not contain config %q: %#v", expected, command)
 +}
 +
@@ -10917,10 +10577,10 @@ index 00000000..430efccf
 +}
 diff --git a/router/router_system_config_test.go b/router/router_system_config_test.go
 new file mode 100644
-index 00000000..33c2ae10
+index 00000000..a15f085f
 --- /dev/null
 +++ b/router/router_system_config_test.go
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,64 @@
 +package router
 +
 +import (
@@ -10943,7 +10603,6 @@ index 00000000..33c2ae10
 +			return
 +		}
 +	}
-+
 +	t.Fatal("GET /api/system/config is not registered")
 +}
 +
@@ -10988,10 +10647,10 @@ index 00000000..33c2ae10
 +}
 diff --git a/router/router_upload_batch_test.go b/router/router_upload_batch_test.go
 new file mode 100644
-index 00000000..023b51a2
+index 00000000..e85eba67
 --- /dev/null
 +++ b/router/router_upload_batch_test.go
-@@ -0,0 +1,266 @@
+@@ -0,0 +1,259 @@
 +package router
 +
 +import (
@@ -11041,7 +10700,6 @@ index 00000000..023b51a2
 +		_, err = part.Write(file.data)
 +		require.NoError(t, err)
 +	}
-+
 +	if !manifestFirst {
 +		writeFields()
 +	}
@@ -11176,7 +10834,6 @@ index 00000000..023b51a2
 +		for _, p := range paths {
 +			files = append(files, multipartTestFile{filepath.Base(p), []byte("data")})
 +		}
-+
 +		response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/new", files, batchPaths(t, paths...), false)
 +		require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
 +		require.NoDirExists(t, filepath.Join(s.Filesystem().Path(), "new"))
@@ -11191,7 +10848,6 @@ index 00000000..023b51a2
 +		require.Equal(t, http.StatusForbidden, response.Code, response.Body.String())
 +		require.NoFileExists(t, filepath.Join(s.Filesystem().Path(), "good.txt"))
 +	}
-+
 +	for _, target := range []string{"link/file.txt", "link/nested/file.txt", "file.txt"} {
 +		_, s, handler := newBetterFilesHTTPServer(t, 10, 10)
 +		outside := t.TempDir()
@@ -11223,7 +10879,6 @@ index 00000000..023b51a2
 +		response = performMultipartUpload(t, handler, token, "/", []multipartTestFile{{"a", []byte("x")}}, nil, false)
 +		require.Equal(t, http.StatusNotFound, response.Code)
 +	}
-+
 +	_, s, handler := newBetterFilesHTTPServer(t, 1, 10)
 +	response := performMultipartUpload(t, handler, signBetterFilesUploadToken(t, s.ID()), "/", []multipartTestFile{{"big", bytes.Repeat([]byte("x"), 10*1024*1024)}}, batchPaths(t, "folder/big"), false)
 +	require.Equal(t, http.StatusRequestEntityTooLarge, response.Code, response.Body.String())
@@ -11236,11 +10891,9 @@ index 00000000..023b51a2
 +		for _, size := range sizes {
 +			form.File["files"] = append(form.File["files"], &multipart.FileHeader{Filename: "file.txt", Size: size})
 +		}
-+
 +		_, err := multipartUploadTargets(form, "/", math.MaxInt64)
 +		require.Error(t, err)
 +	}
-+
 +	form := &multipart.Form{
 +		Value: map[string][]string{"paths": {"[]"}},
 +		File: map[string][]*multipart.FileHeader{
@@ -11253,7 +10906,6 @@ index 00000000..023b51a2
 +	for i := range form.File["files"] {
 +		form.File["files"][i] = &multipart.FileHeader{Filename: "file.txt"}
 +	}
-+
 +	targets, err := multipartUploadTargets(form, "/", 10)
 +	require.NoError(t, err, "flat uploads retain the multipart parser's original file-count limit")
 +	require.Len(t, targets, maxMultipartUploadFiles+1)
@@ -11273,10 +10925,10 @@ index 07ad8f4e..c896adee 100644
  }
 diff --git a/router/websocket/betterfiles_collaboration.go b/router/websocket/betterfiles_collaboration.go
 new file mode 100644
-index 00000000..10a66072
+index 00000000..df7d64a4
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration.go
-@@ -0,0 +1,1356 @@
+@@ -0,0 +1,1307 @@
 +package websocket
 +
 +import (
@@ -11555,7 +11207,6 @@ index 00000000..10a66072
 +		session.Unlock()
 +		return h.betterFilesCollabError("collaboration session is full")
 +	}
-+
 +	session.Members[h.Uuid().String()] = &betterFilesCollabMember{
 +		HandlerID: h.Uuid().String(),
 +		User:      user,
@@ -11595,7 +11246,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	session.Lock()
 +	if open {
 +		member.FilePath = path
@@ -11610,10 +11260,8 @@ index 00000000..10a66072
 +		if err != nil {
 +			return h.betterFilesCollabError(err.Error())
 +		}
-+
 +		return h.betterFilesCollabSendDocument(session, document, path)
 +	}
-+
 +	return nil
 +}
 +
@@ -11658,7 +11306,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	payload.Path = path
 +	payload.Line = betterFilesCollabClampCursor(payload.Line)
 +	payload.Column = betterFilesCollabClampCursor(payload.Column)
@@ -11686,7 +11333,6 @@ index 00000000..10a66072
 +	if !betterFilesCollabDecode(m, &payload) {
 +		return h.betterFilesCollabError("invalid collaboration patch payload")
 +	}
-+
 +	session, member := betterFilesCollabMemberFor(h, payload.Code)
 +	if session == nil || member == nil {
 +		return h.betterFilesCollabError("not joined to this collaboration session")
@@ -11711,7 +11357,6 @@ index 00000000..10a66072
 +			change.BaseLength > betterFilesCollabMaxPayloadBytes {
 +			return h.betterFilesCollabError("invalid collaboration patch change")
 +		}
-+
 +		totalTextBytes += len(change.Text)
 +	}
 +
@@ -11727,7 +11372,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	payload.Path = path
 +	payload.Line = betterFilesCollabClampCursor(payload.Line)
 +	payload.Column = betterFilesCollabClampCursor(payload.Column)
@@ -11759,7 +11403,6 @@ index 00000000..10a66072
 +		if errors.Is(err, errBetterFilesCollabTooLarge) {
 +			return h.betterFilesCollabError("collaboration document is too large")
 +		}
-+
 +		return h.betterFilesCollabError("invalid collaboration patch")
 +	}
 +	if len(result.Changes) == 0 {
@@ -11779,7 +11422,6 @@ index 00000000..10a66072
 +	if result.Transformed {
 +		return h.betterFilesCollabSendDocument(session, document, payload.Path)
 +	}
-+
 +	return nil
 +}
 +
@@ -11792,7 +11434,6 @@ index 00000000..10a66072
 +	if !betterFilesCollabDecode(m, &payload) {
 +		return h.betterFilesCollabError("invalid collaboration snapshot payload")
 +	}
-+
 +	session, member := betterFilesCollabMemberFor(h, payload.Code)
 +	if session == nil || member == nil {
 +		return h.betterFilesCollabError("not joined to this collaboration session")
@@ -11800,7 +11441,6 @@ index 00000000..10a66072
 +	if session.Mode != "edit" {
 +		return h.betterFilesCollabError("collaboration session is view-only")
 +	}
-+
 +	maxPayloadBytes := session.MaxFileBytes
 +	if maxPayloadBytes <= 0 || maxPayloadBytes > betterFilesCollabMaxPayloadBytes {
 +		maxPayloadBytes = betterFilesCollabMaxPayloadBytes
@@ -11813,7 +11453,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	payload.Path = path
 +	payload.Line = betterFilesCollabClampCursor(payload.Line)
 +	payload.Column = betterFilesCollabClampCursor(payload.Column)
@@ -11827,7 +11466,6 @@ index 00000000..10a66072
 +	if err != nil {
 +		return h.betterFilesCollabError(err.Error())
 +	}
-+
 +	current, revision := document.snapshot()
 +	if current != payload.Content {
 +		if revision == 0 && len(betterFilesCollabUsersForPath(session, payload.Path, h.Uuid().String())) == 0 {
@@ -11881,7 +11519,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	payload.Path = path
 +	if !betterFilesCollabAcceptVersion(session, member, payload.Version) {
 +		return nil
@@ -11893,7 +11530,6 @@ index 00000000..10a66072
 +	if err != nil {
 +		return h.betterFilesCollabError(err.Error())
 +	}
-+
 +	document.replace(payload.Content)
 +	_, revision := document.snapshot()
 +
@@ -11922,7 +11558,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	conflicts := betterFilesCollabConflictsForPath(h, path)
 +	users := make([]betterFilesCollabUser, 0)
 +	for _, conflict := range conflicts {
@@ -11956,7 +11591,6 @@ index 00000000..10a66072
 +	if !ok {
 +		return h.betterFilesCollabError("file is not allowed in live collaboration")
 +	}
-+
 +	user := payload.User
 +	user.UUID = jwt.UserUUID
 +	user.Username = betterFilesCollabSafeText(user.Username, 48)
@@ -12006,7 +11640,6 @@ index 00000000..10a66072
 +	for _, session := range betterFilesCollabSessions {
 +		sessions = append(sessions, session)
 +	}
-+
 +	betterFilesCollabMu.Unlock()
 +
 +	for _, session := range sessions {
@@ -12023,7 +11656,6 @@ index 00000000..10a66072
 +	if err != nil {
 +		return err
 +	}
-+
 +	return h.SendJson(Message{Event: event, Args: []string{string(data)}})
 +}
 +
@@ -12031,7 +11663,6 @@ index 00000000..10a66072
 +	if len(m.Args) == 0 || len(m.Args[0]) > betterFilesCollabMaxMessageBytes {
 +		return false
 +	}
-+
 +	return json.Unmarshal([]byte(m.Args[0]), dst) == nil
 +}
 +
@@ -12145,9 +11776,7 @@ index 00000000..10a66072
 +	if err != nil {
 +		return nil, fmt.Errorf("could not open collaboration file")
 +	}
-+
 +	defer file.Close()
-+
 +	if stat.IsDir() {
 +		return nil, fmt.Errorf("collaboration path is not a file")
 +	}
@@ -12159,7 +11788,6 @@ index 00000000..10a66072
 +	if stat.Size() > int64(maxBytes) {
 +		return nil, fmt.Errorf("collaboration file is too large")
 +	}
-+
 +	content, err := io.ReadAll(io.LimitReader(file, int64(maxBytes)+1))
 +	if err != nil {
 +		return nil, fmt.Errorf("could not read collaboration file")
@@ -12171,24 +11799,20 @@ index 00000000..10a66072
 +	document = newBetterFilesCollabDocument(string(content))
 +	session.Lock()
 +	defer session.Unlock()
-+
 +	if existing := session.Documents[path]; existing != nil {
 +		return existing, nil
 +	}
 +	if len(session.Documents) >= betterFilesCollabMaxDocuments {
 +		return nil, fmt.Errorf("collaboration session has too many open documents")
 +	}
-+
 +	currentBytes := 0
 +	for _, existing := range session.Documents {
 +		existingContent, _ := existing.snapshot()
 +		currentBytes += len(existingContent)
 +	}
-+
 +	if currentBytes+len(content) > betterFilesCollabMaxSessionBytes {
 +		return nil, fmt.Errorf("collaboration session document memory limit reached")
 +	}
-+
 +	session.Documents[path] = document
 +	return document, nil
 +}
@@ -12214,7 +11838,6 @@ index 00000000..10a66072
 +	for _, document := range session.Documents {
 +		documents = append(documents, document)
 +	}
-+
 +	session.RUnlock()
 +
 +	total := 0
@@ -12222,7 +11845,6 @@ index 00000000..10a66072
 +		content, _ := document.snapshot()
 +		total += len(content)
 +	}
-+
 +	return total
 +}
 +
@@ -12263,7 +11885,6 @@ index 00000000..10a66072
 +		session.Unlock()
 +		return
 +	}
-+
 +	delete(session.Members, handlerID)
 +	empty := len(session.Members) == 0
 +	session.Unlock()
@@ -12327,7 +11948,6 @@ index 00000000..10a66072
 +			sessions = append(sessions, session)
 +		}
 +	}
-+
 +	betterFilesCollabMu.Unlock()
 +
 +	return sessions
@@ -12363,7 +11983,6 @@ index 00000000..10a66072
 +		delete(betterFilesCollabSessions, code)
 +		sessions = append(sessions, session)
 +	}
-+
 +	betterFilesCollabMu.Unlock()
 +
 +	for _, session := range sessions {
@@ -12396,7 +12015,6 @@ index 00000000..10a66072
 +			users = append(users, member.User)
 +		}
 +	}
-+
 +	session.RUnlock()
 +
 +	return users
@@ -12446,10 +12064,8 @@ index 00000000..10a66072
 +		if member.FilePath == "" {
 +			continue
 +		}
-+
 +		fileUsers[member.FilePath] = append(fileUsers[member.FilePath], member.User)
 +	}
-+
 +	session.RUnlock()
 +
 +	betterFilesCollabBroadcast(session, "", betterFilesCollabFileUsersEvent, map[string]any{
@@ -12466,7 +12082,6 @@ index 00000000..10a66072
 +	for _, member := range session.Members {
 +		members = append(members, member.User)
 +	}
-+
 +	return members
 +}
 +
@@ -12480,7 +12095,6 @@ index 00000000..10a66072
 +	if err != nil {
 +		return
 +	}
-+
 +	msg := Message{Event: event, Args: []string{string(data)}}
 +
 +	session.RLock()
@@ -12489,10 +12103,8 @@ index 00000000..10a66072
 +		if exceptHandlerID != "" && member.HandlerID == exceptHandlerID {
 +			continue
 +		}
-+
 +		members = append(members, member)
 +	}
-+
 +	session.RUnlock()
 +
 +	for _, member := range members {
@@ -12509,7 +12121,6 @@ index 00000000..10a66072
 +	if len(code) != 9 || code[4] != '-' {
 +		return ""
 +	}
-+
 +	for i, r := range code {
 +		if i == 4 {
 +			continue
@@ -12518,7 +12129,6 @@ index 00000000..10a66072
 +			return ""
 +		}
 +	}
-+
 +	return code
 +}
 +
@@ -12538,13 +12148,11 @@ index 00000000..10a66072
 +		!utf8.ValidString(path) {
 +		return "", false
 +	}
-+
 +	for _, r := range path {
 +		if r < 0x20 || r == 0x7f {
 +			return "", false
 +		}
 +	}
-+
 +	if !strings.HasPrefix(path, "/") {
 +		path = "/" + path
 +	}
@@ -12553,7 +12161,6 @@ index 00000000..10a66072
 +			return "", false
 +		}
 +	}
-+
 +	path = pathpkg.Clean(path)
 +	if !strings.HasPrefix(path, "/") {
 +		path = "/" + path
@@ -12564,7 +12171,6 @@ index 00000000..10a66072
 +		betterFilesCollabSensitivePath(path) {
 +		return "", false
 +	}
-+
 +	return path, true
 +}
 +
@@ -12593,7 +12199,6 @@ index 00000000..10a66072
 +			return true
 +		}
 +	}
-+
 +	return false
 +}
 +
@@ -12604,7 +12209,6 @@ index 00000000..10a66072
 +	if value > betterFilesCollabMaxCursorValue {
 +		return betterFilesCollabMaxCursorValue
 +	}
-+
 +	return value
 +}
 +
@@ -12616,7 +12220,6 @@ index 00000000..10a66072
 +	if strings.HasPrefix(value, "https://") {
 +		return value
 +	}
-+
 +	return ""
 +}
 +
@@ -12635,10 +12238,10 @@ index 00000000..10a66072
 +}
 diff --git a/router/websocket/betterfiles_collaboration_ot.go b/router/websocket/betterfiles_collaboration_ot.go
 new file mode 100644
-index 00000000..47173748
+index 00000000..f782aa4f
 --- /dev/null
 +++ b/router/websocket/betterfiles_collaboration_ot.go
-@@ -0,0 +1,314 @@
+@@ -0,0 +1,302 @@
 +package websocket
 +
 +import (
@@ -12698,7 +12301,6 @@ index 00000000..47173748
 +func (d *betterFilesCollabDocument) snapshot() (string, int64) {
 +	d.Lock()
 +	defer d.Unlock()
-+
 +	return d.Content, d.Revision
 +}
 +
@@ -12725,7 +12327,6 @@ index 00000000..47173748
 +		if transformErr != nil {
 +			return betterFilesCollabApplyResult{}, fmt.Errorf("transform collaboration patch: %w", transformErr)
 +		}
-+
 +		incoming = transformed
 +	}
 +
@@ -12734,7 +12335,6 @@ index 00000000..47173748
 +	if err != nil {
 +		return betterFilesCollabApplyResult{}, err
 +	}
-+
 +	next, err := incoming.Apply(current)
 +	if err != nil {
 +		return betterFilesCollabApplyResult{}, fmt.Errorf("apply collaboration patch: %w", err)
@@ -12802,7 +12402,6 @@ index 00000000..47173748
 +			break
 +		}
 +	}
-+
 +	if baseRevision < 0 {
 +		return 0, "", errBetterFilesCollabBaseNotFound
 +	}
@@ -12815,7 +12414,6 @@ index 00000000..47173748
 +			return 0, "", fmt.Errorf("reconstruct collaboration patch base: %w", err)
 +		}
 +	}
-+
 +	if betterFilesCollabContentHash(baseContent) != baseHash ||
 +		betterFilesCollabUTF16Len(baseContent) != baseLength {
 +		return 0, "", errBetterFilesCollabBaseNotFound
@@ -12842,12 +12440,10 @@ index 00000000..47173748
 +		if change.RangeOffset < 0 || change.RangeLength < 0 || !utf8.ValidString(change.Text) {
 +			return nil, errBetterFilesCollabInvalidEdit
 +		}
-+
 +		start, ok := betterFilesCollabRuneOffset(prefix, change.RangeOffset)
 +		if !ok {
 +			return nil, errBetterFilesCollabInvalidEdit
 +		}
-+
 +		end, ok := betterFilesCollabRuneOffset(prefix, change.RangeOffset+change.RangeLength)
 +		if !ok || start < cursor || end < start {
 +			return nil, errBetterFilesCollabInvalidEdit
@@ -12858,7 +12454,6 @@ index 00000000..47173748
 +		op.Insert(change.Text)
 +		cursor = end
 +	}
-+
 +	op.Retain(uint64(len(runes) - cursor))
 +	return op, nil
 +}
@@ -12914,12 +12509,10 @@ index 00000000..47173748
 +			return nil, errBetterFilesCollabInvalidEdit
 +		}
 +	}
-+
 +	flush()
 +	if sourceRune != len(runes) {
 +		return nil, errBetterFilesCollabInvalidEdit
 +	}
-+
 +	return changes, nil
 +}
 +
@@ -12931,7 +12524,6 @@ index 00000000..47173748
 +			prefix[i+1]++
 +		}
 +	}
-+
 +	return prefix
 +}
 +
@@ -12950,7 +12542,6 @@ index 00000000..47173748
 +	for _, unit := range utf16.Encode([]rune(content)) {
 +		hash = hash*31 + uint32(unit)
 +	}
-+
 +	return fmt.Sprintf("%08x", hash)
 +}
 diff --git a/router/websocket/betterfiles_collaboration_ot_test.go b/router/websocket/betterfiles_collaboration_ot_test.go
@@ -13096,10 +12687,10 @@ index 00000000..e29132fc
 +}
 diff --git a/router/websocket/file_collaboration_yjs.go b/router/websocket/file_collaboration_yjs.go
 new file mode 100644
-index 00000000..d67cf15c
+index 00000000..f2a3a706
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs.go
-@@ -0,0 +1,669 @@
+@@ -0,0 +1,631 @@
 +package websocket
 +
 +import (
@@ -13170,7 +12761,6 @@ index 00000000..d67cf15c
 +	if configured > fileCollabMaximumFileSizeCap {
 +		return fileCollabMaximumFileSizeCap
 +	}
-+
 +	return int(configured)
 +}
 +
@@ -13243,7 +12833,6 @@ index 00000000..d67cf15c
 +	default:
 +		return false, nil
 +	}
-+
 +	if !NativeFileCollaborationConfigured() {
 +		return true, h.nativeFileCollabError("", "collaborative editing is disabled")
 +	}
@@ -13265,7 +12854,6 @@ index 00000000..d67cf15c
 +		}
 +		return true, h.nativeFileCollabError(errorPath, errFileCollabInvalidRequest.Error())
 +	}
-+
 +	path, ok := betterFilesCollabPath(message.Args[0])
 +	if !ok {
 +		return true, h.nativeFileCollabError(message.Args[0], "file not found")
@@ -13293,11 +12881,9 @@ index 00000000..d67cf15c
 +	case FileCollabSaveEvent:
 +		err = nativeFileCollabSave(h, path)
 +	}
-+
 +	if err != nil {
 +		return true, h.nativeFileCollabError(path, err.Error())
 +	}
-+
 +	return true, nil
 +}
 +
@@ -13345,12 +12931,10 @@ index 00000000..d67cf15c
 +				count++
 +			}
 +		}
-+
 +		if count >= fileCollabMaxSessionsPerServer {
 +			nativeFileCollabRegistry.Unlock()
 +			return errors.New("too many collaborative sessions open on this server")
 +		}
-+
 +		session = nativeFileCollabNewSession(h.server.ID(), path, content)
 +		nativeFileCollabRegistry.sessions[key] = session
 +	}
@@ -13392,7 +12976,6 @@ index 00000000..d67cf15c
 +	}); err != nil {
 +		return err
 +	}
-+
 +	nativeFileCollabBroadcastParticipants(session)
 +	return nil
 +}
@@ -13402,7 +12985,6 @@ index 00000000..d67cf15c
 +	if session == nil || member == nil {
 +		return errFileCollabNotSubscribed
 +	}
-+
 +	chunk, err := base64.StdEncoding.DecodeString(encoded)
 +	if err != nil {
 +		return errors.New("invalid update encoding")
@@ -13419,20 +13001,17 @@ index 00000000..d67cf15c
 +		session.mu.Unlock()
 +		return errors.New("update is too large")
 +	}
-+
 +	member.pending = append(member.pending, chunk...)
 +	if !finished {
 +		session.mu.Unlock()
 +		return nil
 +	}
-+
 +	update := append([]byte(nil), member.pending...)
 +	member.pending = nil
 +	if len(update) == 0 {
 +		session.mu.Unlock()
 +		return errFileCollabInvalidRequest
 +	}
-+
 +	session.mu.Unlock()
 +	needsResync, err := session.applyUpdate(update, h.Uuid().String())
 +	if err != nil {
@@ -13443,7 +13022,6 @@ index 00000000..d67cf15c
 +		nativeFileCollabBroadcast(session, "", Message{Event: fileCollabErrorEvent, Args: []string{path, "resync"}})
 +		return nil
 +	}
-+
 +	nativeFileCollabBroadcast(session, h.Uuid().String(), Message{
 +		Event: FileCollabUpdateEvent,
 +		Args: []string{
@@ -13459,12 +13037,10 @@ index 00000000..d67cf15c
 +	if session == nil || member == nil {
 +		return errFileCollabNotSubscribed
 +	}
-+
 +	decoded, err := base64.StdEncoding.DecodeString(payload)
 +	if err != nil || len(decoded) > fileCollabMaxAwarenessBytes {
 +		return errors.New("invalid awareness update")
 +	}
-+
 +	nativeFileCollabBroadcast(session, h.Uuid().String(), Message{Event: FileCollabAwarenessEvent, Args: []string{path, payload}})
 +	return nil
 +}
@@ -13474,7 +13050,6 @@ index 00000000..d67cf15c
 +	if session == nil || member == nil {
 +		return errFileCollabNotSubscribed
 +	}
-+
 +	session.saveMu.Lock()
 +	defer session.saveMu.Unlock()
 +
@@ -13518,7 +13093,6 @@ index 00000000..d67cf15c
 +	if session == nil {
 +		return nil
 +	}
-+
 +	nativeFileCollabRemoveMember(session, h.Uuid().String())
 +	return nil
 +}
@@ -13531,7 +13105,6 @@ index 00000000..d67cf15c
 +			sessions = append(sessions, session)
 +		}
 +	}
-+
 +	nativeFileCollabRegistry.Unlock()
 +	for _, session := range sessions {
 +		nativeFileCollabRemoveMember(session, h.Uuid().String())
@@ -13544,7 +13117,6 @@ index 00000000..d67cf15c
 +		session.mu.Unlock()
 +		return
 +	}
-+
 +	delete(session.members, handlerID)
 +	empty := len(session.members) == 0
 +	session.teardownGeneration++
@@ -13555,7 +13127,6 @@ index 00000000..d67cf15c
 +		nativeFileCollabBroadcastParticipants(session)
 +		return
 +	}
-+
 +	time.AfterFunc(fileCollabSessionGracePeriod, func() {
 +		key := nativeFileCollabKey(session.serverUUID, session.path)
 +		nativeFileCollabRegistry.Lock()
@@ -13580,7 +13151,6 @@ index 00000000..d67cf15c
 +	if session == nil {
 +		return nil, nil
 +	}
-+
 +	session.mu.Lock()
 +	member := session.members[h.Uuid().String()]
 +	session.mu.Unlock()
@@ -13595,7 +13165,6 @@ index 00000000..d67cf15c
 +			sessions = append(sessions, session)
 +		}
 +	}
-+
 +	nativeFileCollabRegistry.Unlock()
 +	count := 0
 +	for _, session := range sessions {
@@ -13603,14 +13172,12 @@ index 00000000..d67cf15c
 +			count++
 +		}
 +	}
-+
 +	return count
 +}
 +
 +func nativeFileCollabHasMember(session *nativeFileCollabSession, h *Handler) bool {
 +	session.mu.Lock()
 +	defer session.mu.Unlock()
-+
 +	return session.members[h.Uuid().String()] != nil
 +}
 +
@@ -13622,11 +13189,9 @@ index 00000000..d67cf15c
 +		if _, ok := seen[member.user.User]; ok {
 +			continue
 +		}
-+
 +		seen[member.user.User] = struct{}{}
 +		participants = append(participants, member.user)
 +	}
-+
 +	session.mu.Unlock()
 +	payload, _ := json.Marshal(participants)
 +	nativeFileCollabBroadcast(session, "", Message{Event: fileCollabParticipantsEvent, Args: []string{session.path, string(payload)}})
@@ -13644,7 +13209,6 @@ index 00000000..d67cf15c
 +			handlers = append(handlers, member.handler)
 +		}
 +	}
-+
 +	session.mu.Unlock()
 +	for _, handler := range handlers {
 +		_ = handler.SendJson(message)
@@ -13656,21 +13220,17 @@ index 00000000..d67cf15c
 +	if err := h.server.Filesystem().IsIgnored(path); err != nil {
 +		return "", errors.New("file not found")
 +	}
-+
 +	file, stat, err := h.server.Filesystem().File(path)
 +	if err != nil {
 +		return "", errors.New("file not found")
 +	}
-+
 +	defer file.Close()
-+
 +	if stat.IsDir() {
 +		return "", errors.New("file is not a file")
 +	}
 +	if stat.Size() > int64(fileSizeCap) {
 +		return "", errFileCollabTooLarge
 +	}
-+
 +	content, err := io.ReadAll(io.LimitReader(file, int64(fileSizeCap)+1))
 +	if err != nil {
 +		return "", errors.New("file not found")
@@ -13681,7 +13241,6 @@ index 00000000..d67cf15c
 +	if !utf8.Valid(content) {
 +		return "", errors.New("file is not editable as text")
 +	}
-+
 +	return string(content), nil
 +}
 +
@@ -13719,11 +13278,9 @@ index 00000000..d67cf15c
 +func (session *nativeFileCollabSession) applyUpdate(update []byte, origin any) (bool, error) {
 +	session.mu.Lock()
 +	defer session.mu.Unlock()
-+
 +	if err := crdt.ApplyUpdateV1(session.doc, update, origin); err != nil {
 +		return false, errors.New("invalid update")
 +	}
-+
 +	content := session.text.ToString()
 +	session.dirty = true
 +	session.appliedUpdateBytes += int64(len(update))
@@ -13748,12 +13305,10 @@ index 00000000..d67cf15c
 +	if avatar == nil {
 +		return nil
 +	}
-+
 +	value := betterFilesCollabSafeImage(*avatar)
 +	if value == "" {
 +		return nil
 +	}
-+
 +	return &value
 +}
 +
@@ -13761,20 +13316,18 @@ index 00000000..d67cf15c
 +	if len(content) <= maxBytes {
 +		return content
 +	}
-+
 +	content = content[:maxBytes]
 +	for !utf8.ValidString(content) {
 +		content = content[:len(content)-1]
 +	}
-+
 +	return content
 +}
 diff --git a/router/websocket/file_collaboration_yjs_test.go b/router/websocket/file_collaboration_yjs_test.go
 new file mode 100644
-index 00000000..9cbe95c5
+index 00000000..9bdb2c6e
 --- /dev/null
 +++ b/router/websocket/file_collaboration_yjs_test.go
-@@ -0,0 +1,365 @@
+@@ -0,0 +1,360 @@
 +package websocket
 +
 +import (
@@ -13891,7 +13444,6 @@ index 00000000..9cbe95c5
 +		if err != nil {
 +			return
 +		}
-+
 +		serverConn <- conn
 +	}))
 +	t.Cleanup(httpServer.Close)
@@ -13945,7 +13497,6 @@ index 00000000..9cbe95c5
 +	t.Helper()
 +	require.NoError(t, conn.SetReadDeadline(time.Now().Add(2*time.Second)))
 +	defer conn.SetReadDeadline(time.Time{})
-+
 +	var message Message
 +	require.NoError(t, conn.ReadJSON(&message))
 +	return message
@@ -13995,7 +13546,6 @@ index 00000000..9cbe95c5
 +	require.NoError(t, err)
 +	browser, browserText := nativeFileCollabTestPeer(t, initialState)
 +	defer browser.Destroy()
-+
 +	vector := browser.StateVector()
 +	update := nativeFileCollabTestInsert(t, browser, browserText, vector, browserText.Len(), " world")
 +	split := len(update) / 2
@@ -14080,7 +13630,6 @@ index 00000000..9cbe95c5
 +
 +	peerA, textA := nativeFileCollabTestPeer(t, initialState)
 +	defer peerA.Destroy()
-+
 +	peerB, textB := nativeFileCollabTestPeer(t, initialState)
 +	defer peerB.Destroy()
 +
@@ -14102,7 +13651,6 @@ index 00000000..9cbe95c5
 +	session := nativeFileCollabNewSession("server", "/config.yml", "before")
 +	peer, peerText := nativeFileCollabTestPeer(t, session.doc.EncodeStateAsUpdate())
 +	defer peer.Destroy()
-+
 +	vector := session.doc.StateVector()
 +	update := nativeFileCollabTestInsert(t, peer, peerText, vector, peerText.Len(), " after")
 +
@@ -14484,10 +14032,10 @@ index d08411cc..c4a31cb5 100644
  // Events returns the server's emitter instance.
 diff --git a/server/file_history.go b/server/file_history.go
 new file mode 100644
-index 00000000..9dcdc43b
+index 00000000..a506adee
 --- /dev/null
 +++ b/server/file_history.go
-@@ -0,0 +1,911 @@
+@@ -0,0 +1,846 @@
 +package server
 +
 +import (
@@ -14631,12 +14179,10 @@ index 00000000..9dcdc43b
 +	if !ShouldRecordFileHistory(path, uint64(len(after))) || isLikelyBinaryHistoryContent(after) {
 +		return 0, nil
 +	}
-+
 +	store, err := s.fileHistoryStore()
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	return store.record(path, before, after, user, cfg)
 +}
 +
@@ -14649,12 +14195,10 @@ index 00000000..9dcdc43b
 +	if !config.Get().System.FileHistory.Enabled {
 +		return nil, nil
 +	}
-+
 +	store, err := s.fileHistoryStore()
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	return store.list(path)
 +}
 +
@@ -14662,12 +14206,10 @@ index 00000000..9dcdc43b
 +	if !config.Get().System.FileHistory.Enabled {
 +		return nil, "", sql.ErrNoRows
 +	}
-+
 +	store, err := s.fileHistoryStore()
 +	if err != nil {
 +		return nil, "", err
 +	}
-+
 +	return store.content(id)
 +}
 +
@@ -14675,7 +14217,6 @@ index 00000000..9dcdc43b
 +	if !config.Get().System.FileHistory.Enabled {
 +		return
 +	}
-+
 +	store, err := s.fileHistoryStore()
 +	if err != nil {
 +		s.Log().WithError(err).Warn("failed to open file history store")
@@ -14690,7 +14231,6 @@ index 00000000..9dcdc43b
 +	if !config.Get().System.FileHistory.Enabled {
 +		return
 +	}
-+
 +	store, err := s.fileHistoryStore()
 +	if err != nil {
 +		s.Log().WithError(err).Warn("failed to open file history store")
@@ -14711,25 +14251,21 @@ index 00000000..9dcdc43b
 +	if err := os.MkdirAll(dir, 0o700); err != nil {
 +		return nil, err
 +	}
-+
 +	dbPath := filepath.Join(dir, s.ID()+".db")
 +	db, err := sql.Open("sqlite", dbPath)
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	store := &fileHistoryStore{db: db}
 +	if err := store.init(); err != nil {
 +		_ = db.Close()
 +		return nil, err
 +	}
-+
 +	actual, loaded := fileHistoryStores.LoadOrStore(s.ID(), store)
 +	if loaded {
 +		_ = db.Close()
 +		return actual.(*fileHistoryStore), nil
 +	}
-+
 +	return store, nil
 +}
 +
@@ -14746,7 +14282,6 @@ index 00000000..9dcdc43b
 +	if _, err := s.db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
 +		return err
 +	}
-+
 +	_, err := s.db.Exec(fileHistorySchema)
 +	return err
 +}
@@ -14769,7 +14304,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	defer tx.Rollback()
 +
 +	fileID, err := upsertHistoryFile(tx, path)
@@ -14812,7 +14346,6 @@ index 00000000..9dcdc43b
 +			if err != nil {
 +				return 0, err
 +			}
-+
 +			break
 +		}
 +		previous, err := reconstructHistoryRevision(tx, latest.id, cfg.ZstdLevel)
@@ -14821,7 +14354,6 @@ index 00000000..9dcdc43b
 +			if err != nil {
 +				return 0, err
 +			}
-+
 +			break
 +		}
 +		revisionID, err = insertCompactHistoryRevision(tx, fileID, latest.id, latest.chainID, previous, user, after, nowMs, cfg.ZstdLevel)
@@ -14843,7 +14375,6 @@ index 00000000..9dcdc43b
 +	if err := tx.Commit(); err != nil {
 +		return 0, err
 +	}
-+
 +	return revisionID, nil
 +}
 +
@@ -14855,7 +14386,6 @@ index 00000000..9dcdc43b
 +	if err != nil || fileID == 0 {
 +		return nil, err
 +	}
-+
 +	rows, err := s.db.Query(`
 +		SELECT id, chain_id, created, size, COALESCE(user_id, ''), base_id, LENGTH(payload), content_hash
 +		FROM revisions WHERE file_id = ?
@@ -14863,7 +14393,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer rows.Close()
 +
 +	revisions := make([]FileRevision, 0)
@@ -14872,7 +14401,6 @@ index 00000000..9dcdc43b
 +		if err != nil {
 +			return nil, err
 +		}
-+
 +		revisions = append(revisions, FileRevision{
 +			ID:         row.id,
 +			Size:       row.size,
@@ -14882,7 +14410,6 @@ index 00000000..9dcdc43b
 +			Created:    time.UnixMilli(row.createdMs).UTC(),
 +		})
 +	}
-+
 +	return revisions, rows.Err()
 +}
 +
@@ -14894,7 +14421,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, "", err
 +	}
-+
 +	var p string
 +	if err := s.db.QueryRow(`
 +		SELECT files.path
@@ -14903,14 +14429,12 @@ index 00000000..9dcdc43b
 +		WHERE revisions.id = ?`, id).Scan(&p); err != nil {
 +		return nil, "", err
 +	}
-+
 +	return content, p, nil
 +}
 +
 +func (s *fileHistoryStore) deleteFile(path string) error {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
-+
 +	_, err := s.db.Exec("DELETE FROM files WHERE path = ?", path)
 +	return err
 +}
@@ -14918,7 +14442,6 @@ index 00000000..9dcdc43b
 +func (s *fileHistoryStore) renameFile(oldPath string, newPath string) error {
 +	s.mu.Lock()
 +	defer s.mu.Unlock()
-+
 +	_, err := s.db.Exec("UPDATE files SET path = ? WHERE path = ?", newPath, oldPath)
 +	return err
 +}
@@ -14937,12 +14460,10 @@ index 00000000..9dcdc43b
 +	if err != sql.ErrNoRows {
 +		return 0, err
 +	}
-+
 +	res, err := tx.Exec("INSERT INTO files(path) VALUES (?)", path)
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	return res.LastInsertId()
 +}
 +
@@ -14952,7 +14473,6 @@ index 00000000..9dcdc43b
 +	if err == sql.ErrNoRows {
 +		return 0, nil
 +	}
-+
 +	return id, err
 +}
 +
@@ -14968,7 +14488,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	return &revision, nil
 +}
 +
@@ -14978,7 +14497,6 @@ index 00000000..9dcdc43b
 +	if err == sql.ErrNoRows {
 +		return sql.NullInt64{}, nil
 +	}
-+
 +	return chainID, err
 +}
 +
@@ -15000,7 +14518,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	return insertEncodedHistorySnapshot(tx, fileID, user, content, payload, createdMs)
 +}
 +
@@ -15019,7 +14536,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	id, err := res.LastInsertId()
 +	if err != nil {
 +		return 0, err
@@ -15027,7 +14543,6 @@ index 00000000..9dcdc43b
 +	if _, err := tx.Exec("UPDATE revisions SET chain_id = ? WHERE id = ?", id, id); err != nil {
 +		return 0, err
 +	}
-+
 +	return id, nil
 +}
 +
@@ -15046,12 +14561,10 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	deltaPayload, deltaErr := encodeHistoryDelta(base, content, level)
 +	if deltaErr != nil || len(deltaPayload)*10 >= len(snapshotPayload)*9 {
 +		return insertEncodedHistorySnapshot(tx, fileID, user, content, snapshotPayload, createdMs)
 +	}
-+
 +	return insertEncodedHistoryDelta(tx, fileID, baseID, chainID, user, content, deltaPayload, createdMs)
 +}
 +
@@ -15072,7 +14585,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return 0, err
 +	}
-+
 +	return res.LastInsertId()
 +}
 +
@@ -15085,13 +14597,11 @@ index 00000000..9dcdc43b
 +	if err := pruneOldHistoryChains(tx, fileID, maxUint64(cfg.KeepChains, 1)); err != nil {
 +		return err
 +	}
-+
 +	for {
 +		size, err := historyFilePayloadBytes(tx, fileID)
 +		if err != nil || size <= cfg.PerFileDiskBudget {
 +			return err
 +		}
-+
 +		freed, err := dropOldestHistoryChain(tx, fileID, protectedChain, maxUint64(cfg.KeepChains, 1))
 +		if err != nil || freed == 0 {
 +			return err
@@ -15108,13 +14618,11 @@ index 00000000..9dcdc43b
 +	if cfg.PerServerDiskBudget == 0 {
 +		return nil
 +	}
-+
 +	for {
 +		size, err := historyTotalPayloadBytes(tx)
 +		if err != nil || size <= cfg.PerServerDiskBudget {
 +			return err
 +		}
-+
 +		freed, err := dropGloballyOldestHistoryChain(tx, protectedFileID, protectedChain)
 +		if err != nil || freed == 0 {
 +			return err
@@ -15130,7 +14638,6 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return err
 +	}
-+
 +	defer rows.Close()
 +
 +	chains := make([]int64, 0, keepChains)
@@ -15139,17 +14646,14 @@ index 00000000..9dcdc43b
 +		if err := rows.Scan(&id); err != nil {
 +			return err
 +		}
-+
 +		chains = append(chains, id)
 +	}
-+
 +	if err := rows.Err(); err != nil {
 +		return err
 +	}
 +	if uint64(len(chains)) < keepChains || len(chains) == 0 {
 +		return nil
 +	}
-+
 +	_, err = tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id < ?", fileID, chains[len(chains)-1])
 +	return err
 +}
@@ -15178,12 +14682,10 @@ index 00000000..9dcdc43b
 +	if err := tx.QueryRow(query, args...).Scan(&chainID); err != nil || !chainID.Valid {
 +		return 0, err
 +	}
-+
 +	var freed uint64
 +	if err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID.Int64).Scan(&freed); err != nil {
 +		return 0, err
 +	}
-+
 +	_, err := tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID.Int64)
 +	return freed, err
 +}
@@ -15213,7 +14715,6 @@ index 00000000..9dcdc43b
 +		if err == sql.ErrNoRows {
 +			return 0, nil
 +		}
-+
 +		return 0, err
 +	}
 +
@@ -15221,7 +14722,6 @@ index 00000000..9dcdc43b
 +	if err := tx.QueryRow("SELECT COALESCE(SUM(LENGTH(payload)), 0) FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID).Scan(&freed); err != nil {
 +		return 0, err
 +	}
-+
 +	_, err := tx.Exec("DELETE FROM revisions WHERE file_id = ? AND chain_id = ?", fileID, chainID)
 +	return freed, err
 +}
@@ -15247,14 +14747,12 @@ index 00000000..9dcdc43b
 +			Scan(&row.id, &row.baseID, &row.payload, &row.hash); err != nil {
 +			return nil, err
 +		}
-+
 +		chain = append(chain, row)
 +		current = row.baseID
 +		if !row.baseID.Valid {
 +			break
 +		}
 +	}
-+
 +	if len(chain) == 0 || chain[len(chain)-1].baseID.Valid {
 +		return nil, fmt.Errorf("revision %d has no snapshot anchor", id)
 +	}
@@ -15267,7 +14765,6 @@ index 00000000..9dcdc43b
 +	if contentHash(content) != chain[0].hash {
 +		return nil, fmt.Errorf("content hash mismatch at revision %d", chain[0].id)
 +	}
-+
 +	for _, next := range chain[1:] {
 +		content, err = decodeHistoryDelta(next.payload, content, level)
 +		if err != nil {
@@ -15277,7 +14774,6 @@ index 00000000..9dcdc43b
 +			return nil, fmt.Errorf("content hash mismatch at revision %d", next.id)
 +		}
 +	}
-+
 +	return content, nil
 +}
 +
@@ -15302,9 +14798,7 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer encoder.Close()
-+
 +	return encoder.EncodeAll(content, nil), nil
 +}
 +
@@ -15313,9 +14807,7 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer decoder.Close()
-+
 +	return decoder.DecodeAll(payload, nil)
 +}
 +
@@ -15324,9 +14816,7 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer encoder.Close()
-+
 +	payload := encoder.EncodeAll(content, nil)
 +	decoded, err := decodeHistoryDelta(payload, base, level)
 +	if err != nil {
@@ -15335,7 +14825,6 @@ index 00000000..9dcdc43b
 +	if !bytes.Equal(decoded, content) {
 +		return nil, fmt.Errorf("zstd delta round-trip mismatch")
 +	}
-+
 +	return payload, nil
 +}
 +
@@ -15344,9 +14833,7 @@ index 00000000..9dcdc43b
 +	if err != nil {
 +		return nil, err
 +	}
-+
 +	defer decoder.Close()
-+
 +	return decoder.DecodeAll(payload, nil)
 +}
 +
@@ -15359,7 +14846,6 @@ index 00000000..9dcdc43b
 +	if value == 0 {
 +		return fallback
 +	}
-+
 +	return value
 +}
 +
@@ -15368,7 +14854,6 @@ index 00000000..9dcdc43b
 +	if ext == "" {
 +		return true
 +	}
-+
 +	_, skipped := fileHistorySkippedExtensions[ext]
 +	return !skipped
 +}
@@ -15377,7 +14862,6 @@ index 00000000..9dcdc43b
 +	if len(content) == 0 {
 +		return false
 +	}
-+
 +	sample := content
 +	if len(sample) > 8192 {
 +		sample = sample[:8192]
@@ -15396,7 +14880,6 @@ index 00000000..9dcdc43b
 +			}
 +		}
 +	}
-+
 +	return controlBytes*100 > len(sample)*5
 +}
 diff --git a/server/file_history_test.go b/server/file_history_test.go
@@ -15547,10 +15030,10 @@ index 00000000..32cabc52
 +}
 diff --git a/server/file_operations.go b/server/file_operations.go
 new file mode 100644
-index 00000000..7e5102db
+index 00000000..a6dc9968
 --- /dev/null
 +++ b/server/file_operations.go
-@@ -0,0 +1,225 @@
+@@ -0,0 +1,219 @@
 +package server
 +
 +import (
@@ -15661,7 +15144,6 @@ index 00000000..7e5102db
 +		cancel()
 +		return nil, nil, ErrFileOperationLimit
 +	}
-+
 +	m.operations[op.identifier] = op
 +	m.mu.Unlock()
 +
@@ -15706,11 +15188,9 @@ index 00000000..7e5102db
 +	stopped chan<- struct{},
 +) {
 +	defer close(stopped)
-+
 +	m.publishProgress(op)
 +	ticker := time.NewTicker(time.Second)
 +	defer ticker.Stop()
-+
 +	for {
 +		select {
 +		case <-done:
@@ -15726,7 +15206,6 @@ index 00000000..7e5102db
 +	if err != nil {
 +		return
 +	}
-+
 +	m.publishArgs(OperationProgressEvent, op.identifier, string(payload))
 +}
 +
@@ -15751,7 +15230,6 @@ index 00000000..7e5102db
 +		op.cancelled.Store(true)
 +		op.cancel()
 +	}
-+
 +	m.mu.RUnlock()
 +}
 +
@@ -15773,15 +15251,14 @@ index 00000000..7e5102db
 +	if errors.Is(err, context.Canceled) || errors.Is(err, ErrFileOperationCanceled) {
 +		return ErrFileOperationCanceled.Error()
 +	}
-+
 +	return "file operation failed"
 +}
 diff --git a/server/file_operations_test.go b/server/file_operations_test.go
 new file mode 100644
-index 00000000..039ffaba
+index 00000000..04161a93
 --- /dev/null
 +++ b/server/file_operations_test.go
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,158 @@
 +package server
 +
 +import (
@@ -15810,7 +15287,6 @@ index 00000000..039ffaba
 +	t.Helper()
 +	timer := time.NewTimer(3 * time.Second)
 +	defer timer.Stop()
-+
 +	for {
 +		select {
 +		case raw := <-events:
@@ -15833,7 +15309,6 @@ index 00000000..039ffaba
 +		args[index], ok = value.(string)
 +		require.True(t, ok)
 +	}
-+
 +	return args
 +}
 +
@@ -15927,7 +15402,6 @@ index 00000000..039ffaba
 +			operation.AddBytesProcessed(1)
 +			operation.AddFilesProcessed(1)
 +		}
-+
 +		return nil
 +	})
 +	require.NoError(t, err)
@@ -15935,13 +15409,11 @@ index 00000000..039ffaba
 +		readers.Add(1)
 +		go func() {
 +			defer readers.Done()
-+
 +			for j := 0; j < 1000; j++ {
 +				_ = op.Snapshot()
 +			}
 +		}()
 +	}
-+
 +	readers.Wait()
 +	require.NoError(t, <-done)
 +}
@@ -16006,10 +15478,10 @@ index 2014c8a9..2009a472 100644
  
 diff --git a/server/filesystem/replace.go b/server/filesystem/replace.go
 new file mode 100644
-index 00000000..6ab77a48
+index 00000000..730ce7b4
 --- /dev/null
 +++ b/server/filesystem/replace.go
-@@ -0,0 +1,144 @@
+@@ -0,0 +1,134 @@
 +package filesystem
 +
 +import (
@@ -16031,14 +15503,12 @@ index 00000000..6ab77a48
 +
 +	olddirfd, oldname, closeOld, err := fs.unixFS.SafePath(oldpath)
 +	defer closeOld()
-+
 +	if err != nil {
 +		return err
 +	}
 +	if oldname == "." {
 +		return ufs.ErrBadPathResolution
 +	}
-+
 +	oldInfo, err := fs.unixFS.Lstatat(olddirfd, oldname)
 +	if err != nil {
 +		return err
@@ -16056,7 +15526,6 @@ index 00000000..6ab77a48
 +		if err := fs.mkdirAll(filepath.Dir(newpath), 0o755); err != nil {
 +			return err
 +		}
-+
 +		newdirfd, newname, closeNew, err = fs.unixFS.SafePath(newpath)
 +		if err != nil {
 +			closeNew()
@@ -16064,7 +15533,6 @@ index 00000000..6ab77a48
 +		}
 +	}
 +	defer closeNew()
-+
 +	if newname == "." {
 +		return ufs.ErrBadPathResolution
 +	}
@@ -16082,7 +15550,6 @@ index 00000000..6ab77a48
 +				Err: err,
 +			}
 +		}
-+
 +		return nil
 +	}
 +}
@@ -16094,14 +15561,12 @@ index 00000000..6ab77a48
 +func (fs *Filesystem) Replace(oldpath, newpath string) error {
 +	olddirfd, oldname, closeOld, err := fs.unixFS.SafePath(oldpath)
 +	defer closeOld()
-+
 +	if err != nil {
 +		return err
 +	}
 +	if oldname == "." {
 +		return ufs.ErrBadPathResolution
 +	}
-+
 +	oldInfo, err := fs.unixFS.Lstatat(olddirfd, oldname)
 +	if err != nil {
 +		return err
@@ -16112,7 +15577,6 @@ index 00000000..6ab77a48
 +
 +	newdirfd, newname, closeNew, err := fs.unixFS.SafePath(newpath)
 +	defer closeNew()
-+
 +	if err != nil {
 +		return err
 +	}
@@ -16145,10 +15609,8 @@ index 00000000..6ab77a48
 +				Err: err,
 +			}
 +		}
-+
 +		break
 +	}
-+
 +	if replacedSize > 0 {
 +		fs.adjustDisk(-replacedSize)
 +	}
@@ -16156,10 +15618,10 @@ index 00000000..6ab77a48
 +}
 diff --git a/server/filesystem/upload.go b/server/filesystem/upload.go
 new file mode 100644
-index 00000000..66af1115
+index 00000000..e89aeba0
 --- /dev/null
 +++ b/server/filesystem/upload.go
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,114 @@
 +package filesystem
 +
 +import (
@@ -16182,7 +15644,6 @@ index 00000000..66af1115
 +	if size < 0 || !fs.ValidPath(name) || name == "." || strings.ContainsAny(name, "\\\x00") {
 +		return ufs.ErrBadPathResolution
 +	}
-+
 +	parts := strings.Split(name, "/")
 +	for i := range parts {
 +		prefix := strings.Join(parts[:i+1], "/")
@@ -16190,20 +15651,16 @@ index 00000000..66af1115
 +			return err
 +		}
 +	}
-+
 +	if err := f.HasSpaceFor(0); err != nil {
 +		return err
 +	}
-+
 +	parent, err := f.unixFS.OpenFile(".", ufs.O_DIRECTORY|ufs.O_RDONLY, 0)
 +	if err != nil {
 +		return err
 +	}
-+
 +	defer func() {
 +		_ = parent.Close()
 +	}()
-+
 +	uid, gid := config.Get().System.User.Uid, config.Get().System.User.Gid
 +	for _, component := range parts[:len(parts)-1] {
 +		child, openErr := f.unixFS.OpenFileat(int(parent.Fd()), component, ufs.O_DIRECTORY|ufs.O_RDONLY|ufs.O_NOFOLLOW, 0)
@@ -16225,7 +15682,6 @@ index 00000000..66af1115
 +		if openErr != nil {
 +			return openErr
 +		}
-+
 +		_ = parent.Close()
 +		parent = child
 +	}
@@ -16235,18 +15691,15 @@ index 00000000..66af1115
 +	if err != nil {
 +		return err
 +	}
-+
 +	defer func() {
 +		if closeErr := file.Close(); err == nil {
 +			err = closeErr
 +		}
 +	}()
-+
 +	info, err := file.Stat()
 +	if err != nil {
 +		return err
 +	}
-+
 +	var stat unix.Stat_t
 +	if err := unix.Fstat(int(file.Fd()), &stat); err != nil {
 +		return err
@@ -16254,18 +15707,15 @@ index 00000000..66af1115
 +	if !info.Mode().IsRegular() || stat.Nlink != 1 {
 +		return ufs.ErrBadPathResolution
 +	}
-+
 +	growth := size - info.Size()
 +	if err := f.HasSpaceFor(growth); err != nil {
 +		return err
 +	}
-+
 +	reserved := int64(0)
 +	if growth > 0 {
 +		if err := f.reserveDisk(growth); err != nil {
 +			return err
 +		}
-+
 +		reserved = growth
 +	}
 +	defer func() {
@@ -16275,7 +15725,6 @@ index 00000000..66af1115
 +			err = statErr
 +		}
 +	}()
-+
 +	if err := file.Truncate(0); err != nil {
 +		return err
 +	}
@@ -16285,15 +15734,14 @@ index 00000000..66af1115
 +	if !f.isTest {
 +		return unix.Fchown(int(file.Fd()), uid, gid)
 +	}
-+
 +	return nil
 +}
 diff --git a/server/filesystem/upload_test.go b/server/filesystem/upload_test.go
 new file mode 100644
-index 00000000..76f6367a
+index 00000000..dbf937f7
 --- /dev/null
 +++ b/server/filesystem/upload_test.go
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,111 @@
 +package filesystem
 +
 +import (
@@ -16338,7 +15786,6 @@ index 00000000..76f6367a
 +			for _, name := range []string{"escape/file", "escape/new/file", "alias/nested/file", "leaf", "hardlink", "fifo", "protected/nested/file"} {
 +				require.Error(t, f.WriteUpload(name, bytes.NewBufferString("bad"), 3), name)
 +			}
-+
 +			data, err := os.ReadFile(filepath.Join(outside, "file"))
 +			require.NoError(t, err)
 +			require.Equal(t, "outside", string(data))
@@ -16359,14 +15806,12 @@ index 00000000..76f6367a
 +		wg.Add(1)
 +		go func(name string) {
 +			defer wg.Done()
-+
 +			<-start
 +			if err := f.WriteUpload(name, bytes.NewBufferString("1234567890"), 10); err == nil {
 +				successes.Add(1)
 +			}
 +		}(name)
 +	}
-+
 +	close(start)
 +	wg.Wait()
 +	require.Equal(t, int32(1), successes.Load())
@@ -16379,7 +15824,6 @@ index 00000000..76f6367a
 +		require.NoError(t, err)
 +		actual += info.Size()
 +	}
-+
 +	require.Equal(t, int64(10), actual)
 +}
 +
@@ -16397,7 +15841,6 @@ index 00000000..76f6367a
 +		require.Equal(t, uint32(os.Getuid()), stat.Uid)
 +		require.Equal(t, uint32(os.Getgid()), stat.Gid)
 +	}
-+
 +	require.NoError(t, f.WriteUpload("a/b/file", bytes.NewBufferString("12"), 2))
 +	require.Equal(t, int64(2), f.CachedUsage())
 +	require.ErrorIs(t, f.WriteUpload("a/b/short", bytes.NewBufferString("123"), 8), io.EOF)

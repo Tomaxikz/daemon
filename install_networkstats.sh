@@ -88,6 +88,14 @@ with tempfile.TemporaryDirectory(prefix="wings-nsm-merge-") as directory:
         git("add", "-A", "--", *present, env=env)
     before = git("write-tree", env=env).decode().strip()
 
+    statistics = tree / "server/protocol_stats.go"
+    if sys.argv[3] == "nsm.patch" and statistics.exists():
+        legacy_blob = "1fcc0a6b9a82d0fdcae7fe28ab07a7bf17ebf9ca"
+        if git("rev-parse", ":server/protocol_stats.go", env=env).decode().strip() == legacy_blob:
+            # The legacy addon added this file too. Replace only that exact
+            # snapshot in the private tree; customized copies still conflict.
+            git("rm", "-f", "--", "server/protocol_stats.go", env=env)
+
     router = tree / "router/router.go"
     if router.exists() and sys.argv[3] == "nsm.patch":
         text = router.read_text()

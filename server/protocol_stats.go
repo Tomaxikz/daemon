@@ -2,14 +2,20 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/docker/docker/client"
 
 	"github.com/pterodactyl/wings/environment/docker"
 )
 
 const ProtocolStatsEvent = "protocol stats"
+
+var errProtocolStatsUnavailable = errors.New("container stopped during statistics collection")
 
 type ProtocolStats struct {
 	Total struct {
@@ -46,10 +52,26 @@ func (s *Server) GetProtocolStats(ctx context.Context) (*ProtocolStats, error) {
 	if !ok {
 		return stats, nil
 	}
-	cmd := exec.Command("docker", "exec", env.Id, "cat", "/proc/net/dev")
-	output, err := cmd.Output()
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	c, err := env.ContainerInspect(ctx)
+	if client.IsErrNotFound(err) {
+		return stats, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get network device stats: %v", err)
+		return nil, fmt.Errorf("failed to inspect container for protocol stats: %w", err)
+	}
+	if c.State == nil || !c.State.Running {
+		return stats, nil
+	}
+
+	output, err := readProtocolFile(ctx, env, c.ID, "/proc/net/dev")
+	if errors.Is(err, errProtocolStatsUnavailable) {
+		return stats, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network device stats: %w", err)
 	}
 	lines := strings.Split(string(output), "\n")
 	for _, line := range lines {
@@ -62,10 +84,12 @@ func (s *Server) GetProtocolStats(ctx context.Context) (*ProtocolStats, error) {
 			break
 		}
 	}
-	cmd = exec.Command("docker", "exec", env.Id, "cat", "/proc/net/snmp")
-	output, err = cmd.Output()
+	output, err = readProtocolFile(ctx, env, c.ID, "/proc/net/snmp")
+	if errors.Is(err, errProtocolStatsUnavailable) {
+		return &ProtocolStats{}, nil
+	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get protocol stats: %v", err)
+		return nil, fmt.Errorf("failed to get protocol stats: %w", err)
 	}
 	lines = strings.Split(string(output), "\n")
 	for i := 0; i < len(lines)-1; i += 2 {
@@ -74,6 +98,9 @@ func (s *Server) GetProtocolStats(ctx context.Context) (*ProtocolStats, error) {
 
 		if len(header) == 0 || len(values) == 0 {
 			continue
+		}
+		if header[0] != values[0] || len(values) < len(header) {
+			return nil, fmt.Errorf("malformed protocol stats for %s", header[0])
 		}
 
 		switch header[0] {
@@ -132,4 +159,35 @@ func (s *Server) GetProtocolStats(ctx context.Context) (*ProtocolStats, error) {
 	}
 
 	return stats, nil
+}
+
+func readProtocolFile(ctx context.Context, env *docker.Environment, id, path string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "docker", "exec", id, "cat", path)
+	cmd.WaitDelay = 250 * time.Millisecond
+	output, err := cmd.Output()
+	if err == nil {
+		return output, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	// A stop or recreation between inspection and exec is expected, not a
+	// collection failure. Recheck Docker rather than matching error text.
+	c, inspectErr := env.ContainerInspect(ctx)
+	if client.IsErrNotFound(inspectErr) || (inspectErr == nil &&
+		(c.State == nil || !c.State.Running || c.ID != id)) {
+		return nil, errProtocolStatsUnavailable
+	}
+
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		if detail := strings.TrimSpace(string(exit.Stderr)); detail != "" {
+			if len(detail) > 2048 {
+				detail = detail[:2048]
+			}
+			return nil, fmt.Errorf("%w: %s", err, detail)
+		}
+	}
+	return nil, err
 }
