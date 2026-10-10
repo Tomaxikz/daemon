@@ -121,7 +121,9 @@ def validate(case):
                 ["git", "diff", "--cached", "--diff-filter=A", "--name-only"], cwd=path
             ).splitlines()
             for name in added:
-                if name.endswith(".go"):
+                # Test fixtures are tied to the patch's pinned upstream base.
+                # Current-branch tests may use APIs introduced by later merges.
+                if name.endswith(".go") and not name.endswith("_test.go"):
                     if (path / name).read_text() != (ROOT / name).read_text():
                         raise RuntimeError(f"{patch} contains a stale copy of {name}")
 

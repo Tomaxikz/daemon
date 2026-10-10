@@ -31,6 +31,8 @@ func newPullTestServer(t *testing.T) *server.Server {
 	t.Cleanup(func() { config.Set(previous) })
 	next := *previous
 	next.System.Data = t.TempDir()
+	next.System.User.Uid = os.Getuid()
+	next.System.User.Gid = os.Getgid()
 	next.Api.RemoteDownloadAllowlist = []string{"127.0.0.1"}
 	config.Set(&next)
 
