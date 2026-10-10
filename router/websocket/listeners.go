@@ -130,7 +130,7 @@ func (h *Handler) listenForServerEvents(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			// Exits through the break after the select.
 		case b := <-logOutput:
 			sendErr := h.SendJson(Message{Event: server.ConsoleOutputEvent, Args: []string{string(b)}})
 			if sendErr == nil {

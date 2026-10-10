@@ -12,14 +12,16 @@ type TokenStore struct {
 	cache *cache.Cache
 }
 
-var _tokens *TokenStore
-var tokensOnce sync.Once
+var (
+	_tokens     *TokenStore
+	_tokensOnce sync.Once
+)
 
 // Returns the global unique token store cache. This is used to validate
 // one time token usage by storing any received tokens in a local memory
 // cache until they are ready to expire.
 func getTokenStore() *TokenStore {
-	tokensOnce.Do(func() {
+	_tokensOnce.Do(func() {
 		_tokens = &TokenStore{
 			cache: cache.New(time.Minute*60, time.Minute*5),
 		}
@@ -36,7 +38,7 @@ func (t *TokenStore) IsValidToken(token string) bool {
 	_, exists := t.cache.Get(token)
 
 	if !exists {
-		t.cache.Add(token, "", time.Minute*60)
+		t.cache.Set(token, "", time.Minute*60)
 	}
 
 	return !exists

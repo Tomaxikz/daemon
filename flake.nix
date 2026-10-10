@@ -22,10 +22,10 @@
       perSystem = {system, ...}: let
         pkgs = import inputs.nixpkgs {inherit system;};
         secureGo = pkgs.go_1_26.overrideAttrs (_: {
-          version = "1.26.7";
+          version = "1.26.9";
           src = pkgs.fetchurl {
-            url = "https://go.dev/dl/go1.26.7.src.tar.gz";
-            hash = "sha256-DtJOrHVRBQhbif6cq8J0K5GgrXuUtZ0602SRjryJVq0=";
+            url = "https://go.dev/dl/go1.26.9.src.tar.gz";
+            hash = "sha256-lzXX3Ntls10/pXfwQGRzfAO4nPGitx5uaf4vPG+f1Mo=";
           };
         });
       in {

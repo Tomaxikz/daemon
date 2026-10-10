@@ -271,6 +271,9 @@ func (s *Server) syncWithConfiguration(cfg remote.ServerConfigurationResponse, t
 
 		return errors.WithStackIf(err)
 	}
+	if id := s.ID(); id != "" && id != c.Uuid {
+		return errors.New("server: configuration returned by the Panel is for a different server")
+	}
 
 	if s.Environment != nil {
 		settings := environment.Settings{
@@ -293,9 +296,9 @@ func (s *Server) syncWithConfiguration(cfg remote.ServerConfigurationResponse, t
 }
 
 func stageConfiguration(settings json.RawMessage, trustedID string) (*Configuration, error) {
-	c := &Configuration{
+	c := &Configuration{configurationData: configurationData{
 		CrashDetectionEnabled: config.Get().System.CrashDetection.CrashDetectionEnabled,
-	}
+	}}
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(settings, &fields); err != nil {
@@ -313,14 +316,17 @@ func stageConfiguration(settings json.RawMessage, trustedID string) (*Configurat
 	if err := json.Unmarshal(staged, c); err != nil {
 		return c, err
 	}
+	incoming, err := uuid.Parse(c.Uuid)
+	if err != nil || incoming.String() != c.Uuid {
+		return c, errors.New("server: configuration returned by the Panel contains an invalid server uuid")
+	}
 	if trustedID != "" {
 		trusted, err := uuid.Parse(trustedID)
 		if err != nil || trusted.String() != trustedID {
 			return c, errors.New("trusted server UUID is not canonical")
 		}
 
-		incoming, err := uuid.Parse(c.Uuid)
-		if err != nil || incoming.String() != c.Uuid || incoming != trusted {
+		if incoming != trusted {
 			return c, errors.New("configuration UUID does not match the trusted server UUID")
 		}
 	}
@@ -359,21 +365,8 @@ func (s *Server) commitConfiguration(c *Configuration, process *remote.ProcessCo
 	s.cfg.mu.Lock()
 	defer s.cfg.mu.Unlock()
 
-	// Keep the mutex: readers may already be waiting on it.
-	s.cfg.Uuid = c.Uuid
-	s.cfg.Meta = c.Meta
-	s.cfg.Suspended = c.Suspended
-	s.cfg.Invocation = c.Invocation
-	s.cfg.SkipEggScripts = c.SkipEggScripts
-	s.cfg.EnvVars = c.EnvVars
-	s.cfg.Labels = c.Labels
-	s.cfg.Allocations = c.Allocations
-	s.cfg.NetworkPolicy = c.NetworkPolicy
-	s.cfg.Build = c.Build
-	s.cfg.CrashDetectionEnabled = c.CrashDetectionEnabled
-	s.cfg.Mounts = c.Mounts
-	s.cfg.Egg = c.Egg
-	s.cfg.Container = c.Container
+	// Replace the data without replacing the mutex that existing readers use.
+	s.cfg.configurationData = c.configurationData
 
 	s.Lock()
 	s.procConfig = process
@@ -400,7 +393,7 @@ func (s *Server) CreateEnvironment() error {
 		// without any dashes.
 		p := filepath.Join(cfg.System.MachineID.Directory, s.ID())
 		machineID := append(bytes.ReplaceAll([]byte(s.ID()), []byte{'-'}, []byte{}), '\n')
-		if err := os.WriteFile(p, machineID, 0o644); err != nil {
+		if err := os.WriteFile(p, machineID, 0o644); err != nil { //nolint:gosec // mounted as /etc/machine-id, which the container user must be able to read
 			return fmt.Errorf("failed to write machine-id (at '%s') for server '%s': %w", p, s.ID(), err)
 		}
 	}
@@ -517,6 +510,6 @@ func (s *Server) ToAPIResponse() APIResponse {
 		State:         s.Environment.State(),
 		IsSuspended:   s.IsSuspended(),
 		Utilization:   s.Proc(),
-		Configuration: *s.Config(),
+		Configuration: s.cfg.snapshot(),
 	}
 }

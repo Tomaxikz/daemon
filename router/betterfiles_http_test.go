@@ -53,7 +53,7 @@ func newBetterFilesHTTPServer(
 	})
 	require.NoError(t, err)
 	manager := server.NewEmptyManager(nil)
-	s, err := manager.InitServer(remote.ServerConfigurationResponse{Settings: settings})
+	s, err := manager.InitServer(serverUUID, remote.ServerConfigurationResponse{Settings: settings})
 	require.NoError(t, err)
 	manager.Add(s)
 	t.Cleanup(s.CtxCancel)

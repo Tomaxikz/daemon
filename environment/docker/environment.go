@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"emperror.dev/errors"
 	"github.com/apex/log"
+	cerrdefs "github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 
@@ -62,6 +64,11 @@ type Environment struct {
 
 	// Tracks the environment state.
 	st *system.AtomicString
+
+	// Tracks how often the attached stream has ended while the container kept
+	// running, guarded by mu.
+	reattachedAt    time.Time
+	reattachedCount int
 }
 
 // New creates a new base Docker environment. The ID passed through will be the
@@ -127,7 +134,7 @@ func (e *Environment) Exists() (bool, error) {
 	if err != nil {
 		// If this error is because the container instance wasn't found via Docker we
 		// can safely ignore the error and just return false.
-		if client.IsErrNotFound(err) {
+		if cerrdefs.IsNotFound(err) {
 			return false, nil
 		}
 
@@ -142,8 +149,7 @@ func (e *Environment) Exists() (bool, error) {
 // shouldn't be a case that ever happens under correctly developed
 // circumstances).
 //
-// You can confirm if the instance wasn't found by using client.IsErrNotFound
-// from the Docker API.
+// You can confirm if the instance wasn't found by using cerrdefs.IsNotFound.
 //
 // @see docker/client/errors.go
 func (e *Environment) IsRunning(ctx context.Context) (bool, error) {
@@ -169,7 +175,7 @@ func (e *Environment) ExitState() (uint32, bool, error) {
 		// so that's a mystery that will have to go unsolved.
 		//
 		// @see https://github.com/pterodactyl/panel/issues/2003
-		if client.IsErrNotFound(err) {
+		if cerrdefs.IsNotFound(err) {
 			return 1, false, nil
 		}
 

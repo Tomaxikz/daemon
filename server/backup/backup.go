@@ -2,7 +2,7 @@ package backup
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec // see Checksum
 	"encoding/hex"
 	"io"
 	"io/fs"
@@ -139,7 +139,7 @@ func (b *Backup) Checksum() ([]byte, error) {
 	if err := b.validateIdentifier(); err != nil {
 		return nil, err
 	}
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec // integrity checksum; the Panel expects checksum_type "sha1"
 
 	f, err := os.Open(b.Path())
 	if err != nil {
@@ -159,7 +159,7 @@ func (b *Backup) Checksum() ([]byte, error) {
 // the disk to the caller.
 func (b *Backup) Details(ctx context.Context, parts []remote.BackupPart) (*ArchiveDetails, error) {
 	ad := ArchiveDetails{ChecksumType: "sha1", Parts: parts}
-	g, _ := errgroup.WithContext(ctx)
+	var g errgroup.Group
 
 	g.Go(func() error {
 		resp, err := b.Checksum()

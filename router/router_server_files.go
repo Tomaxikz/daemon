@@ -616,6 +616,7 @@ func postServerUploadFiles(c *gin.Context) {
 		})
 		return
 	}
+	middleware.ClearDeadlines(c)
 
 	maxFileSize := config.Get().Api.UploadLimit
 	const maxUploadLimitMB = int64(1<<63-1) / (1024 * 1024)

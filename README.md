@@ -26,7 +26,7 @@ sudo systemctl is-active wings
 
 ## Source installs
 
-Use Go 1.26.7, or the version specified in `go.mod` for another release.
+Use Go 1.26.9 or newer, as specified in `go.mod`.
 
 | Addon | Installer | Patch |
 | --- | --- | --- |

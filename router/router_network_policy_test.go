@@ -42,7 +42,7 @@ func TestNetworkPolicyRoutesAuthorizationAndContract(t *testing.T) {
 	require.NoError(t, err)
 
 	m := server.NewEmptyManager(nil)
-	s, err := m.InitServer(remote.ServerConfigurationResponse{Settings: settings})
+	s, err := m.InitServer(id, remote.ServerConfigurationResponse{Settings: settings})
 	require.NoError(t, err)
 	m.Add(s)
 	t.Cleanup(s.CtxCancel)
@@ -89,7 +89,7 @@ func TestNetworkPolicyRoutesAuthorizationAndContract(t *testing.T) {
 		require.Equal(t, 404, out.Code)
 	}
 
-	other, err := m.InitServer(remote.ServerConfigurationResponse{
+	other, err := m.InitServer("22345678-1234-4234-8234-123456789abc", remote.ServerConfigurationResponse{
 		Settings: []byte(`{"uuid":"22345678-1234-4234-8234-123456789abc","allocations":{"mappings":{"192.0.2.2":[25566]}}}`),
 	})
 	require.NoError(t, err)

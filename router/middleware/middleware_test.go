@@ -108,8 +108,8 @@ func TestSetAccessControlHeadersAllowsRangeStreaming(t *testing.T) {
 		if got := recorder.Header().Get("Access-Control-Expose-Headers"); got != "" {
 			t.Fatalf("expected no exposed headers on normal download route, got %q", got)
 		}
-		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "" {
-			t.Fatalf("expected no stream private network header, got %q", got)
+		if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {
+			t.Fatalf("expected configured private network grant, got %q", got)
 		}
 	})
 }
