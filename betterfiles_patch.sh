@@ -1212,6 +1212,8 @@ insert_after(
 # in place. Unknown custom upload implementations require a reviewed merge.
 upload_path, upload_text = read_text("router/router_server_files.go")
 reference = Path(os.environ["BFM_UPLOAD_REFERENCE"]).read_text()
+if "func ClearDeadlines(" not in Path("router/middleware/middleware.go").read_text():
+    reference = reference.replace("\tmiddleware.ClearDeadlines(c)\n", "", 1)
 marker = "const (\n\tmaxMultipartUploadFiles"
 if marker not in reference or "func multipartUploadTargets(" not in reference:
     fail("downloaded upload reference does not contain folder batch support")
@@ -1256,14 +1258,40 @@ for import_path in (
         '"' + import_path + '"',
         "folder batch upload import " + import_path,
     )
+
+# Test files downloaded from the merged branch use the newer upstream APIs.
+# Keep the old-base installer tests compatible without changing runtime code.
+_, manager_text = read_text("server/manager.go")
+if "func (m *Manager) InitServer(uuid string," not in manager_text:
+    replace_if_present(
+        "router/betterfiles_http_test.go",
+        "manager.InitServer(serverUUID, remote.ServerConfigurationResponse",
+        "manager.InitServer(remote.ServerConfigurationResponse",
+        "legacy manager test fixture",
+    )
+    replace_if_present(
+        "router/websocket/file_collaboration_yjs_test.go",
+        "manager.InitServer(serverUUID, remote.ServerConfigurationResponse",
+        "manager.InitServer(remote.ServerConfigurationResponse",
+        "legacy collaboration test fixture",
+    )
+_, middleware_text = read_text("router/middleware/middleware.go")
+if 'c.Header("Access-Control-Request-Private-Network", "true")' in middleware_text:
+    replace_if_present(
+        "router/middleware/middleware_test.go",
+        'if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "true" {\n\t\t\tt.Fatalf("expected configured private network grant, got %q", got)',
+        'if got := recorder.Header().Get("Access-Control-Allow-Private-Network"); got != "" {\n\t\t\tt.Fatalf("expected no stream private network header, got %q", got)',
+        "legacy private network test fixture",
+    )
 PY
 
 section "Applying shared core fixes"
-for source in .github/scripts/apply_core_fixes.py server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go; do
+# The pinned upstream base has different test-only APIs; keep its own core tests.
+for source in .github/scripts/apply_core_fixes.py server/resources_test.go; do
 	fetch_file "$source" "$source"
 done
 run_with_spinner "fix core lock copies" python3 .github/scripts/apply_core_fixes.py --backup "$BACKUP_DIR"
-run_with_spinner "format core fixes" gofmt -w server/resources.go server/server.go router/downloader/downloader.go router/router.go server/filesystem/filesystem_test.go server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go
+run_with_spinner "format core fixes" gofmt -w server/resources.go server/server.go router/downloader/downloader.go router/router.go server/filesystem/filesystem_test.go server/resources_test.go
 
 section "Formatting and building"
 run_with_spinner "format Go files" gofmt -w \

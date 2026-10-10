@@ -1209,11 +1209,12 @@ replace_once(
 PY
 
 section "Applying shared core fixes"
-for source in .github/scripts/apply_core_fixes.py server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go; do
+# The pinned upstream base has different test-only APIs; keep its own core tests.
+for source in .github/scripts/apply_core_fixes.py server/resources_test.go; do
 	fetch_file "$source" "$source"
 done
 run_with_spinner "fix core lock copies" python3 .github/scripts/apply_core_fixes.py --backup "$BACKUP_DIR"
-run_with_spinner "format core fixes" gofmt -w server/resources.go server/server.go router/downloader/downloader.go router/router.go server/filesystem/filesystem_test.go server/resources_test.go server/configuration_test.go router/downloader/downloader_test.go
+run_with_spinner "format core fixes" gofmt -w server/resources.go server/server.go router/downloader/downloader.go router/router.go server/filesystem/filesystem_test.go server/resources_test.go
 
 section "Formatting and building"
 run_with_spinner "format Go files" gofmt -w \

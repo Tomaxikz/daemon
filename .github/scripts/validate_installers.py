@@ -162,7 +162,7 @@ def validate(case):
                         raise RuntimeError("Fork upgrade installer is not idempotent")
 
     print(
-        f"PASS: {case} patch, source consistency"
+        f"PASS: {case} patch, production source consistency"
         + (", clean install, repeat install and upgrade" if script else ""),
         flush=True,
     )
