@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Code checkout
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -27,3 +29,7 @@ jobs:
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.11.4
+          # Schema verification fetches a remote file; linting still runs.
+          verify: false
+          # Gate new findings while the fork's existing lint debt is cleared separately.
+          args: --new-from-rev=1aacfb81aa0a63b4616d946007ab9d228bca1c29

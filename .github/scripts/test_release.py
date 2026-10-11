@@ -197,6 +197,21 @@ class ReleaseTests(unittest.TestCase):
             publisher.return_value.snapshot.assert_called_once_with(tag, metadata, directory)
             publisher.return_value.promote_dev.assert_not_called()
 
+    def test_context_prefers_toolchain_version_for_release_compiler(self):
+        go_mod = self.root / "go.mod"
+        with patch.object(release, "run", return_value=COMMIT), patch.dict(
+            release.os.environ, {}, clear=True
+        ):
+            go_mod.write_text("module example.com/wings\n\ngo 1.26.0\n")
+            self.assertEqual(release.context(self.root)["go_version"], "go1.26.0")
+
+            go_mod.write_text("module example.com/wings\n\ngo 1.26.0\n\ntoolchain go1.26.9\n")
+            self.assertEqual(release.context(self.root)["go_version"], "go1.26.9")
+
+            go_mod.write_text("module example.com/wings\n")
+            with self.assertRaisesRegex(ValueError, "No Go version found"):
+                release.context(self.root)
+
     def test_bundle_pins_sources_and_has_portable_verified_checksums(self):
         directory, metadata = self.make_bundle()
         self.assertEqual(set(metadata["files"]), release.PAYLOAD)

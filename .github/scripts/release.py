@@ -83,9 +83,11 @@ def context(root=ROOT):
         raise ValueError("Invalid repository name")
 
     ref = os.environ.get("GITHUB_REF", "refs/heads/develop")
-    go = re.search(r"^go (\d+\.\d+(?:\.\d+)?)$", (root / "go.mod").read_text(), re.M)
+    go_mod = (root / "go.mod").read_text()
+    go = re.search(r"^go (\d+\.\d+(?:\.\d+)?)$", go_mod, re.M)
     if not go:
         raise ValueError("No Go version found in go.mod")
+    toolchain = re.search(r"^toolchain (go\d+\.\d+(?:\.\d+)?)$", go_mod, re.M)
 
     return {
         "schema_version": 1,
@@ -93,7 +95,7 @@ def context(root=ROOT):
         "repository": repository,
         "ref": ref,
         "version": version_for(ref, commit),
-        "go_version": "go" + go[1],
+        "go_version": toolchain[1] if toolchain else "go" + go[1],
         "workflow_url": f"https://github.com/{repository}/actions/runs/{os.environ.get('GITHUB_RUN_ID', 'local')}",
     }
 
